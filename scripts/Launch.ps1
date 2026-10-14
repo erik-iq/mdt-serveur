@@ -1,4 +1,5 @@
 ﻿# Run inside the separate WinPE boot image, after wpeinit.
+param([switch]$TextMode)
 $ErrorActionPreference = 'Stop'
 $config = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
 $rootCertificate = Join-Path $PSScriptRoot 'trusted-root.cer'
@@ -6,6 +7,10 @@ if (Test-Path $rootCertificate) {
     $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine')
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
     try { $store.Add((New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($rootCertificate))) } finally { $store.Close() }
+}
+if (-not $TextMode) {
+    & (Join-Path $PSScriptRoot 'Wizard.ps1') -Config $config
+    return
 }
 Write-Host 'Atelier PXE — déploiement Windows autorisé depuis la console' -ForegroundColor Cyan
 $id = Read-Host 'Identifiant du déploiement'

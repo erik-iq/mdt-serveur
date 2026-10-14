@@ -2,7 +2,7 @@
 
 Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
 
-La console web en français fournit l’inventaire MAC, les images WIM vérifiées par SHA-256, les profils d’édition/langue, l’autorisation de déploiement, les journaux et l’annulation. L’agent vérifie la machine, l’UEFI, la source et le disque, puis exige une confirmation locale avant de supprimer ses partitions.
+La version **0.2** ajoute un assistant graphique directement sur le PC démarré par PXE : sélection de Windows, nom du poste, clavier, région, fuseau horaire, logiciels/bundles, thème et fond d’écran. La console web prépare le catalogue et les autorisations. L’agent vérifie la MAC, l’UEFI, les SHA-256 et le disque, puis exige une confirmation locale avant de supprimer ses partitions.
 
 ![Console Atelier PXE avec des données synthétiques de test](docs/console.png)
 
@@ -10,7 +10,9 @@ Cette première version est un atelier **supervisé**, à valider sur un PC de l
 
 ## Installer sur votre serveur
 
-Pour votre VM **DEPLOY-01 / 192.168.99.250**, suivre [la suite d’installation personnalisée](docs/SUITE-INSTALLATION.md). L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
+Pour mettre à jour votre VM **DEPLOY-01 / 192.168.99.250** déjà installée, suivre [l’assistant PXE et le test physique HP pas à pas](docs/ASSISTANT-PXE.md). Le premier client est un **HP EliteBook 850 G6**. L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
+
+Les bundles accueillent VLC, un lecteur PDF, Chrome et les outils constructeurs. HP Image Assistant est proposé sur HP, Lenovo System Update sur Lenovo. Les autres marques reçoivent les logiciels communs. Les logiciels sont préparés pendant WinPE, puis installés à la première connexion administrateur ; le fond d’écran et le thème s’appliquent au premier compte. Les installateurs et médias Microsoft sont fournis séparément par leurs éditeurs.
 
 Pour le premier essai, suivre [la procédure de test pas à pas](docs/PROCEDURE-TEST.md) : console locale, réseau HTTPS/WDS, refus d’effacement puis installation sur un disque de laboratoire.
 
@@ -41,10 +43,11 @@ flowchart LR
   IIS --> API[Console FastAPI locale]
   API --> DB[(SQLite / journaux)]
   PC[PC UEFI] -->|PXE / DHCP / TFTP| WDS[WDS Server 2025]
-  WDS --> PE[WinPE + agent PowerShell]
+  WDS --> PE[WinPE + assistant graphique]
   PE -->|HTTPS / jeton de déploiement| IIS
-  PE -->|SMB chiffré / lecture seule| WIM[Images WIM]
+  PE -->|SMB chiffré / lecture seule| WIM[Images / logiciels / fond écran]
   PE -->|DISM / BCDBoot| Disk[Disque GPT / Windows]
+  Disk --> First[Première connexion admin / bundle et bureau]
 ```
 
 Le transport iPXE/wimboot est disponible en option avec `/boot/menu.ipxe`. WDS est le parcours recommandé ici et ne dépend pas d’iPXE. Les fichiers Microsoft, licences Windows, drivers et binaires de démarrage ne sont pas distribués avec le logiciel.

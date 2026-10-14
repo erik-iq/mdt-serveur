@@ -6,7 +6,7 @@ param(
     [string]$OutputPath = 'C:\AtelierPXE\WinPE',
     [string]$DriversPath,
     [string]$TrustedRootCertificate,
-    [string]$WdsImageName = 'Atelier PXE - WinPE x64',
+    [string]$WdsImageName = 'Atelier PXE - Assistant Windows x64',
     [switch]$ImportIntoWds,
     [switch]$AllowHttpForLab
 )
@@ -21,6 +21,9 @@ $envScript = Join-Path $adk 'Deployment Tools\DandISetEnv.bat'
 $copype = Join-Path $peRoot 'copype.cmd'
 $oc = Join-Path $peRoot 'amd64\WinPE_OCs'
 foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complémentaire WinPE absent : $path" } }
+foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1')) {
+    if (-not (Test-Path (Join-Path $PSScriptRoot $script))) { throw "Mettez a jour tous les fichiers du projet avant la construction : $script absent." }
+}
 if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
 # Pass the complete command line directly to cmd.exe: Windows PowerShell 5.1's
 # native argument handling otherwise removes quotes around ADK paths with spaces.
@@ -42,15 +45,17 @@ try {
     if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
     $target = Join-Path $mount 'Atelier'
     New-Item -ItemType Directory -Path $target | Out-Null
-    Copy-Item (Join-Path $PSScriptRoot 'Deploy.ps1'), (Join-Path $PSScriptRoot 'Launch.ps1') -Destination $target
+    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1')) {
+        Copy-Item (Join-Path $PSScriptRoot $script) -Destination $target
+    }
     if ($TrustedRootCertificate) {
         $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($TrustedRootCertificate)
         if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorité de confiance.' }
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
-    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
+    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
     # Start an operator console; no image or disk is selected automatically.
-    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1`r`ncmd.exe"
+    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`npowershell.exe -STA -NoLogo -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1`r`ncmd.exe"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
 } finally {

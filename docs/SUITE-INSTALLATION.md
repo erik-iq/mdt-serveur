@@ -1,5 +1,7 @@
 # Suite de l’installation — DEPLOY-01
 
+**Pour reprendre votre installation déjà effectuée :** suivre [la mise à jour 0.2, l’assistant moderne et le test sur le HP EliteBook 850 G6](ASSISTANT-PXE.md). Les étapes initiales ci-dessous concernent un serveur neuf.
+
 Ce guide poursuit la création de votre VM Windows Server 2025, une fois le réseau opérationnel. Les commandes sont à exécuter **dans la VM de déploiement**, en **Windows PowerShell administrateur**, sauf les actions explicitement indiquées dans Hyper-V.
 
 | Élément | Configuration confirmée |
@@ -12,7 +14,7 @@ Ce guide poursuit la création de votre VM Windows Server 2025, une fois le rés
 | Stockage attendu | D: NTFS, volume de données dédié |
 | Console accessible depuis le LAN | https://192.168.99.250 |
 
-Conserver `.250` et `.253` hors des adresses attribuées à d’autres appareils par le DHCP du routeur, par exclusion ou réservation appropriée. Le routeur continue à fournir le DHCP ; ce guide n’installe pas de service DHCP dans la VM. Le premier client sera une VM avec disque vierge sur ce même réseau. Les scripts Windows seront validés par cet essai réel ; les tests Linux déjà exécutés ne constituent pas une validation Windows/PXE.
+Conserver `.250` et `.253` hors des adresses attribuées à d’autres appareils par le DHCP du routeur, par exclusion ou réservation appropriée. Le routeur continue à fournir le DHCP ; ce guide n’installe pas de service DHCP dans la VM. Le premier client sera le HP EliteBook 850 G6 sur ce même réseau. Les scripts Windows seront validés par cet essai réel ; les tests Linux déjà exécutés ne constituent pas une validation Windows/PXE.
 
 ## 1. Vérifier le serveur et son disque
 
@@ -78,7 +80,7 @@ Invoke-RestMethod http://127.0.0.1:8080/health
 Get-ScheduledTask -TaskName AtelierPXE-Console
 ```
 
-Attendu : `status = ok`, `version = 0.1.0`, tâche `Running`. En cas d’échec, lire `D:\AtelierPXE\data\logs\console.log`.
+Attendu : `status = ok`, `version = 0.2.0`, tâche `Running`. En cas d’échec, lire `D:\AtelierPXE\data\logs\console.log`.
 
 Ouvrir localement `http://127.0.0.1:8080` dans le navigateur de la VM. Ouvrir le jeton avec :
 
@@ -168,7 +170,7 @@ Construire et importer WinPE :
   -ImportIntoWds
 ```
 
-Si vous avez utilisé votre autorité interne, remplacer le certificat public par celui de sa racine. Choisir un nouveau dossier à chaque reconstruction. Attendu : image **Atelier PXE - WinPE x64** visible sous **Images de démarrage** dans la console WDS. Les réponses PXE restent désactivées jusqu’à l’essai client.
+Si vous avez utilisé votre autorité interne, remplacer le certificat public par celui de sa racine. Choisir un nouveau dossier à chaque reconstruction. Attendu : image **Atelier PXE - Assistant Windows x64** visible sous **Images de démarrage** dans la console WDS. Les réponses PXE restent désactivées jusqu’à l’essai client.
 
 ## 9. Préparer l’image Windows à installer
 
@@ -211,68 +213,10 @@ Get-SmbShareAccess -Name AtelierImages
 
 Attendu : accès **Read** pour `DEPLOY-01\DeployRead`. Le compte est non administrateur, le partage exige le chiffrement SMB et expose uniquement les fichiers d’images. Les règles réseau sont limitées au LAN `.99.0/24`. Si le compte, le partage ou une règle existe déjà, examiner cet élément plutôt que le recréer. Ne pas enregistrer le mot de passe dans WinPE.
 
-## 11. Créer la VM cliente de test dans Hyper-V
+## 11. Préparer le bundle et tester le PC physique
 
-Créer une **seconde VM**, distincte du serveur, avec ces paramètres :
+La suite se déroule directement sur le **HP EliteBook 850 G6**. Suivre [la préparation du fond d’écran et du bundle](ASSISTANT-PXE.md#5-enregistrer-le-fond-décran-et-les-logiciels), puis [le premier démarrage PXE sans effacement](ASSISTANT-PXE.md#8-premier-démarrage-du-hp-sans-effacement).
 
-| Paramètre | Valeur |
-|---|---|
-| Nom Hyper-V | PC-TEST-01 |
-| Génération | 2 |
-| Mémoire | 4 Go minimum pour Windows 11 |
-| CPU | 2 processeurs virtuels minimum |
-| Disque | Nouveau VHDX vierge de 80 Go |
-| Réseau | vSwitch-LAN |
-| Installation | Système d’exploitation ultérieurement, sans ISO |
-| Sécurité | Secure Boot, modèle Microsoft Windows ; TPM virtuel activé |
-| Microprogramme | Carte réseau en premier pour le premier démarrage |
-
-Vérifier que l’hôte dispose des ressources nécessaires pour les deux VM simultanément. Dans les fonctionnalités avancées de sa carte réseau, relever la MAC et la conserver stable (adresse MAC statique avec la valeur attribuée, unique). Dans la console Atelier, enregistrer `PC-TEST-01` avec **la MAC de cette VM cliente**, séparée par des deux-points ou des tirets : par exemple, la valeur Hyper-V `00155D63FD01` doit être saisie `00:15:5D:63:FD:01` dans Atelier. Utiliser la valeur réellement attribuée au client ; cet exemple de format n’est pas une MAC à recopier.
-
-Créer un déploiement pour cette machine, le profil Windows, disque **0** du client vierge, confirmation **EFFACER PC-TEST-01**. Conserver l’identifiant et le jeton de déploiement affichés une seule fois. Le jeton de déploiement est distinct du jeton administrateur.
-
-## 12. Tester PXE et le refus d’effacement
-
-Les deux VM et le DHCP sont sur le même réseau pour ce premier essai. Sur le serveur, activer les réponses PXE pour l’essai supervisé :
-
-```powershell
-wdsutil.exe /Set-Server /AnswerClients:All
-Start-Service WDSServer
-```
-
-Ne pas ajouter automatiquement les options DHCP 66/67 sur le routeur. Les réponses WDS sont séparées des autorisations d’effacement dans Atelier. Pour des clients sur un autre VLAN, faire configurer les relais appropriés vers DHCP `.1` et WDS `.250`.
-
-Démarrer **PC-TEST-01**, confirmer le démarrage réseau si demandé et sélectionner **Atelier PXE - WinPE x64**. Le lanceur démarre. L’interrompre avec **Ctrl+C avant tout effacement** pour revenir au terminal CMD WinPE, puis connecter le partage et relancer :
-
-```cmd
-ipconfig /all
-net use \\192.168.99.250\AtelierImages /user:DEPLOY-01\DeployRead *
-dir \\192.168.99.250\AtelierImages\Windows11-FR.wim
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
-```
-
-Le `*` demande le mot de passe SMB localement. Saisir dans le lanceur l’identifiant et le jeton du job, puis le chemin `\\192.168.99.250\AtelierImages\Windows11-FR.wim`.
-
-Après les contrôles MAC/UEFI/disque/hash/index, à la confirmation d’effacement, taper **ANNULER**. Attendu : refus avant `diskpart clean`, journal `Confirmation locale refusée ; aucun disque effacé`, état **Échec**. Si un prérequis bloque avant ce prompt, diagnostiquer ce point. Un job terminé en échec exige une nouvelle autorisation ; son jeton est révoqué.
-
-## 13. Installer réellement sur le disque vierge et valider Windows
-
-Créer un nouveau déploiement pour le client, utiliser son nouvel identifiant/jeton, puis relancer l’agent. Vérifier numéro, modèle et taille du disque client. Pour le disque client 0 confirmé comme sacrifiable, taper **EFFACER PC-TEST-01 DISQUE 0**. Toutes ses partitions seront supprimées. Il n’y a ni rollback ni reprise automatique ; ne pas utiliser le disque du serveur.
-
-Attendre l’application DISM et **Image appliquée / 100 %**. La progression suit les phases ; le hash et DISM peuvent rester plusieurs minutes sur une phase. Ce résultat signifie que l’image et le démarrage sont préparés, sans certifier le premier démarrage Windows.
-
-Pour la VM Hyper-V cliente, éteindre WinPE :
-
-```cmd
-wpeutil shutdown
-```
-
-Dans **Paramètres de PC-TEST-01 → Microprogramme**, mettre le disque en premier puis démarrer la VM. Terminer OOBE et contrôler sous Windows : nom du poste, réseau, pilotes, activation légale, TPM/Secure Boot et `reagentc /info` depuis une session administrateur. Ces contrôles valident le poste réellement installé.
-
-À la fin des essais, annuler les jobs abandonnés et désactiver les réponses PXE si vous ne souhaitez plus distribuer WinPE :
-
-```powershell
-wdsutil.exe /Set-Server /AnswerClients:None
-```
+L’assistant affiche matériel et MAC, permet de choisir le Windows, le nom, la région, les logiciels et le bureau, puis montre le disque avant confirmation. Les étapes 9 et 10 du guide expliquent l’autorisation et l’installation réelle sur le disque de test, suivies du contrôle des logiciels au premier logon administrateur. Pour d’autres marques/modèles, injecter les pilotes WinPE réseau/stockage nécessaires et refaire d’abord ce passage sans effacement.
 
 Le dernier contrôle d’exploitation est un redémarrage planifié de DEPLOY-01 : vérifier le retour de la tâche console, l’accès HTTPS et les services requis. Les scripts d’installation ne doivent pas être relancés pour effectuer ce contrôle.

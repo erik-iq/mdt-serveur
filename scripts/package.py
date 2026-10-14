@@ -3,7 +3,7 @@ from pathlib import Path
 import zipfile
 
 root = Path(__file__).resolve().parent.parent
-output = root / 'dist' / 'atelier-pxe-0.1.0.zip'
+output = root / 'dist' / 'atelier-pxe-0.2.0.zip'
 output.parent.mkdir(exist_ok=True)
 files = [root / name for name in ('.gitignore','.env.example','README.md','requirements.txt','requirements-dev.txt','requirements-browser.txt','constraints.txt')]
 for directory in ('app','scripts','docs','tests'):

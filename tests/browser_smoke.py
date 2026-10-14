@@ -24,6 +24,9 @@ def run():
         data = Path(folder)
         (data / 'artifacts').mkdir()
         (data / 'artifacts' / 'lab.wim').write_bytes(b'MSWIM\0\0\0' + b'not-a-real-wim' * 20)
+        (data / 'artifacts' / 'vlc.exe').write_bytes(b'unsigned-test-installer-not-executed')
+        (data / 'artifacts' / 'hp.zip').write_bytes(b'test-archive-not-extracted')
+        (data / 'artifacts' / 'desktop.png').write_bytes(b'\x89PNG\r\n\x1a\nnot-a-real-wallpaper')
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1', 0))
             port = reservation.getsockname()[1]
@@ -65,11 +68,49 @@ def run():
                 page.get_by_label('Type',exact=True).select_option('windows')
                 page.locator('#submit-resource').click()
                 page.wait_for_selector('#form-dialog',state='hidden')
+                page.locator('[data-page="software"]').click()
+                for filename, kind in [('vlc.exe','application'),('hp.zip','application'),('desktop.png','wallpaper')]:
+                    page.get_by_role('button',name='Enregistrer un installateur ou votre fond d’écran →',exact=True).click()
+                    page.get_by_label('Nom exact du fichier').fill(filename)
+                    page.get_by_label('Type',exact=True).select_option(kind)
+                    page.locator('#submit-resource').click()
+                    page.wait_for_selector('#form-dialog',state='hidden')
+                for name, filename, manufacturer, mode, entry in [
+                    ('VLC','vlc.exe','all','install',''),
+                    ('HP Image Assistant','hp.zip','hp','portable','HPImageAssistant.exe')]:
+                    page.get_by_role('button',name='＋ Ajouter un logiciel',exact=True).click()
+                    page.get_by_label('Nom du logiciel',exact=True).fill(name)
+                    page.get_by_label('Version du logiciel',exact=True).fill('test')
+                    page.get_by_label('Fichier du logiciel',exact=True).select_option(label=filename)
+                    page.get_by_label('Constructeur compatible').select_option(manufacturer)
+                    page.get_by_label('Mode',exact=True).select_option(mode)
+                    page.get_by_label('Programme dans le ZIP').fill(entry)
+                    page.locator('#submit-resource').click()
+                    page.wait_for_selector('#form-dialog',state='hidden')
+                page.get_by_role('button',name='＋ Créer un bundle',exact=True).click()
+                page.get_by_label('Nom du bundle').fill('Atelier standard')
+                page.get_by_label('VLC test · all',exact=True).check()
+                page.get_by_label('HP Image Assistant test · hp',exact=True).check()
+                page.locator('#submit-resource').click()
+                page.wait_for_selector('#form-dialog',state='hidden')
+                expect(page.locator('#applications .profile-card')).to_have_count(2)
+                expect(page.locator('#bundles .profile-card')).to_have_count(1)
+                page.screenshot(path='/tmp/atelier-software.png',full_page=True)
+                page.locator('[data-page="profiles"]').click()
                 page.get_by_role('button',name='＋ Nouveau profil',exact=True).click()
                 page.get_by_label('Nom du profil').fill('Windows 11 · Laboratoire')
                 page.get_by_label('Image Windows',exact=True).select_option(index=1)
+                page.get_by_label('Version Windows',exact=True).fill('26H2')
+                page.get_by_label('Édition',exact=True).fill('Pro')
+                page.get_by_label('Thème Windows').select_option('dark')
+                page.get_by_label('Fond d’écran',exact=True).select_option(label='desktop.png')
+                page.get_by_label('Atelier standard',exact=True).check()
                 page.locator('#submit-resource').click()
                 page.wait_for_selector('#form-dialog',state='hidden')
+                with urlopen(Request(origin+'/api/state',headers={'Authorization':'Bearer '+admin})) as response:
+                    saved = json.load(response)['profiles'][0]
+                assert saved['windows_version'] == '26H2' and saved['settings']['theme'] == 'dark'
+                assert saved['settings']['wallpaper_asset_id'] and len(saved['settings']['bundle_ids']) == 1
                 page.locator('[data-page="overview"]').click()
 
                 def create_job():
@@ -81,8 +122,10 @@ def run():
                     page.wait_for_selector('#token-dialog[open]')
                     identifier = page.locator('#job-id').input_value()
                     agent_token = page.locator('#job-token').input_value()
+                    assert len(page.locator('#boot-code').input_value()) == 24
                     page.locator('[data-close="token-dialog"]').click()
                     assert not page.locator('#job-token').input_value()
+                    assert not page.locator('#boot-code').input_value()
                     return identifier, agent_token
 
                 identifier, agent_token = create_job()
@@ -110,7 +153,7 @@ def run():
                 page.screenshot(path='/tmp/atelier-mobile.png',full_page=True)
                 assert not errors, errors
                 browser.close()
-            print('Browser smoke passed: authentication, machine/image/profile forms, authorization, agent lifecycle, journal, cancellation, mobile layout; no JavaScript errors.')
+            print('Browser smoke passed: authentication, machine/image/software/bundle/profile forms, saved personalization, PXE code cleared, agent lifecycle, journal, cancellation, mobile layout; no JavaScript errors.')
         finally:
             process.terminate()
             process.wait(timeout=10)

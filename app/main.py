@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -17,6 +18,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+
+from app.customization import ApplicationInput, BootConnection, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -57,7 +60,7 @@ class MachineInput(BaseModel):
 
 class AssetInput(BaseModel):
     filename: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
-    kind: str = Field(pattern=r"^(wimboot|bcd|sdi|winpe|windows)$")
+    kind: str = Field(pattern=r"^(wimboot|bcd|sdi|winpe|windows|application|wallpaper)$")
 
 
 class ProfileInput(BaseModel):
@@ -65,6 +68,9 @@ class ProfileInput(BaseModel):
     asset_id: str
     image_index: int = Field(default=1, ge=1, le=100)
     locale: str = Field(default="fr-FR", pattern=r"^[a-z]{2}-[A-Z]{2}$")
+    windows_version: str = Field(default='', max_length=24)
+    edition: str = Field(default='', max_length=40)
+    settings: Personalization | None = None
 
 
 class DeploymentInput(BaseModel):
@@ -72,6 +78,7 @@ class DeploymentInput(BaseModel):
     profile_id: str
     disk_number: int = Field(default=0, ge=0, le=32)
     confirmation: str
+    wizard_enabled: bool = False
 
 
 class EventInput(BaseModel):
@@ -142,9 +149,32 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, deployment_id TEXT NOT NULL REFERENCES deployments(id),
                 status TEXT NOT NULL, progress INTEGER NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS applications (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL,
+                asset_id TEXT NOT NULL REFERENCES assets(id), arguments TEXT NOT NULL,
+                entry_point TEXT NOT NULL, install_mode TEXT NOT NULL, manufacturer TEXT NOT NULL,
+                created_at TEXT NOT NULL, UNIQUE(name,version));
+            CREATE TABLE IF NOT EXISTS bundles (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
+                application_ids_json TEXT NOT NULL, created_at TEXT NOT NULL);
         """)
 
-    api = FastAPI(title="Atelier PXE", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
+        # Additive migrations preserve the console installed on DEPLOY-01.
+        additions = {
+            'profiles': {'windows_version': "TEXT NOT NULL DEFAULT ''", 'edition': "TEXT NOT NULL DEFAULT ''",
+                         'settings_json': "TEXT NOT NULL DEFAULT '{}'"},
+            'deployments': {'wizard_enabled': 'INTEGER NOT NULL DEFAULT 0',
+                            'catalog_json': "TEXT NOT NULL DEFAULT '{}'", 'selection_json': "TEXT NOT NULL DEFAULT '{}'",
+                            'boot_code_hash': 'TEXT', 'boot_code_expires': 'TEXT'},
+        }
+        for table, columns in additions.items():
+            present = {r['name'] for r in con.execute(f'PRAGMA table_info({table})')}
+            for name, definition in columns.items():
+                if name not in present:
+                    con.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
+        con.execute('CREATE UNIQUE INDEX IF NOT EXISTS boot_code_unique ON deployments(boot_code_hash) WHERE boot_code_hash IS NOT NULL')
+
+    api = FastAPI(title="Atelier PXE", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
     api.state.data_dir = data
 
     @api.middleware("http")
@@ -177,6 +207,78 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             raise HTTPException(409, "Fichier modifié : enregistrez une nouvelle image sous un autre nom")
         return path
 
+    def profile_public(record):
+        result = dict(record)
+        saved = json.loads(result.pop('settings_json'))
+        result['settings'] = Personalization.model_validate(saved or defaults_for_locale(result['locale'])).model_dump()
+        return result
+
+    def bundle_public(record):
+        result = dict(record)
+        result['application_ids'] = json.loads(result.pop('application_ids_json'))
+        return result
+
+    def asset_snapshot(con, identifier, kind):
+        value = row(con, 'assets', identifier)
+        if value['kind'] != kind:
+            raise HTTPException(400, f'Type de fichier requis : {kind}')
+        asset_path(value)
+        return {k: value[k] for k in ('id', 'filename', 'kind', 'sha256', 'size')}
+
+    def resolved_settings(con, settings):
+        settings = Personalization.model_validate(settings).model_dump()
+        ids = list(settings['application_ids'])
+        for identifier in settings['bundle_ids']:
+            bundle = bundle_public(row(con, 'bundles', identifier))
+            ids.extend(bundle['application_ids'])
+        apps = []
+        for identifier in dict.fromkeys(ids):
+            application = row(con, 'applications', identifier)
+            application['asset'] = asset_snapshot(con, application['asset_id'], 'application')
+            apps.append(application)
+        wallpaper = asset_snapshot(con, settings['wallpaper_asset_id'], 'wallpaper') if settings['wallpaper_asset_id'] else None
+        return {'settings': settings, 'applications': apps, 'wallpaper': wallpaper}
+
+    def catalogue(con, profile_id, interactive):
+        profile_rows = con.execute('SELECT * FROM profiles ORDER BY name').fetchall() if interactive else [row(con, 'profiles', profile_id)]
+        profiles = []
+        for record in profile_rows:
+            profile = profile_public(record)
+            profile['asset'] = asset_snapshot(con, profile['asset_id'], 'windows')
+            resolved_settings(con, profile['settings'])
+            profiles.append(profile)
+        if not interactive:
+            selected = resolved_settings(con, profiles[0]['settings'])
+            selected_bundles = [bundle_public(row(con, 'bundles', i)) for i in profiles[0]['settings']['bundle_ids']]
+            return {'profiles': profiles, 'applications': selected['applications'], 'bundles': selected_bundles,
+                    'wallpapers': [selected['wallpaper']] if selected['wallpaper'] else [], 'options': OPTIONS}
+        apps = [dict(r) for r in con.execute('SELECT * FROM applications ORDER BY name,version')]
+        for app in apps:
+            app['asset'] = asset_snapshot(con, app['asset_id'], 'application')
+        bundles = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY name')]
+        wallpapers = [asset_snapshot(con, r['id'], 'wallpaper') for r in con.execute("SELECT id FROM assets WHERE kind='wallpaper'")]
+        return {'profiles': profiles, 'applications': apps, 'bundles': bundles, 'wallpapers': wallpapers, 'options': OPTIONS}
+
+    def job_selection(con, job):
+        selected = json.loads(job['selection_json'])
+        machine = row(con, 'machines', job['machine_id'])
+        if not selected:
+            profile = profile_public(row(con, 'profiles', job['profile_id']))
+            selected = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
+        profile = profile_public(row(con, 'profiles', selected['profile_id']))
+        resolved = resolved_settings(con, selected['settings'])
+        return selected, profile, machine, resolved
+
+    def plan_data(con, job):
+        selected, profile, machine, resolved = job_selection(con, job)
+        asset = asset_snapshot(con, profile['asset_id'], 'windows')
+        return {'id': job['id'], 'status': job['status'], 'hostname': selected['hostname'],
+                'inventory_hostname': machine['hostname'], 'mac': machine['mac'], 'disk_number': job['disk_number'],
+                'profile_id': profile['id'], 'profile_name': profile['name'], 'windows_version': profile['windows_version'],
+                'edition': profile['edition'], 'image_index': profile['image_index'], 'locale': profile['locale'],
+                'image_filename': asset['filename'], 'image_size': asset['size'], 'image_sha256': asset['sha256'],
+                'image_path': f"/api/agent/{job['id']}/image", 'wizard_enabled': bool(job['wizard_enabled']), **resolved}
+
     def agent(con, identifier, authorization):
         job = row(con, "deployments", identifier)
         supplied = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
@@ -194,21 +296,27 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": "0.2.0"}
 
     @api.get("/api/state", dependencies=[Depends(admin)])
     def state():
         with db() as con:
             result = {name: [dict(r) for r in con.execute(f"SELECT * FROM {name} ORDER BY created_at DESC")]
-                      for name in ("machines", "assets", "profiles")}
+                      for name in ("machines", "assets", "applications")}
+            result['profiles'] = [profile_public(r) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
+            result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
-                d.progress,d.created_at,d.updated_at,m.hostname,m.mac,p.name AS profile_name
+                d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name
                 FROM deployments d JOIN machines m ON m.id=d.machine_id JOIN profiles p ON p.id=d.profile_id
                 ORDER BY d.created_at DESC LIMIT 100""")]
+            for item in result['deployments']:
+                selection = json.loads(item.pop('selection_json'))
+                item['hostname'] = selection.get('hostname', item['hostname'])
             result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
         result["base_url"] = public_url
+        result['customization_options'] = OPTIONS
         return result
 
     @api.post("/api/machines", status_code=201, dependencies=[Depends(admin)])
@@ -232,6 +340,14 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             with path.open("rb") as handle:
                 if handle.read(8) != b"MSWIM\x00\x00\x00":
                     raise HTTPException(400, "Une image WIM non fractionnée est requise")
+        if body.kind == 'application' and path.suffix.lower() not in {'.exe', '.msi', '.zip'}:
+            raise HTTPException(400, 'Un installateur .exe/.msi ou un bundle .zip est requis')
+        if body.kind == 'wallpaper':
+            with path.open('rb') as handle:
+                signature = handle.read(8)
+            if not ((path.suffix.lower() == '.png' and signature == b'\x89PNG\r\n\x1a\n')
+                    or (path.suffix.lower() in {'.jpg', '.jpeg'} and signature.startswith(b'\xff\xd8\xff'))):
+                raise HTTPException(400, 'Une image PNG ou JPEG est requise')
         stat_before = path.stat()
         checksum = file_hash(path)
         stat = path.stat()
@@ -254,27 +370,118 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
                 if asset["kind"] != "windows":
                     raise HTTPException(400, "Le profil nécessite une image Windows")
                 asset_path(asset)
-                con.execute("INSERT INTO profiles VALUES (?,?,?,?,?,?)", (identifier, body.name, body.asset_id, body.image_index, body.locale, now()))
-                return row(con, "profiles", identifier)
+                settings = body.settings.model_dump() if body.settings else defaults_for_locale(body.locale)
+                resolved_settings(con, settings)
+                con.execute("INSERT INTO profiles(id,name,asset_id,image_index,locale,created_at,windows_version,edition,settings_json) VALUES (?,?,?,?,?,?,?,?,?)",
+                            (identifier, body.name, body.asset_id, body.image_index, body.locale, now(), body.windows_version,
+                             body.edition, json.dumps(settings, ensure_ascii=False)))
+                return profile_public(row(con, "profiles", identifier))
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Ce nom de profil existe déjà")
+
+    @api.post('/api/applications', status_code=201, dependencies=[Depends(admin)])
+    def add_application(body: ApplicationInput):
+        identifier = str(uuid.uuid4())
+        try:
+            with db() as con:
+                asset = asset_snapshot(con, body.asset_id, 'application')
+                if asset['filename'].lower().endswith('.zip'):
+                    if not body.entry_point:
+                        raise HTTPException(400, 'Le point d’entrée du ZIP est requis')
+                elif body.entry_point or body.install_mode == 'portable':
+                    raise HTTPException(400, 'Le point d’entrée et le mode portable sont réservés aux ZIP')
+                if body.install_mode == 'portable' and body.arguments:
+                    raise HTTPException(400, 'Un outil portable est copié sans être exécuté automatiquement')
+                con.execute('INSERT INTO applications VALUES (?,?,?,?,?,?,?,?,?)',
+                            (identifier, body.name, body.version, body.asset_id, body.arguments, body.entry_point,
+                             body.install_mode, body.manufacturer, now()))
+                return row(con, 'applications', identifier)
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, 'Ce logiciel et cette version existent déjà')
+
+    @api.post('/api/bundles', status_code=201, dependencies=[Depends(admin)])
+    def add_bundle(body: BundleInput):
+        identifier = str(uuid.uuid4())
+        try:
+            with db() as con:
+                for app_id in body.application_ids:
+                    application = row(con, 'applications', app_id)
+                    asset_snapshot(con, application['asset_id'], 'application')
+                con.execute('INSERT INTO bundles VALUES (?,?,?,?,?)',
+                            (identifier, body.name, body.description, json.dumps(body.application_ids), now()))
+                return bundle_public(row(con, 'bundles', identifier))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, 'Ce nom de bundle existe déjà')
 
     @api.post("/api/deployments", status_code=201, dependencies=[Depends(admin)])
     def deploy(body: DeploymentInput):
         identifier, agent_token = str(uuid.uuid4()), secrets.token_urlsafe(32)
+        boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled else None
         try:
             with db() as con:
                 machine = row(con, "machines", body.machine_id)
-                profile = row(con, "profiles", body.profile_id)
+                profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
                 if body.confirmation != "EFFACER " + machine["hostname"]:
                     raise HTTPException(400, "Confirmation d’effacement incorrecte")
                 timestamp = now()
-                con.execute("INSERT INTO deployments VALUES (?,?,?,?,?,?,?,?,?)", (identifier, body.machine_id, body.profile_id, body.disk_number, digest(agent_token), "queued", 0, timestamp, timestamp))
+                catalog = catalogue(con, body.profile_id, body.wizard_enabled)
+                selection = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
+                con.execute("INSERT INTO deployments(id,machine_id,profile_id,disk_number,token_hash,status,progress,created_at,updated_at,wizard_enabled,catalog_json,selection_json,boot_code_hash,boot_code_expires) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (identifier, body.machine_id, body.profile_id, body.disk_number, digest(agent_token), 'queued', 0,
+                             timestamp, timestamp, int(body.wizard_enabled), json.dumps(catalog), json.dumps(selection),
+                             digest(boot_code) if boot_code else None, (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat() if boot_code else None))
                 event(con, identifier, "queued", 0, "Déploiement autorisé ; attente de l’agent WinPE")
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Un déploiement est déjà actif sur cette machine")
-        return {"id": identifier, "agent_token": agent_token, "base_url": public_url}
+        return {"id": identifier, "agent_token": agent_token, "base_url": public_url,
+                'boot_code': '-'.join(boot_code[i:i+4] for i in range(0, 20, 4)) if boot_code else None}
+
+    @api.post('/api/boot/connect')
+    def boot_connect(body: BootConnection):
+        code = body.code.replace('-', '').strip().upper()
+        with db() as con:
+            record = con.execute("SELECT * FROM deployments WHERE boot_code_hash=? AND status='queued' AND boot_code_expires>?", (digest(code), now())).fetchone()
+            if not record:
+                raise HTTPException(401, 'Code d’installation absent, expiré ou déjà utilisé')
+            job = dict(record)
+            machine = row(con, 'machines', job['machine_id'])
+            macs = {value.replace('-', ':').upper() for value in body.macs}
+            if machine['mac'] not in macs:
+                raise HTTPException(403, 'Ce code est réservé à un autre poste')
+            new_token = secrets.token_urlsafe(32)
+            con.execute('UPDATE deployments SET token_hash=?,updated_at=? WHERE id=?', (digest(new_token), now(), job['id']))
+            return {'id': job['id'], 'agent_token': new_token, 'plan': plan_data(con, job), 'catalog': json.loads(job['catalog_json'])}
+
+    @api.post('/api/agent/{identifier}/configure')
+    def configure(identifier: str, body: WizardSelection, authorization: str = Header(default='')):
+        with db() as con:
+            job = agent(con, identifier, authorization)
+            if job['status'] != 'queued':
+                raise HTTPException(409, 'Les paramètres sont figés après le début du déploiement')
+            if not job['wizard_enabled']:
+                raise HTTPException(403, 'Le choix dans l’assistant n’a pas été autorisé pour ce poste')
+            catalog = json.loads(job['catalog_json'])
+            if body.profile_id not in {p['id'] for p in catalog.get('profiles', [])}:
+                raise HTTPException(403, 'Ce profil ne fait pas partie de l’autorisation')
+            settings = body.settings.model_dump()
+            allowed_apps = {a['id'] for a in catalog['applications']}
+            allowed_bundles = {b['id'] for b in catalog['bundles']}
+            allowed_wallpapers = {w['id'] for w in catalog['wallpapers']}
+            if (not set(settings['application_ids']) <= allowed_apps or not set(settings['bundle_ids']) <= allowed_bundles
+                    or (settings['wallpaper_asset_id'] and settings['wallpaper_asset_id'] not in allowed_wallpapers)):
+                raise HTTPException(403, 'La sélection contient un élément non autorisé')
+            duplicate = con.execute('SELECT id FROM machines WHERE hostname=? COLLATE NOCASE AND id!=?', (body.hostname, job['machine_id'])).fetchone()
+            if duplicate:
+                raise HTTPException(409, 'Ce nom est déjà réservé à un autre poste')
+            for active in con.execute("SELECT id,selection_json FROM deployments WHERE status IN ('queued','running') AND id!=?", (identifier,)):
+                if json.loads(active['selection_json']).get('hostname', '').lower() == body.hostname.lower():
+                    raise HTTPException(409, 'Ce nom est déjà utilisé par un autre déploiement actif')
+            resolved_settings(con, settings)
+            con.execute('UPDATE deployments SET profile_id=?,selection_json=?,updated_at=? WHERE id=?',
+                        (body.profile_id, json.dumps(body.model_dump()), now(), identifier))
+            event(con, identifier, 'queued', 0, f'Assistant : profil et paramètres validés pour {body.hostname}')
+            return plan_data(con, row(con, 'deployments', identifier))
 
     @api.get("/api/deployments/{identifier}/events", dependencies=[Depends(admin)])
     def events(identifier: str):
@@ -296,13 +503,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
     def plan(identifier: str, authorization: str = Header(default="")):
         with db() as con:
             job = agent(con, identifier, authorization)
-            machine = row(con, "machines", job["machine_id"])
-            profile = row(con, "profiles", job["profile_id"])
-            asset = row(con, "assets", profile["asset_id"])
-            asset_path(asset)
-        return {"id": identifier, "status": job["status"], "hostname": machine["hostname"], "mac": machine["mac"],
-                "disk_number": job["disk_number"], "image_index": profile["image_index"], "locale": profile["locale"],
-                "image_size": asset["size"], "image_sha256": asset["sha256"], "image_path": f"/api/agent/{identifier}/image"}
+            return plan_data(con, job)
 
     @api.get("/api/agent/{identifier}/image")
     def image(identifier: str, authorization: str = Header(default="")):
@@ -319,7 +520,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             job = agent(con, identifier, authorization)
             if job["status"] != "queued":
                 raise HTTPException(409, "Ce déploiement a déjà été pris en charge")
-            con.execute("UPDATE deployments SET status='running',updated_at=? WHERE id=?", (now(), identifier))
+            plan_data(con, job)
+            con.execute("UPDATE deployments SET status='running',updated_at=?,boot_code_hash=NULL WHERE id=?", (now(), identifier))
             event(con, identifier, "running", 0, "L’agent WinPE a réservé le déploiement")
         return {"claimed": True}
 

@@ -1,6 +1,6 @@
 # Installation neuve — Windows Server 2025
 
-Serveur prévu : **DEPLOY-01 / 192.168.99.250**, hébergé sur Hyper-V `192.168.99.253`. Masque confirmé : `255.255.255.0` ; passerelle et DHCP : routeur `192.168.99.1`. Le premier essai utilise le même LAN pour serveur et client. L’installation de ce dépôt n’a pas accès à ce serveur distant et ne modifie pas sa configuration. Voir aussi [la suite personnalisée](SUITE-INSTALLATION.md).
+Serveur prévu : **DEPLOY-01 / 192.168.99.250**, hébergé sur Hyper-V `192.168.99.253`. Masque confirmé : `255.255.255.0` ; passerelle et DHCP : routeur `192.168.99.1`. Le premier essai utilise le même LAN pour serveur et client. Pour la console déjà installée, suivre [la mise à jour 0.2 et le parcours physique HP](ASSISTANT-PXE.md). Ce guide couvre une installation neuve.
 
 ## 1. Préparer le serveur
 
@@ -68,7 +68,7 @@ WDS sert ici une image **WinPE personnalisée**. Ne pas utiliser le `boot.wim` d
 
 Omettre `-TrustedRootCertificate` si le certificat serveur est déjà reconnu par WinPE. Omettre `-DriversPath` si les pilotes réseau/stockage nécessaires sont inclus. Fournir uniquement des pilotes Windows x64 signés provenant du constructeur ; le script n’active pas de mode d’installation de pilotes non signés.
 
-Le script utilise `copype amd64`, ajoute WMI, .NET, Scripting, PowerShell, StorageWMI et DismCmdlets, copie l’agent et crée un lanceur. Il refuse d’écraser une image existante. En cas d’erreur de montage, il tente de démonter en annulant ses modifications. Le résultat est `media\sources\boot.wim`, importé comme une image distincte nommée « Atelier PXE - WinPE x64 ».
+Le script utilise `copype amd64`, ajoute WMI, .NET, Scripting, PowerShell, StorageWMI et DismCmdlets, puis copie l’assistant graphique et les scripts d’installation/personnalisation. Il refuse d’écraser une image existante. En cas d’erreur de montage, il tente de démonter en annulant ses modifications. Le résultat est `media\sources\boot.wim`, importé comme une image distincte nommée « Atelier PXE - Assistant Windows x64 ».
 
 Le paramètre `-AllowHttpForLab` sert uniquement à un réseau de laboratoire isolé et expose les jetons en clair sur le réseau. Le parcours normal utilise HTTPS. Secure Boot doit rester activé si votre matériel et la chaîne de démarrage le permettent ; l’image ADK/WDS doit être à jour des exigences de signature/révocation de votre parc.
 
@@ -94,7 +94,7 @@ New-LocalUser -Name 'DeployRead' -Password $password -Description 'Lecture des i
 
 Ce script publie uniquement `data\artifacts`, avec lecture seule SMB/NTFS et chiffrement SMB requis. Le jeton administrateur et la base restent hors du partage. Le compte ne doit pas appartenir aux administrateurs. Gérer sa rotation et l’expiration du mot de passe selon votre politique ; ne stocker aucun mot de passe dans l’image WinPE.
 
-Dans la console : **Profils Windows → Enregistrer un fichier → Image Windows**. Puis créer un profil avec le bon index DISM et une locale installée dans l’image. `fr-FR` règle la région ; cela n’ajoute pas un pack de langue absent de l’image. OOBE reste interactif, sans compte/mot de passe d’administration prédéfini.
+Dans la console : **Profils Windows → Enregistrer un fichier → Image Windows**. Puis créer un profil avec le bon index DISM et une locale installée dans l’image. Le champ langue ne rajoute pas un pack de langue absent. Le profil contient aussi clavier, région, fuseau, thème, fond d’écran et bundles. Voir [la préparation des logiciels](ASSISTANT-PXE.md#5-enregistrer-le-fond-décran-et-les-logiciels). OOBE reste interactif, sans compte/mot de passe d’administration prédéfini.
 
 ## 7. Raccorder DHCP et PXE
 
@@ -112,24 +112,17 @@ Dans la console WDS, sélectionner la politique de réponse adaptée et activer 
 
 ## 8. Premier déploiement supervisé
 
-1. Sauvegarder le poste de laboratoire et relever la MAC de son interface PXE.
-2. L’enregistrer dans **Parc machines** avec son futur nom Windows.
-3. Créer un déploiement et saisir `EFFACER NOM-DU-POSTE`. Le numéro de disque sera revérifié dans WinPE.
-4. Conserver l’identifiant et le jeton affiché une seule fois. En cas de perte, annuler et créer une nouvelle autorisation.
-5. Démarrer le poste en PXE **UEFI x64**, sélectionner l’image Atelier.
-6. Avant le lanceur, ou dans le terminal après une première tentative, connecter SMB si nécessaire :
+1. Démarrer le PC de test en PXE **UEFI x64**, choisir **Atelier PXE - Assistant Windows x64**. L’écran Connexion affiche matériel et MAC avant toute installation.
+2. Relever la MAC Ethernet utilisée et l’enregistrer dans **Parc machines** avec son futur nom Windows.
+3. Créer un déploiement avec le numéro réel du disque et le choix dans l’assistant autorisé. Saisir `EFFACER NOM-DU-POSTE` côté console.
+4. Conserver le code PXE affiché une seule fois, valable deux heures. En cas de perte/expiration, annuler et créer une nouvelle autorisation.
+5. Dans l’assistant, saisir code et compte/mot de passe SMB, puis choisir Windows, nom, région et bundle/bureau.
+6. Pour le premier parcours, fermer au récapitulatif sans saisir la confirmation et annuler le job : aucun disque n’est effacé.
+7. Sur le passage d’installation prévu, vérifier modèle, numéro, série et taille du disque. Taper la phrase exacte `EFFACER NOM-DU-POSTE DISQUE N` uniquement pour le disque de test choisi.
+8. Attendre « Image appliquée », fermer l’assistant, éteindre avec `wpeutil shutdown`, puis démarrer Windows depuis le disque.
+9. Terminer OOBE avec un premier compte administrateur ; les logiciels et le bureau sont alors configurés. Vérifier `C:\ProgramData\AtelierPXE\result.json`, pilotes, réseau, activation et `reagentc /info`.
 
-```cmd
-net use \\192.168.99.250\AtelierImages /user:NOM-DU-SERVEUR\DeployRead *
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
-```
-
-Le `*` demande le mot de passe sans l’inscrire dans la commande. Si le lanceur démarre avant la connexion SMB, le quitter sans confirmer l’installation puis le relancer après `net use`.
-
-7. Saisir l’identifiant, le jeton et `\\192.168.99.250\AtelierImages\Windows11-Pro.wim`.
-8. Vérifier modèle, numéro, série et taille du disque affiché. Taper exactement `EFFACER NOM-DU-POSTE DISQUE 0` seulement si la cible est correcte.
-9. L’agent applique l’image et prépare EFI/MSR/Windows/Recovery. Attendre « Image appliquée » puis redémarrer manuellement avec `wpeutil reboot`.
-10. Valider le premier démarrage, OOBE, drivers, réseau, TPM/Secure Boot, activation et `reagentc /info`. Aucune jonction AD, application métier ou clé de licence n’est injectée.
+Pour le détail du HP EliteBook 850 G6 et des bundles, suivre [la recette graphique](ASSISTANT-PXE.md#8-premier-démarrage-du-hp-sans-effacement). Le lanceur de secours reste disponible avec `powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1 -TextMode`, en utilisant l’identifiant/jeton confidentiel de l’autorisation.
 
 Une annulation arrête les opérations aux points de contrôle ; elle ne restaure pas un disque effacé et n’interrompt pas instantanément DISM. Une coupure réseau après le début du partitionnement nécessite un diagnostic local. Il n’y a ni rollback ni reprise automatique.
 

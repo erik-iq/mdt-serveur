@@ -2,6 +2,8 @@
 
 Serveur : **192.168.99.250**. Commencer par la console locale, puis tester le démarrage PXE et enfin une installation Windows sur un **poste de laboratoire avec disque sacrifiable**. Les tests API ont été exécutés dans le cloud ; les étapes Windows ci-dessous constituent la recette à exécuter sur votre matériel, pas une installation déjà validée sur Server 2025.
 
+**Parcours graphique recommandé :** [mise à jour 0.2, bundles et test sur HP EliteBook 850 G6](ASSISTANT-PXE.md). Le présent guide conserve une recette technique du lanceur **texte de secours**. Sur un serveur déjà installé, ne pas recréer la console ni ses données pour effectuer ces tests.
+
 Les commandes serveur utilisent **Windows PowerShell en administrateur**. Les exemples supposent un volume **D: NTFS** pour les images et WDS. Si ce volume n’existe pas, adapter tous les chemins, y compris `-Path` du partage SMB. Prévoir au moins 100 Go libres. Pour le poste, utiliser un PC UEFI x64 sauvegardé, ou une VM UEFI/Génération 2 avec disque vierge de 80 Go et compatibilité Windows 11 (TPM 2.0, Secure Boot, CPU pris en charge). Déconnecter les disques contenant des données à conserver avant le test destructif.
 
 ## 1. Récupérer le logiciel et installer Python
@@ -18,7 +20,7 @@ Set-Location C:\AtelierPXE\console
 & .\.venv\Scripts\python.exe -m pytest -q -k 'not test_database_survives_restart_and_generated_token_is_private'
 ```
 
-**Attendu :** Python `3.12.x`, puis **20 tests passés et 1 désélectionné**, sans échec, depuis la session administrateur demandée. Le test exclu utilise des permissions POSIX `0600`, adaptées à Linux ; les droits NTFS du jeton seront contrôlés à l’étape 3. Les 18 tests API ont été validés dans le cloud Linux ; les trois tests supplémentaires vérifient sous Windows les appels batch ADK avec espaces et leurs codes d’échec, avec un ADK simulé et sans exécuter DISM/WDS. Le test de lien symbolique nécessite également les privilèges Windows appropriés. Ces tests n’installent pas Windows et n’effacent aucun disque. Si une commande échoue, corriger ce point avant de continuer ; ne pas désactiver d’autres tests pour contourner un échec.
+**Attendu :** Python `3.12.x`, puis **37 tests passés et 1 désélectionné** lorsque Windows PowerShell est disponible, sans échec, depuis la session administrateur demandée. Le test exclu utilise des permissions POSIX `0600`, adaptées à Linux ; les droits NTFS du jeton seront contrôlés à l’étape 3. Les 32 tests API et trois tests du générateur Unattend/règles constructeur ont été validés dans le cloud Linux ; les trois tests supplémentaires vérifient sous Windows les appels batch ADK avec espaces et leurs codes d’échec, avec un ADK simulé et sans exécuter DISM/WDS. Le test de lien symbolique nécessite également les privilèges Windows appropriés. Ces tests n’installent pas Windows et n’effacent aucun disque. Si une commande échoue, corriger ce point avant de continuer.
 
 ## 2. Tester la console sur le serveur, sans PXE
 
@@ -37,11 +39,11 @@ Invoke-RestMethod http://127.0.0.1:8080/health
 notepad C:\AtelierPXE\test-data\admin-token
 ```
 
-**Attendu :** `status = ok`, `version = 0.1.0`.
+**Attendu :** `status = ok`, `version = 0.2.0`.
 
 Sur le serveur avec interface graphique, ouvrir le navigateur et saisir **http://127.0.0.1:8080**. Copier le jeton affiché dans le fichier vers le formulaire de connexion. Ne pas l’envoyer dans un chat ni le mettre dans Git. Si le serveur est en édition Core, valider `/health` ici et tester le navigateur depuis un autre poste après l’étape HTTPS.
 
-Vérifier que les quatre pages s’ouvrent : Vue d’ensemble, Parc machines, Profils Windows, Infrastructure PXE. Tester une connexion avec un jeton incorrect : elle doit être refusée. L’infrastructure iPXE peut apparaître non préparée ; le parcours choisi utilise **WDS** et n’exige pas les quatre fichiers iPXE.
+Vérifier que les cinq pages s’ouvrent : Vue d’ensemble, Parc machines, Profils Windows, Logiciels & bundles, Infrastructure PXE. Tester une connexion avec un jeton incorrect : elle doit être refusée. L’infrastructure iPXE peut apparaître non préparée ; le parcours choisi utilise **WDS** et n’exige pas les quatre fichiers iPXE.
 
 À la fin, revenir dans la première fenêtre, arrêter Uvicorn avec **Ctrl+C**, puis retirer les variables de test dans cette fenêtre :
 
@@ -186,7 +188,7 @@ Créer l’image de démarrage, avec le certificat racine public correspondant �
 
 Omettre le paramètre de certificat si WinPE reconnaît déjà l’autorité. Si des pilotes réseau ou stockage sont nécessaires, ajouter `-DriversPath 'D:\Pilotes\WinPE-x64'` avec leurs fichiers INF signés provenant du constructeur. Ne pas fournir un PFX ni une clé privée. Pour reconstruire l’image, choisir un **nouveau dossier de sortie**.
 
-**Attendu :** fichier `D:\AtelierPXE\WinPE-test-v1\media\sources\boot.wim` et image **Atelier PXE - WinPE x64** visible dans les images de démarrage WDS. Utiliser cette image personnalisée, pas le `boot.wim` de l’ISO Windows 11.
+**Attendu :** fichier `D:\AtelierPXE\WinPE-test-v1\media\sources\boot.wim` et image **Atelier PXE - Assistant Windows x64** visible dans les images de démarrage WDS. Utiliser cette image personnalisée, pas le `boot.wim` de l’ISO Windows 11.
 
 ## 7. Préparer le WIM et son partage
 
@@ -243,7 +245,7 @@ wdsutil.exe /Set-Server /AnswerClients:All
 Start-Service WDSServer
 ```
 
-Démarrer le **poste de test**, sélectionner le boot réseau **UEFI IPv4** et l’image **Atelier PXE - WinPE x64**. Le lanceur Atelier s’ouvre automatiquement. Pour préparer SMB et vérifier le disque, interrompre ce lanceur avec **Ctrl+C** avant de confirmer une installation. Cela peut afficher une demande liée au batch `startnet.cmd` ; le but est de revenir à un **terminal CMD WinPE**, sans redémarrer le poste ni lancer DISM. Si un terminal est nécessaire, l’ouvrir avec **Maj+F10** lorsque disponible. Dans ce terminal :
+Démarrer le **poste de test**, sélectionner le boot réseau **UEFI IPv4** et l’image **Atelier PXE - Assistant Windows x64**. L’assistant graphique s’ouvre automatiquement. Pour cette recette texte, fermer la fenêtre sans code ni confirmation : le terminal CMD WinPE devient disponible. Dans ce terminal :
 
 ```cmd
 ipconfig /all
@@ -259,7 +261,7 @@ Remplacer `NOM-DU-SERVEUR` par le nom relevé à l’étape 7. Le `*` demande le
 Relancer le lanceur :
 
 ```cmd
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1 -TextMode
 ```
 
 Saisir l’identifiant, le jeton de déploiement puis le chemin :
