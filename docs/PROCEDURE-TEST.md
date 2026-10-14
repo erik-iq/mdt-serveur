@@ -18,7 +18,7 @@ Set-Location C:\AtelierPXE\console
 & .\.venv\Scripts\python.exe -m pytest -q -k 'not test_database_survives_restart_and_generated_token_is_private'
 ```
 
-**Attendu :** Python `3.12.x`, puis **17 tests passés et 1 désélectionné**, sans échec. Le test exclu utilise des permissions POSIX `0600`, adaptées à Linux ; les droits NTFS du jeton seront contrôlés à l’étape 3. Les 18 tests complets ont été validés dans le cloud Linux. Le test de lien symbolique nécessite les privilèges Windows appropriés : utiliser la session administrateur demandée. Ces tests portent sur la console et l’API ; ils n’installent pas Windows et n’effacent aucun disque. Si une commande échoue, corriger ce point avant de continuer ; ne pas désactiver d’autres tests pour contourner un échec.
+**Attendu :** Python `3.12.x`, puis **20 tests passés et 1 désélectionné**, sans échec, depuis la session administrateur demandée. Le test exclu utilise des permissions POSIX `0600`, adaptées à Linux ; les droits NTFS du jeton seront contrôlés à l’étape 3. Les 18 tests API ont été validés dans le cloud Linux ; les trois tests supplémentaires vérifient sous Windows les appels batch ADK avec espaces et leurs codes d’échec, avec un ADK simulé et sans exécuter DISM/WDS. Le test de lien symbolique nécessite également les privilèges Windows appropriés. Ces tests n’installent pas Windows et n’effacent aucun disque. Si une commande échoue, corriger ce point avant de continuer ; ne pas désactiver d’autres tests pour contourner un échec.
 
 ## 2. Tester la console sur le serveur, sans PXE
 

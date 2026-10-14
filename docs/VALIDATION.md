@@ -12,6 +12,8 @@ Les tests API exercent l’authentification, le lifecycle, les transitions refus
 
 La syntaxe des sept scripts PowerShell a également été vérifiée avec le parseur PowerShell 7.5.4. Les scripts sont enregistrés en UTF-8 avec BOM pour Windows PowerShell 5.1. Ce contrôle ne valide ni la présence des cmdlets sur Server 2025/WinPE ni leur exécution.
 
+`tests/test_winpe_process.py` ajoute trois contrôles réservés à Windows PowerShell 5.1 en administrateur : chemins ADK/sortie avec espaces, transmission de l’environnement entre les deux fichiers batch, puis arrêt avant montage lorsqu’un batch échoue. Il utilise le vrai `cmd.exe` avec un ADK simulé dans un dossier temporaire ; DISM et WDS ne sont pas exécutés. Ces trois contrôles sont ignorés sous Linux. Sur Windows, lancer `.venv\Scripts\python.exe -m pytest -q tests\test_winpe_process.py`.
+
 Le test navigateur optionnel `tests/browser_smoke.py` utilise Chromium installé sur la machine, démarre un serveur isolé et vérifie les formulaires, le journal, l’annulation et le rendu mobile. Il se lance avec `.venv/bin/python tests/browser_smoke.py` après installation de `requirements-browser.txt`.
 
 ## À exécuter sur Server 2025 et un PC de test

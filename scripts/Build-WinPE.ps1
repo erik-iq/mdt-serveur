@@ -21,9 +21,13 @@ $envScript = Join-Path $adk 'Deployment Tools\DandISetEnv.bat'
 $copype = Join-Path $peRoot 'copype.cmd'
 $oc = Join-Path $peRoot 'amd64\WinPE_OCs'
 foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complémentaire WinPE absent : $path" } }
-if ($OutputPath -match '["&|<>^%!]' -or $adk -match '["&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
-& cmd.exe /d /s /c "`"`"$envScript`" && `"$copype`" amd64 `"$OutputPath`"`""
-if ($LASTEXITCODE -ne 0) { throw 'Échec de copype.' }
+if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
+# Pass the complete command line directly to cmd.exe: Windows PowerShell 5.1's
+# native argument handling otherwise removes quotes around ADK paths with spaces.
+# Both batch files must run in the same process to retain the ADK environment.
+$copyArguments = '/d /s /c "call "{0}" && call "{1}" amd64 "{2}""' -f $envScript, $copype, $OutputPath
+$copyProcess = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgumentList $copyArguments -NoNewWindow -Wait -PassThru
+if ($copyProcess.ExitCode -ne 0) { throw "Échec de copype (code $($copyProcess.ExitCode))." }
 $mount = Join-Path $OutputPath 'mount'
 $wim = Join-Path $OutputPath 'media\sources\boot.wim'
 $mounted = $false
