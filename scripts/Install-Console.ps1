@@ -1,7 +1,7 @@
 ﻿#requires -RunAsAdministrator
 [CmdletBinding()]
 param(
-    [string]$ServerUrl = 'https://192.168.99.2',
+    [string]$ServerUrl = 'https://192.168.99.250',
     [int]$Port = 8080,
     [string]$PythonExe = 'C:\Program Files\Python312\python.exe',
     [string]$DataPath = 'D:\AtelierPXE\data',

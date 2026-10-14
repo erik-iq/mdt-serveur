@@ -1,10 +1,10 @@
 # Installation neuve — Windows Server 2025
 
-Serveur prévu : **192.168.99.2**. Le fournisseur DHCP, le masque, la passerelle et les VLAN restent à identifier. L’installation de ce dépôt n’a pas accès à ce serveur distant et ne modifie pas sa configuration.
+Serveur prévu : **DEPLOY-01 / 192.168.99.250**, hébergé sur Hyper-V `192.168.99.253`. Masque confirmé : `255.255.255.0` ; passerelle et DHCP : routeur `192.168.99.1`. Le premier essai utilise le même LAN pour serveur et client. L’installation de ce dépôt n’a pas accès à ce serveur distant et ne modifie pas sa configuration. Voir aussi [la suite personnalisée](SUITE-INSTALLATION.md).
 
 ## 1. Préparer le serveur
 
-- Fixer l’IP `192.168.99.2`, puis vérifier le DNS, la passerelle, la synchronisation horaire et l’absence de doublon d’adresse.
+- Fixer l’IP `192.168.99.250`, puis vérifier le DNS, la passerelle, la synchronisation horaire et l’absence de doublon d’adresse.
 - Prévoir un volume NTFS pour WDS et les images, idéalement `D:` avec 100 Go libres minimum ; adapter les chemins si le volume est différent.
 - Installer **Python 3.12 x64 pour tous les utilisateurs**, par exemple `C:\Program Files\Python312\python.exe`, depuis [python.org](https://www.python.org/downloads/windows/).
 - Installer un [ADK et son module complémentaire WinPE](https://learn.microsoft.com/windows-hardware/get-started/adk-install) compatibles avec l’image Windows x64 choisie. Les deux installateurs sont distincts. Inclure les outils de déploiement.
@@ -17,7 +17,7 @@ Pour une nouvelle installation de postes en 2026, choisir une édition Windows 1
 PowerShell administrateur, dans `C:\AtelierPXE\console` :
 
 ```powershell
-.\scripts\Install-Console.ps1 -ServerUrl 'https://192.168.99.2' -DataPath 'D:\AtelierPXE\data' -InstallStartupTask
+.\scripts\Install-Console.ps1 -ServerUrl 'https://192.168.99.250' -DataPath 'D:\AtelierPXE\data' -InstallStartupTask
 ```
 
 Ce script crée un environnement Python, la base, un jeton aléatoire et une tâche `AtelierPXE-Console` au démarrage sous **LOCAL SERVICE**, avec des droits de lecture sur le code et de modification sur les données. La tâche ne nécessite pas une session ouverte et redémarre jusqu’à trois fois en cas d’échec. Python écoute uniquement sur `127.0.0.1:8080`. Le script ne remplace ni une tâche ni un fichier de configuration existant.
@@ -35,7 +35,7 @@ Les logs sont dans `D:\AtelierPXE\data\logs\console.log`. Le jeton administrateu
 
 Installer IIS avec **URL Rewrite et Application Request Routing (ARR)** depuis les sources officielles IIS. Activer le proxy ARR au niveau serveur. Créer un site IIS dédié, par exemple dans `C:\inetpub\AtelierPXE`, et y copier `docs/iis.web.config.example` en `web.config`.
 
-Configurer une liaison HTTPS 443 avec un certificat de confiance. Pour utiliser `https://192.168.99.2`, le certificat doit contenir **192.168.99.2 dans son SAN de type IP**. Un simple CN ou SAN DNS ne suffit pas. Un nom DNS interne avec le certificat correspondant convient aussi ; utiliser alors ce nom dans `-ServerUrl` et reconstruire WinPE.
+Configurer une liaison HTTPS 443 avec un certificat de confiance. Pour utiliser `https://192.168.99.250`, le certificat doit contenir **192.168.99.250 dans son SAN de type IP**. Un simple CN ou SAN DNS ne suffit pas. Un nom DNS interne avec le certificat correspondant convient aussi ; utiliser alors ce nom dans `-ServerUrl` et reconstruire WinPE.
 
 Restreindre le site IIS et le pare-feu aux réseaux d’administration/déploiement. Les identifiants transitent uniquement en HTTPS. Vérifier `/health` depuis un autre poste. L’exemple IIS ne crée pas les bindings, n’installe pas ARR et ne configure pas automatiquement les certificats.
 
@@ -59,7 +59,7 @@ WDS sert ici une image **WinPE personnalisée**. Ne pas utiliser le `boot.wim` d
 
 ```powershell
 .\scripts\Build-WinPE.ps1 `
-  -ServerUrl 'https://192.168.99.2' `
+  -ServerUrl 'https://192.168.99.250' `
   -OutputPath 'D:\AtelierPXE\WinPE-v1' `
   -TrustedRootCertificate 'C:\Certificats\racine-interne.cer' `
   -DriversPath 'D:\Pilotes\WinPE-x64' `
@@ -104,7 +104,7 @@ WDS ne fournit pas automatiquement des baux DHCP. Identifier d’abord le DHCP e
 |---|---|
 | DHCP externe, WDS sur le même VLAN | Diffusion PXE joignable par DHCP et WDS ; activer les réponses WDS après l’import WinPE. |
 | DHCP et WDS sur le même serveur | `-DhcpOnThisServer` / ports DHCP non utilisés par WDS / option 60. |
-| Postes sur un autre VLAN | Relais DHCP/IP helpers vers DHCP **et** `192.168.99.2`, puis règles réseau compatibles WDS. |
+| Postes sur un autre VLAN | Relais DHCP/IP helpers vers DHCP **et** `192.168.99.250`, puis règles réseau compatibles WDS. |
 
 Ne pas appliquer aveuglément 66/67 : les fichiers dépendent de l’architecture et du firmware. Préférer la négociation WDS et les relais appropriés. Les flux requis incluent DHCP/PXE UDP 67/68/4011, TFTP UDP 69 et ses ports de transfert WDS, HTTPS TCP 443 et SMB TCP 445. Utiliser les règles WDS installées et leur portée réseau ; ne pas ouvrir tous les ports vers Internet. Voir [les ports WDS](https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/ports-used-by-wds).
 
@@ -120,13 +120,13 @@ Dans la console WDS, sélectionner la politique de réponse adaptée et activer 
 6. Avant le lanceur, ou dans le terminal après une première tentative, connecter SMB si nécessaire :
 
 ```cmd
-net use \\192.168.99.2\AtelierImages /user:NOM-DU-SERVEUR\DeployRead *
+net use \\192.168.99.250\AtelierImages /user:NOM-DU-SERVEUR\DeployRead *
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
 ```
 
 Le `*` demande le mot de passe sans l’inscrire dans la commande. Si le lanceur démarre avant la connexion SMB, le quitter sans confirmer l’installation puis le relancer après `net use`.
 
-7. Saisir l’identifiant, le jeton et `\\192.168.99.2\AtelierImages\Windows11-Pro.wim`.
+7. Saisir l’identifiant, le jeton et `\\192.168.99.250\AtelierImages\Windows11-Pro.wim`.
 8. Vérifier modèle, numéro, série et taille du disque affiché. Taper exactement `EFFACER NOM-DU-POSTE DISQUE 0` seulement si la cible est correcte.
 9. L’agent applique l’image et prépare EFI/MSR/Windows/Recovery. Attendre « Image appliquée » puis redémarrer manuellement avec `wpeutil reboot`.
 10. Valider le premier démarrage, OOBE, drivers, réseau, TPM/Secure Boot, activation et `reagentc /info`. Aucune jonction AD, application métier ou clé de licence n’est injectée.
@@ -137,4 +137,4 @@ Une annulation arrête les opérations aux points de contrôle ; elle ne restaur
 
 Arrêter la tâche avant une copie cohérente du dossier `data`, puis la redémarrer. Pour une sauvegarde à chaud, utiliser l’API SQLite de sauvegarde ; ne pas copier seulement le `.sqlite3` en ignorant ses fichiers WAL/SHM. Protéger les sauvegardes et les jetons avec les mêmes droits que le serveur. Sauvegarder aussi les images WIM et les paramètres WDS/IIS. Aucune suppression de machine/profil/image n’est proposée dans cette version pour préserver l’historique référencé.
 
-Le nom du DHCP reste la seule donnée réseau non fournie. Une fois identifié, préciser les relais/règles dans ce guide avant d’ouvrir le PXE aux postes réels.
+Le DHCP est fourni par le routeur `192.168.99.1`. Si des postes sont sur d’autres VLAN, préciser les relais/règles correspondants avant d’ouvrir le PXE à ces postes.

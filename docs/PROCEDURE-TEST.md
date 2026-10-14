@@ -1,6 +1,6 @@
 # Procédure de test — Atelier PXE sur Windows Server 2025
 
-Serveur : **192.168.99.2**. Commencer par la console locale, puis tester le démarrage PXE et enfin une installation Windows sur un **poste de laboratoire avec disque sacrifiable**. Les tests API ont été exécutés dans le cloud ; les étapes Windows ci-dessous constituent la recette à exécuter sur votre matériel, pas une installation déjà validée sur Server 2025.
+Serveur : **192.168.99.250**. Commencer par la console locale, puis tester le démarrage PXE et enfin une installation Windows sur un **poste de laboratoire avec disque sacrifiable**. Les tests API ont été exécutés dans le cloud ; les étapes Windows ci-dessous constituent la recette à exécuter sur votre matériel, pas une installation déjà validée sur Server 2025.
 
 Les commandes serveur utilisent **Windows PowerShell en administrateur**. Les exemples supposent un volume **D: NTFS** pour les images et WDS. Si ce volume n’existe pas, adapter tous les chemins, y compris `-Path` du partage SMB. Prévoir au moins 100 Go libres. Pour le poste, utiliser un PC UEFI x64 sauvegardé, ou une VM UEFI/Génération 2 avec disque vierge de 80 Go et compatibilité Windows 11 (TPM 2.0, Secure Boot, CPU pris en charge). Déconnecter les disques contenant des données à conserver avant le test destructif.
 
@@ -60,7 +60,7 @@ Set-Location C:\AtelierPXE\console
 # Seulement pour les fichiers téléchargés depuis ce dépôt de confiance :
 Get-ChildItem .\scripts -File -Recurse | Unblock-File
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\scripts\Install-Console.ps1 -ServerUrl 'https://192.168.99.2' -DataPath 'D:\AtelierPXE\data' -InstallStartupTask
+.\scripts\Install-Console.ps1 -ServerUrl 'https://192.168.99.250' -DataPath 'D:\AtelierPXE\data' -InstallStartupTask
 ```
 
 Après quelques secondes :
@@ -98,8 +98,8 @@ Python écoute seulement sur **127.0.0.1**. Pour les postes du réseau, prépare
 2. Installer [URL Rewrite](https://www.iis.net/downloads/microsoft/url-rewrite) et [Application Request Routing (ARR)](https://www.iis.net/downloads/microsoft/application-request-routing) depuis les sources officielles IIS.
 3. Dans le Gestionnaire IIS, sélectionner le serveur → **Application Request Routing Cache → Server Proxy Settings → Enable proxy → Apply**.
 4. Créer `C:\inetpub\AtelierPXE` et y copier `docs\iis.web.config.example` sous le nom `web.config`. Ce site ne doit pas pointer vers le code source ni vers le dossier de données.
-5. Créer un site **AtelierPXE** avec ce dossier et une liaison **HTTPS / 443 / 192.168.99.2**, en sélectionnant un certificat serveur de confiance.
-6. Le certificat doit inclure **192.168.99.2 dans un SAN de type IP**. Un simple nom CN ou un SAN DNS contenant l’IP ne suffit pas. Une autorité interne peut émettre ce certificat ; exporter uniquement son certificat racine **public `.cer`** pour WinPE. Les navigateurs de test doivent aussi faire confiance à cette autorité.
+5. Créer un site **AtelierPXE** avec ce dossier et une liaison **HTTPS / 443 / 192.168.99.250**, en sélectionnant un certificat serveur de confiance.
+6. Le certificat doit inclure **192.168.99.250 dans un SAN de type IP**. Un simple nom CN ou un SAN DNS contenant l’IP ne suffit pas. Une autorité interne peut émettre ce certificat ; exporter uniquement son certificat racine **public `.cer`** pour WinPE. Les navigateurs de test doivent aussi faire confiance à cette autorité.
 7. Autoriser TCP 443 uniquement depuis les réseaux de test/administration concernés. Vérifier la liaison IIS, la portée du pare-feu et qu’aucun autre site n’utilise la même liaison.
 
 ### Variante de laboratoire si vous n’avez aucune autorité de certification
@@ -111,17 +111,17 @@ New-Item -ItemType Directory -Path C:\Certificats -Force | Out-Null
 $atelierLabCert = New-SelfSignedCertificate `
   -Type Custom `
   -Subject 'CN=AtelierPXE-Lab' `
-  -FriendlyName 'Atelier PXE - Lab 192.168.99.2' `
+  -FriendlyName 'Atelier PXE - Lab 192.168.99.250' `
   -CertStoreLocation Cert:\LocalMachine\My `
   -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 `
   -KeyUsage DigitalSignature,KeyEncipherment `
-  -TextExtension @('2.5.29.17={text}IPAddress=192.168.99.2','2.5.29.37={text}1.3.6.1.5.5.7.3.1') `
+  -TextExtension @('2.5.29.17={text}IPAddress=192.168.99.250','2.5.29.37={text}1.3.6.1.5.5.7.3.1') `
   -NotAfter (Get-Date).AddMonths(3)
 Export-Certificate -Cert $atelierLabCert -FilePath C:\Certificats\AtelierPXE-lab.cer -Type CERT
 $atelierLabCert | Select-Object Subject,Thumbprint,NotAfter
 ```
 
-Dans IIS, choisir **Atelier PXE - Lab 192.168.99.2** pour la liaison HTTPS. Copier uniquement `AtelierPXE-lab.cer` sur le poste d’administration par un canal de confiance, vérifier son empreinte avec celle affichée sur le serveur, puis importer cette copie localement pour l’utilisateur qui testera le navigateur :
+Dans IIS, choisir **Atelier PXE - Lab 192.168.99.250** pour la liaison HTTPS. Copier uniquement `AtelierPXE-lab.cer` sur le poste d’administration par un canal de confiance, vérifier son empreinte avec celle affichée sur le serveur, puis importer cette copie localement pour l’utilisateur qui testera le navigateur :
 
 ```powershell
 Import-Certificate -FilePath C:\Certificats\AtelierPXE-lab.cer -CertStoreLocation Cert:\CurrentUser\Root
@@ -132,11 +132,11 @@ Pour une requête HTTPS exécutée directement sur le serveur, importer aussi le
 Depuis **un autre poste du même réseau**, exécuter :
 
 ```powershell
-Test-NetConnection 192.168.99.2 -Port 443
-Invoke-RestMethod https://192.168.99.2/health
+Test-NetConnection 192.168.99.250 -Port 443
+Invoke-RestMethod https://192.168.99.250/health
 ```
 
-**Attendu :** `TcpTestSucceeded = True`, puis `status = ok`, **sans erreur de certificat**. Ouvrir `https://192.168.99.2` dans son navigateur et utiliser le jeton de **D:\AtelierPXE\data\admin-token**, lu localement sur le serveur.
+**Attendu :** `TcpTestSucceeded = True`, puis `status = ok`, **sans erreur de certificat**. Ouvrir `https://192.168.99.250` dans son navigateur et utiliser le jeton de **D:\AtelierPXE\data\admin-token**, lu localement sur le serveur.
 
 Si vous utilisez un nom DNS à la place de l’IP, remplacer l’URL dans `Install-Console.ps1`, la configuration IIS et la construction WinPE. Ne pas désactiver la vérification TLS pour franchir cette étape. La configuration du certificat est un prérequis réel du parcours réseau.
 
@@ -148,7 +148,7 @@ Pour le premier essai, placer le poste de test et le serveur sur **le même VLAN
 ipconfig /all
 ```
 
-Relever **DHCP activé**, **Serveur DHCP**, l’adresse, le masque et la passerelle. L’IP `192.168.99.2` fournie pour le serveur ne permet pas de déduire le fournisseur DHCP ni le masque.
+Relever **DHCP activé**, **Serveur DHCP**, l’adresse, le masque et la passerelle. Dans votre installation, le DHCP et la passerelle ont été confirmés à `192.168.99.1`, avec le masque `255.255.255.0`. Cette vérification permet de contrôler les paramètres du poste et toute modification future du réseau.
 
 Sur Server 2025, voir les rôles déjà installés :
 
@@ -156,7 +156,7 @@ Sur Server 2025, voir les rôles déjà installés :
 Get-WindowsFeature -Name DHCP,WDS,Web-Server
 ```
 
-Ne pas installer un second DHCP si un routeur, pare-feu ou autre serveur fournit déjà les baux. Si les postes sont sur un autre VLAN, configurer les relais DHCP/IP helpers vers le DHCP existant **et vers 192.168.99.2**. Ne pas définir automatiquement les options 66/67, car le fichier de boot dépend du firmware et de l’architecture.
+Ne pas installer un second DHCP si un routeur, pare-feu ou autre serveur fournit déjà les baux. Si les postes sont sur un autre VLAN, configurer les relais DHCP/IP helpers vers le DHCP existant **et vers 192.168.99.250**. Ne pas définir automatiquement les options 66/67, car le fichier de boot dépend du firmware et de l’architecture.
 
 **Attendu :** le client reçoit une adresse valide sur le réseau prévu. Une adresse `169.254.x.x` sur son interface de test indique qu’un bail DHCP n’a pas été obtenu.
 
@@ -178,7 +178,7 @@ Créer l’image de démarrage, avec le certificat racine public correspondant �
 
 ```powershell
 .\scripts\Build-WinPE.ps1 `
-  -ServerUrl 'https://192.168.99.2' `
+  -ServerUrl 'https://192.168.99.250' `
   -OutputPath 'D:\AtelierPXE\WinPE-test-v1' `
   -TrustedRootCertificate 'C:\Certificats\racine-interne.cer' `
   -ImportIntoWds
@@ -224,7 +224,7 @@ $env:COMPUTERNAME
 
 ## 8. Préparer un déploiement dans la console
 
-Depuis le navigateur connecté à `https://192.168.99.2` :
+Depuis le navigateur connecté à `https://192.168.99.250` :
 
 1. **Profils Windows → Enregistrer un fichier** : nom `Windows11-test.wim`, type **Image Windows**. Attendre le calcul SHA-256.
 2. **Nouveau profil** : nom `Windows 11 - Test`, fichier précédemment enregistré, index exact donné par DISM, langue réellement présente dans l’image (`fr-FR` pour une image française).
@@ -247,8 +247,8 @@ Démarrer le **poste de test**, sélectionner le boot réseau **UEFI IPv4** et l
 
 ```cmd
 ipconfig /all
-net use \\192.168.99.2\AtelierImages /user:NOM-DU-SERVEUR\DeployRead *
-dir \\192.168.99.2\AtelierImages\Windows11-test.wim
+net use \\192.168.99.250\AtelierImages /user:NOM-DU-SERVEUR\DeployRead *
+dir \\192.168.99.250\AtelierImages\Windows11-test.wim
 powershell.exe -NoProfile -Command "Get-Disk | Format-Table Number,FriendlyName,SerialNumber,Size; Get-Partition | Format-Table DiskNumber,PartitionNumber,DriveLetter,Type,Size"
 ```
 
@@ -265,7 +265,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
 Saisir l’identifiant, le jeton de déploiement puis le chemin :
 
 ```text
-\\192.168.99.2\AtelierImages\Windows11-test.wim
+\\192.168.99.250\AtelierImages\Windows11-test.wim
 ```
 
 L’agent vérifie MAC, firmware, disque, WIM, SHA-256 et index. Au message **« Tapez exactement : EFFACER PC-TEST-01 DISQUE … »**, saisir volontairement **ANNULER** pour ce premier test.
@@ -308,7 +308,7 @@ slmgr.vbs /xpr
 
 ## 11. Tester le redémarrage et fermer le laboratoire
 
-Une fois la configuration enregistrée, redémarrer le serveur à un moment approprié. Après reconnexion, vérifier que la tâche console repart et que `https://192.168.99.2/health` répond depuis le poste d’administration. Vérifier aussi WDS si vous devez poursuivre les essais.
+Une fois la configuration enregistrée, redémarrer le serveur à un moment approprié. Après reconnexion, vérifier que la tâche console repart et que `https://192.168.99.250/health` répond depuis le poste d’administration. Vérifier aussi WDS si vous devez poursuivre les essais.
 
 Annuler les déploiements abandonnés dans la console. Si les essais PXE sont terminés :
 

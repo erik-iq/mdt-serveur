@@ -1,6 +1,6 @@
 # Atelier PXE
 
-Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.2**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
+Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
 
 La console web en français fournit l’inventaire MAC, les images WIM vérifiées par SHA-256, les profils d’édition/langue, l’autorisation de déploiement, les journaux et l’annulation. L’agent vérifie la machine, l’UEFI, la source et le disque, puis exige une confirmation locale avant de supprimer ses partitions.
 
@@ -9,6 +9,8 @@ La console web en français fournit l’inventaire MAC, les images WIM vérifié
 Cette première version est un atelier **supervisé**, à valider sur un PC de laboratoire. Le code Windows est fourni mais n’a pas été exécuté sur Server 2025/WinPE dans l’environnement Linux de développement. Un état `staged` signifie « image appliquée et démarrage préparé » ; le premier démarrage Windows n’est pas certifié par la console.
 
 ## Installer sur votre serveur
+
+Pour votre VM **DEPLOY-01 / 192.168.99.250**, suivre [la suite d’installation personnalisée](docs/SUITE-INSTALLATION.md). L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
 
 Pour le premier essai, suivre [la procédure de test pas à pas](docs/PROCEDURE-TEST.md) : console locale, réseau HTTPS/WDS, refus d’effacement puis installation sur un disque de laboratoire.
 
