@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Site IIS dédié, ARR + URL Rewrite, liaison HTTPS et certificat de confiance requis.
+     Activez le proxy ARR au niveau serveur. Ne placez pas ce site dans le dossier source. -->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="AtelierPXE" stopProcessing="true">
+          <match url="(.*)" />
+          <action type="Rewrite" url="http://127.0.0.1:8080/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
