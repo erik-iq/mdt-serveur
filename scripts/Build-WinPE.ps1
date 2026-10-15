@@ -8,7 +8,9 @@ param(
     [string]$TrustedRootCertificate,
     [string]$WdsImageName = 'Atelier PXE - Assistant Windows x64',
     [switch]$ImportIntoWds,
-    [switch]$AllowHttpForLab
+    [switch]$AllowHttpForLab,
+    [ValidatePattern('^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}$')]
+    [string]$WinPEKeyboardLayout = '040c:0000040c'
 )
 $ErrorActionPreference = 'Stop'
 $uri = [Uri]$ServerUrl
@@ -54,8 +56,9 @@ try {
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
     @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
-    # Start an operator console; no image or disk is selected automatically.
-    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`npowershell.exe -STA -NoLogo -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1`r`ncmd.exe"
+    # Set the operator's keyboard before credentials are entered. The profile's
+    # keyboard configures installed Windows separately from this WinPE session.
+    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`nwpeutil SetKeyboardLayout $WinPEKeyboardLayout`r`npowershell.exe -STA -NoLogo -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1`r`ncmd.exe"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
 } finally {

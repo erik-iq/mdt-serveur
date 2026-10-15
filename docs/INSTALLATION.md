@@ -70,6 +70,8 @@ Omettre `-TrustedRootCertificate` si le certificat serveur est déjà reconnu pa
 
 Le script utilise `copype amd64`, ajoute WMI, .NET, Scripting, PowerShell, StorageWMI et DismCmdlets, puis copie l’assistant graphique et les scripts d’installation/personnalisation. Il refuse d’écraser une image existante. En cas d’erreur de montage, il tente de démonter en annulant ses modifications. Le résultat est `media\sources\boot.wim`, importé comme une image distincte nommée « Atelier PXE - Assistant Windows x64 ».
 
+Le clavier opérateur de WinPE est français AZERTY par défaut, initialisé avant l’assistant. `-WinPEKeyboardLayout '100c:0000100c'` sélectionne le suisse romand ; `'0409:00000409'` sélectionne l’anglais US. Le clavier choisi dans le profil concerne le Windows installé.
+
 Le paramètre `-AllowHttpForLab` sert uniquement à un réseau de laboratoire isolé et expose les jetons en clair sur le réseau. Le parcours normal utilise HTTPS. Secure Boot doit rester activé si votre matériel et la chaîne de démarrage le permettent ; l’image ADK/WDS doit être à jour des exigences de signature/révocation de votre parc.
 
 ## 6. Préparer une image et un partage SMB

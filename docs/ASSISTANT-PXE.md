@@ -60,6 +60,17 @@ Set-Location C:\AtelierPXE\console
 
 Utiliser un autre nouveau dossier si `WinPE-v3` existe déjà. Si aucun pilote supplémentaire n’est encore disponible, omettre `-DriversPath` pour le premier contrôle, puis reconstruire après diagnostic si réseau/disque manque. Ne pas écraser les images précédentes. Attendu dans WDS : **Atelier PXE - Assistant Windows x64**. Garder les réponses PXE désactivées jusqu’à l’essai supervisé.
 
+Les nouvelles images démarrent avec le clavier **français AZERTY**. Pour un autre clavier opérateur, fournir `-WinPEKeyboardLayout '100c:0000100c'` pour le suisse romand, ou `'0409:00000409'` pour l’anglais US. Ce réglage concerne la saisie dans WinPE ; le profil définit séparément le clavier du Windows installé.
+
+Sur une image déjà construite qui démarre en QWERTY, fermer l’assistant avant le début d’une installation pour retrouver le terminal, puis exécuter :
+
+```cmd
+wpeutil SetKeyboardLayout 040c:0000040c
+powershell.exe -STA -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1
+```
+
+Le changement manuel vaut pour la session WinPE actuelle. Dans la connexion Hyper-V standard, le collage simule une frappe et peut dépendre du clavier de l’hôte ; saisir manuellement les identifiants pour le premier essai après changement.
+
 ## 4. Importer votre Windows et ses éditions
 
 Le produit propose les versions réellement enregistrées sur votre serveur. Il n’inclut aucun ISO Windows. Pour votre demande **26H2**, utiliser le média officiel correspondant à vos droits et vérifier sa version réelle ; le champ « Version Windows » est un libellé, il ne transforme pas un média plus ancien en 26H2. La disponibilité du média 26H2 n’a pas pu être vérifiée auprès de Microsoft depuis l’environnement de développement.
