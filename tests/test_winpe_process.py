@@ -97,6 +97,7 @@ function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) 
     menu_bytes = (system32 / 'atelier.cmd').read_bytes()
     assert b'\r\n' in menu_bytes and b'\n' not in menu_bytes.replace(b'\r\n', b'')
     assert (output / 'mount' / 'Atelier' / 'WinPE-Session.ps1').exists()
+    assert (output / 'mount' / 'Atelier' / 'Partitions.ps1').exists()
     configuration = json.loads((output / 'mount' / 'Atelier' / 'config.json').read_text(encoding='utf-8-sig'))
     assert configuration['winpe_keyboard_layout'] == '040c:0000040c'
-    assert configuration['boot_release'] == 'FR-REPRISE-1'
+    assert configuration['boot_release'] == 'FR-REPRISE-2'

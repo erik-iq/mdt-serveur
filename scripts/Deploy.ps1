@@ -18,6 +18,7 @@ $started = $false
 $mutex = $null
 $ownsMutex = $false
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
+. (Join-Path $PSScriptRoot 'Partitions.ps1')
 
 function Send-Event([string]$Status, [int]$Percent, [string]$Message) {
     $body = @{status=$Status; progress=$Percent; message=$Message} | ConvertTo-Json -Compress
@@ -123,10 +124,7 @@ exit
         $partitionPath = Join-Path $env:TEMP 'atelier-partitions.txt'
         Set-Content -LiteralPath $partitionPath -Value $partitionScript -Encoding ASCII
         try { Run-Checked 'diskpart.exe' @('/s', $partitionPath) } finally { Remove-Item $partitionPath -ErrorAction SilentlyContinue }
-        foreach ($letter in @('S','W','R')) {
-            $partition = Get-Partition -DriveLetter $letter
-            if ($partition.DiskNumber -ne $disk.Number) { throw 'Partitionnement incomplet ou disque cible incohérent.' }
-        }
+        Wait-AtelierTargetPartitions -DiskNumber $disk.Number -ExpectedUniqueId ([string]$disk.UniqueId) -ExpectedSize $disk.Size
         Assert-Active
         Send-Event 'running' 35 'Application de l''image Windows (DISM)'
         Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
