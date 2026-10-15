@@ -58,7 +58,7 @@ try {
         if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorité de confiance.' }
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
-    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='FR-REPRISE-2'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
+    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='FR-REPRISE-3'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
     # Each relaunch uses a new STA process; no credentials on its command line.
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null

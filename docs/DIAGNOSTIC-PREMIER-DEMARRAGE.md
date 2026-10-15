@@ -38,6 +38,8 @@ Pour examiner le problème, fournir **diagnostic.json**, **Panther-unattend.xml*
 
 Après collecte, garder la VM arrêtée le temps du diagnostic. Une réparation du XML sera préparée à partir des résultats ; la collecte elle-même ne répare pas le Windows installé.
 
+Si le rapport confirme un fichier intégralement nul, suivre [la réparation ciblée de la VM arrêtée](REPARATION-UNATTEND.md). Le cas constaté sur PC-TEST-PXE contient exactement 1351 octets nuls.
+
 ## Validation du collecteur
 
 Le mode `-WindowsPath` permet de tester la copie depuis une arborescence Windows déjà accessible, sans Hyper-V :

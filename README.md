@@ -12,7 +12,7 @@ Cette première version est un atelier **supervisé**, à valider sur un PC de l
 
 Si le premier démarrage Windows est bloqué par le fichier de réponses, [récupérer les journaux depuis l’hôte Hyper-V](docs/DIAGNOSTIC-PREMIER-DEMARRAGE.md). Le collecteur monte le disque de la VM arrêtée en lecture seule et copie le diagnostic sur l’hôte.
 
-Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [la reconstruction WinPE FR-REPRISE-2 et la reprise du test](docs/REPRISE-PXE.md). Elle conserve le menu de relance et le choix du clavier, et corrige le contrôle des partitions EFI/Windows/Recovery après DiskPart.
+Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [la reprise et la reconstruction WinPE FR-REPRISE-3](docs/REPRISE-PXE.md). Elle vérifie les partitions et sécurise l’écriture des fichiers de personnalisation. Si le fichier de réponses contient uniquement des octets nuls, utiliser [la réparation du Windows déjà appliqué](docs/REPARATION-UNATTEND.md).
 
 Pour mettre à jour votre VM **DEPLOY-01 / 192.168.99.250** déjà installée, suivre [l’assistant PXE et le test physique HP pas à pas](docs/ASSISTANT-PXE.md). Le premier client est un **HP EliteBook 850 G6**. L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
 

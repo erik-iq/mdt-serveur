@@ -12,7 +12,7 @@ Les **32 tests API** exercent l’authentification, le lifecycle, les transition
 
 Les **trois tests de personnalisation** exécutent le générateur PowerShell de fichier Unattend, analysent le XML et vérifient l’échappement des valeurs, les réglages, l’absence d’AutoLogon/mots de passe et les règles HP/Lenovo/autres marques. Ils nécessitent `pwsh` ou `powershell` dans PATH, ou la variable `ATELIER_PWSH` pointant vers l’exécutable. Ils passent avec PowerShell 7.5.4 sous Linux.
 
-La syntaxe des **quatorze scripts PowerShell** a également été vérifiée avec le parseur PowerShell 7.5.4. Les scripts sont enregistrés en UTF-8 avec BOM pour Windows PowerShell 5.1. Ce contrôle ne valide ni la présence des cmdlets sur Server 2025/WinPE ni leur exécution. La mise à jour par `Update-Console.ps1`, l’interface WinForms et les installateurs ne sont pas exécutables sur ce serveur Linux ; ils restent à tester sur Windows.
+La syntaxe des **quinze scripts PowerShell** a également été vérifiée avec le parseur PowerShell 7.5.4. Les scripts sont enregistrés en UTF-8 avec BOM pour Windows PowerShell 5.1. Ce contrôle ne valide ni la présence des cmdlets sur Server 2025/WinPE ni leur exécution. La mise à jour par `Update-Console.ps1`, l’interface WinForms et les installateurs ne sont pas exécutables sur ce serveur Linux ; ils restent à tester sur Windows.
 
 `tests/test_winpe_process.py` ajoute trois contrôles réservés à Windows PowerShell 5.1 en administrateur : chemins ADK/sortie avec espaces, transmission de l’environnement entre les deux fichiers batch, puis arrêt avant montage lorsqu’un batch échoue. Il utilise le vrai `cmd.exe` avec un ADK simulé dans un dossier temporaire ; DISM et WDS ne sont pas exécutés. Ces trois contrôles sont ignorés sous Linux. Sur Windows, lancer `.venv\Scripts\python.exe -m pytest -q tests\test_winpe_process.py`.
 
@@ -25,6 +25,10 @@ Les **22 tests de partitions** exécutent le contrôle PowerShell avec un invent
 Résultat cloud après la reprise WinPE FR-REPRISE-2 : **61 tests passés, 3 tests Windows ignorés** avec PowerShell disponible ; contrôle JavaScript et parseur PowerShell sans erreur. Voir la [recette physique sur HP EliteBook 850 G6](ASSISTANT-PXE.md).
 
 Le collecteur `Get-VMSetupDiagnostics.ps1` ajoute **12 tests portables** sur des arborescences synthétiques : présence et octets exacts des fichiers, fichier XML vide ou rempli d’octets nuls, syntaxe XML, encodage cohérent, liens symboliques refusés et conservation de la source. Les commandes de montage Hyper-V et les permissions Windows ne sont pas exécutées par ces tests. Voir [la collecte des journaux](DIAGNOSTIC-PREMIER-DEMARRAGE.md).
+
+Les **14 tests de fichiers de réponses** exécutent l’écriture UTF-8 vérifiée et une réparation dans une arborescence synthétique : octets Unicode exacts, rejet avant écrasement d’un XML nul/invalide, corruption conservant la taille, sauvegarde des 1351 octets nuls, conservation du bundle/fond d’écran et refus d’une personnalisation incomplète. Ils ne montent pas de VHD et n’exécutent pas Windows Setup. La réparation native est à valider avec [la procédure Hyper-V](REPARATION-UNATTEND.md).
+
+Résultat cloud FR-REPRISE-3 avec les collecteurs et la réparation : **87 tests passés, 3 tests Windows ignorés** ; parseur des quinze scripts PowerShell sans erreur. La cause immédiate du premier démarrage est confirmée par le fichier nul collecté ; le moment de son altération n’est pas encore établi.
 
 ## À exécuter sur Server 2025 et un PC de test
 

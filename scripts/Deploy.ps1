@@ -86,6 +86,8 @@ try {
             throw ("Fichier supplementaire invalide avant effacement : " + $extra.asset.filename)
         }
     }
+    $unattend = New-AtelierUnattend -Plan $plan
+    Assert-AtelierUnattendContent -Content $unattend
     Write-Host "IMAGE : $($edition.ImageName)"
     Write-Host "CIBLE : $($plan.hostname) / $($plan.mac)"
     Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / série $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
@@ -131,12 +133,12 @@ exit
     } finally { $imageLock.Dispose() }
     Assert-Active
     Send-Event 'running' 80 'Configuration du nom du poste et du démarrage UEFI'
-    $unattend = New-AtelierUnattend -Plan $plan
     $payloadPath = 'W:\ProgramData\AtelierPXE'
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1') -Destination $payloadPath
-    @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper} | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $payloadPath 'personalization.json') -Encoding UTF8
+    $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper} | ConvertTo-Json -Depth 12
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active
         Send-Event 'running' 85 ('Preparation du bundle : ' + $extra.asset.filename)
@@ -153,7 +155,10 @@ exit
     # specialize/oobeSystem are processed at first boot, not by DISM's
     # offlineServicing pass. Cache the answer file for Windows setup.
     New-Item -ItemType Directory -Path 'W:\Windows\Panther' -Force | Out-Null
-    Set-Content 'W:\Windows\Panther\Unattend.xml' -Value $unattend -Encoding UTF8
+    $answerBackup = Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'Unattend.generated.xml') -Content $unattend -Unattend
+    $answer = Write-AtelierVerifiedUtf8File -Path 'W:\Windows\Panther\Unattend.xml' -Content $unattend -Unattend
+    $answerManifest = @{hostname=$plan.hostname;locale=$plan.locale;size_bytes=$answer.size_bytes;sha256=$answer.sha256;backup='Unattend.generated.xml'} | ConvertTo-Json
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'unattend-manifest.json') -Content $answerManifest | Out-Null
     Run-Checked 'W:\Windows\System32\bcdboot.exe' @('W:\Windows', '/s', 'S:', '/f', 'UEFI')
     $winre = 'W:\Windows\System32\Recovery\Winre.wim'
     if (Test-Path $winre) {
@@ -162,6 +167,8 @@ exit
         Run-Checked 'W:\Windows\System32\reagentc.exe' @('/SetReImage', '/Path', 'R:\Recovery\WindowsRE', '/Target', 'W:\Windows')
     }
     Assert-Active
+    Assert-AtelierUnattendFile -Path $answer.path -ExpectedHash $answer.sha256
+    Assert-AtelierUnattendFile -Path $answerBackup.path -ExpectedHash $answerBackup.sha256
     Send-Event 'staged' 100 'Image appliquee et bundle prepare. Premier demarrage, logiciels, bureau et OOBE restent a valider.'
     Write-Host 'Installation préparée. Vérifiez le journal, puis redémarrez avec wpeutil reboot. Le premier démarrage Windows reste à contrôler.' -ForegroundColor Green
 } catch {

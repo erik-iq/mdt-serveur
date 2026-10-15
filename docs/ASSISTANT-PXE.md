@@ -6,7 +6,7 @@ Le premier PC physique est un **HP EliteBook 850 G6**, connecté en Ethernet au 
 
 ![Catalogue logiciels et bundles dans la console 0.2, avec données synthétiques de test](logiciels.png)
 
-Pour reprendre le test dans **PC-TEST-PXE** avec une nouvelle image et le menu de relance **FR-REPRISE-2**, suivre [la procédure de reconstruction et de test Hyper-V](REPRISE-PXE.md).
+Pour reprendre le test dans **PC-TEST-PXE** avec une nouvelle image et le menu de relance **FR-REPRISE-3**, suivre [la procédure de reconstruction et de test Hyper-V](REPRISE-PXE.md).
 
 ## 1. Mettre à jour la console existante
 

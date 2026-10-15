@@ -100,4 +100,4 @@ function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) 
     assert (output / 'mount' / 'Atelier' / 'Partitions.ps1').exists()
     configuration = json.loads((output / 'mount' / 'Atelier' / 'config.json').read_text(encoding='utf-8-sig'))
     assert configuration['winpe_keyboard_layout'] == '040c:0000040c'
-    assert configuration['boot_release'] == 'FR-REPRISE-2'
+    assert configuration['boot_release'] == 'FR-REPRISE-3'
