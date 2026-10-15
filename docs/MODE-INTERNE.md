@@ -1,5 +1,7 @@
 # Parcours interne — INTERNE-1
 
+Pour la révision avec rapports PDF, choix Pro/Famille et tests matériels, suivre [ATELIER-2](MISE-A-JOUR-ATELIER-2.md) et le [guide utilisateur](GUIDE-UTILISATEUR.md).
+
 Pour l'installation existante **DEPLOY-01 / 192.168.99.250**, hôte Hyper-V **192.168.99.253**, client **PC-TEST-PXE**. Cette révision s'installe après le test Windows réussi avec FR-REPRISE-3. Elle nécessite une nouvelle construction WinPE ; elle ne change pas les postes déjà installés.
 
 ## Comportement demandé

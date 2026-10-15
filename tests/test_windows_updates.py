@@ -68,6 +68,45 @@ try { Request-AtelierStoreUpdates | ConvertTo-Json -Compress } catch { @{status=
         assert result['completion_verified'] is False
 
 
+def test_async_jobs_emit_real_phases_and_release_resources(tmp_path):
+    result=json.loads(execute(tmp_path,r'''
+$script:phases=New-Object Collections.ArrayList
+$script:cleaned=0
+function New-Job {
+    $job=[pscustomobject]@{ticks=0}
+    $job | Add-Member ScriptProperty IsCompleted { $this.ticks++; return $this.ticks -gt 1 }
+    $job | Add-Member ScriptMethod GetProgress { [pscustomobject]@{PercentComplete=47;CurrentUpdateIndex=0} }
+    $job | Add-Member ScriptMethod CleanUp { $script:cleaned++ }
+    return $job
+}
+$update=[pscustomobject]@{Title='KB123 cumulative';EulaAccepted=$true;InstallationBehavior=[pscustomobject]@{CanRequestUserInput=$false}}
+$searcher=[pscustomobject]@{Updates=@($update)}
+$searcher | Add-Member ScriptMethod BeginSearch { param($criteria,$callback,$state);New-Job }
+$searcher | Add-Member ScriptMethod EndSearch { param($job);[pscustomobject]@{ResultCode=2;Updates=$this.Updates} }
+$downloader=[pscustomobject]@{Updates=$null}
+$downloader | Add-Member ScriptMethod BeginDownload { param($progress,$callback,$state);New-Job }
+$downloader | Add-Member ScriptMethod EndDownload { param($job);[pscustomobject]@{ResultCode=2} }
+$installer=[pscustomobject]@{Updates=$null;AllowSourcePrompts=$true;ForceQuiet=$false;RebootRequiredBeforeInstallation=$false}
+$installer | Add-Member ScriptMethod BeginInstall { param($progress,$callback,$state);New-Job }
+$installer | Add-Member ScriptMethod EndInstall {
+    param($job)
+    $result=[pscustomobject]@{ResultCode=2;RebootRequired=$false}
+    $result | Add-Member ScriptMethod GetUpdateResult { param($index);[pscustomobject]@{ResultCode=2} }
+    return $result
+}
+$session=[pscustomobject]@{ClientApplicationID='';Searcher=$searcher;Downloader=$downloader;Installer=$installer}
+$session | Add-Member ScriptMethod CreateUpdateSearcher { $this.Searcher }
+$session | Add-Member ScriptMethod CreateUpdateDownloader { $this.Downloader }
+$session | Add-Member ScriptMethod CreateUpdateInstaller { $this.Installer }
+$result=Invoke-AtelierWindowsUpdates -PollMilliseconds 1 -SessionFactory { $session } -CollectionFactory { ,(New-Object Collections.ArrayList) } -OnProgress { param($p);$script:phases.Add($p) | Out-Null }
+@{result=$result;phases=@($script:phases);cleaned=$script:cleaned} | ConvertTo-Json -Depth 8 -Compress
+'''))
+    assert result['result']['status']=='installed'
+    assert result['cleaned']==3
+    assert {p['phase'] for p in result['phases']} == {'search','download','install','installed'}
+    assert any(p['percent']==47 and p['title']=='KB123 cumulative' for p in result['phases'])
+
+
 @pytest.mark.parametrize(('serial','mode','name'),[
     ('5CD123AB78','digits','LE-T15-2378'),('5CD123AB78','characters','LE-T15-AB78'),
     (' 5cd123ab78 ','digits','LE-T15-2378'),('To Be Filled By O.E.M.','digits',None),

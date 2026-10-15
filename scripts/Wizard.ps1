@@ -190,7 +190,7 @@ function Show-Page {
         }
         1 {
             $items = @($script:session.catalog.profiles | ForEach-Object { [pscustomobject]@{id=$_.id; name=($_.name + ' | ' + $_.windows_version + ' ' + $_.edition + ' | ' + $_.locale)} })
-            Add-Choice 'profile' 'Windows a installer' $items $script:selectedProfile.id | Out-Null
+            Add-Choice 'profile' 'Edition Windows (Pro / Famille) et profil' $items $script:selectedProfile.id | Out-Null
             Add-Text 'Les versions proposees correspondent aux images enregistrees sur votre serveur. La langue de Windows est celle de l image selectionnee.' | Out-Null
             Add-Text ('Profil initial : ' + $script:session.plan.profile_name) | Out-Null
         }

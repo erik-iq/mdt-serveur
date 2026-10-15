@@ -16,6 +16,7 @@ $ServerUrl = $ServerUrl.TrimEnd('/')
 $endpoint = "$ServerUrl/api/agent/$DeploymentId"
 $lastProgress = 0
 $started = $false
+$imageLock = $null
 $mutex = $null
 $ownsMutex = $false
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
@@ -63,14 +64,20 @@ try {
         $sourceDisk = Get-Partition -DriveLetter $source.FullName.Substring(0,1) | Get-Disk
         if ($sourceDisk.Number -eq $disk.Number) { throw 'L''image source se trouve sur le disque à effacer.' }
     }
-    Invoke-RestMethod -Uri "$endpoint/claim" -Method Post -Headers $headers | Out-Null
+    $claim = Invoke-RestMethod -Uri "$endpoint/claim" -Method Post -Headers $headers
     $started = $true
+    if (-not $claim.report_token -or -not $claim.report_expires) { throw 'Mettre a jour la console ATELIER-2 avant de deployer cette image WinPE. Aucun disque efface.' }
     Send-Event 'running' 5 'Agent WinPE identifié ; contrôle de l''image source'
+    # One full WIM hash: keep a read-only lock from validation through DISM.
+    # Denying writes/deletion avoids a second multi-gigabyte read over SMB.
+    $imageLock = [IO.File]::Open($source.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     $checksum = (Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($checksum -ne $plan.image_sha256) { throw 'Le SHA-256 de l''image ne correspond pas au profil autorisé.' }
     # DismCmdlets rejects a missing edition/index before touching the disk.
     $edition = Get-WindowsImage -ImagePath $source.FullName -Index $plan.image_index
     if ($edition.Architecture -ne 9) { throw 'Une image Windows x64 est requise.' }
+    $expectedEdition=@{Pro='Professional';Professional='Professional';Famille='Core';Home='Core';'Famille unilingue'='CoreSingleLanguage'}[$plan.edition]
+    if ($expectedEdition -and $edition.EditionId -ne $expectedEdition) { throw 'L index WIM ne correspond pas a l edition Pro/Famille du profil. Synchroniser les profils avant de poursuivre.' }
     if ($edition.Languages -and $plan.locale -notin @($edition.Languages)) { throw 'La langue du profil n est pas presente dans cette image Windows.' }
     $manufacturer = [string](Get-CimInstance Win32_ComputerSystem).Manufacturer
     $selectedApplications = @($plan.applications | Where-Object { Test-AtelierManufacturer $_.manufacturer $manufacturer })
@@ -98,9 +105,7 @@ try {
     if ($confirmation -cne $expected) { throw 'Confirmation locale refusée ; aucun disque effacé.' }
     Assert-Active
     # Hold the source open for read and disallow writes/deletion during apply.
-    $imageLock = [IO.File]::Open($source.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
-        if ((Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $plan.image_sha256) { throw 'L''image a changé après sa validation.' }
         Send-Event 'running' 20 'Image vérifiée ; création des partitions UEFI/GPT'
         Assert-Active
         $currentDisk = Get-Disk -Number $plan.disk_number
@@ -131,14 +136,17 @@ exit
         Assert-Active
         Send-Event 'running' 35 'Application de l''image Windows (DISM)'
         Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
-    } finally { $imageLock.Dispose() }
+    } finally { $imageLock.Dispose(); $imageLock=$null }
     Assert-Active
     Send-Event 'running' 80 'Configuration du nom du poste et du démarrage UEFI'
     $payloadPath = 'W:\ProgramData\AtelierPXE'
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper} | ConvertTo-Json -Depth 12
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'reporting.json') -Content $reporting | Out-Null
+    $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active
@@ -180,6 +188,7 @@ exit
     Write-Error $failure -ErrorAction Continue
     exit 1
 } finally {
+    if ($imageLock) { $imageLock.Dispose() }
     if ($ownsMutex) { $mutex.ReleaseMutex() }
     if ($null -ne $mutex) { $mutex.Dispose() }
     $headers.Clear()

@@ -106,7 +106,7 @@ def run(internal=False):
                 page.get_by_label('Nom du profil').fill('Windows 11 · Laboratoire')
                 page.get_by_label('Image Windows',exact=True).select_option(index=1)
                 page.get_by_label('Version Windows',exact=True).fill('26H2')
-                page.get_by_label('Édition',exact=True).fill('Pro')
+                page.get_by_label('Édition',exact=True).select_option('Pro')
                 page.get_by_label('Thème Windows').select_option('dark')
                 page.get_by_label('Fond d’écran',exact=True).select_option(label='desktop.png')
                 page.get_by_label('Atelier standard',exact=True).check()
@@ -147,7 +147,8 @@ def run(internal=False):
                     request = Request(origin+'/api/agent/'+identifier+path,method='POST',headers={'Authorization':'Bearer '+agent_token,'Content-Type':'application/json'},data=json.dumps(body).encode() if body else b'')
                     with urlopen(request) as response:
                         assert response.status == 200
-                callback('/claim')
+                        return json.load(response)
+                reporting_token=callback('/claim')['report_token']
                 callback('/events',{'status':'running','progress':35,'message':'Test navigateur : image en cours'})
                 page.locator('#refresh').click()
                 page.locator(f'[data-job="{identifier}"] .badge.running').wait_for()
@@ -157,6 +158,19 @@ def run(internal=False):
                 page.locator(f'[data-events="{identifier}"]').click()
                 page.get_by_text('Test navigateur : image préparée, démarrage non vérifié',exact=True).wait_for()
                 page.locator('[data-close="events-dialog"]').click()
+                report={'hostname':'PC-LAB-01','status':'completed','generated_at':'2026-10-15T16:00:00Z',
+                        'inventory':{'Modèle':'HP navigateur'},'steps':[{'name':'Windows Update','status':'completed','message':'Test terminé'}],'warnings':[]}
+                request=Request(origin+'/api/windows/'+identifier+'/report',method='POST',headers={'Authorization':'Bearer '+reporting_token,'Content-Type':'application/json'},data=json.dumps(report).encode())
+                with urlopen(request) as response:
+                    assert response.status==200
+                page.locator('#refresh').click()
+                page.locator(f'[data-job="{identifier}"] .badge.completed').wait_for()
+                with page.expect_download() as download:
+                    page.locator(f'[data-job="{identifier}"] [data-report]').click()
+                assert Path(download.value.path()).read_bytes().startswith(b'%PDF-1.4')
+                page.locator('[data-page="machines"]').click()
+                page.locator('#machines [data-report]').wait_for()
+                page.locator('[data-page="overview"]').click()
                 second_id, _ = create_job()
                 page.on('dialog',lambda dialog:dialog.accept())
                 page.locator(f'[data-cancel="{second_id}"]').click()
@@ -167,7 +181,7 @@ def run(internal=False):
                 page.screenshot(path='/tmp/atelier-mobile.png',full_page=True)
                 assert not errors, errors
                 browser.close()
-            print(('Internal mode: ' if internal else 'Authenticated mode: ') + 'Browser smoke passed: authentication, machine/image/software/bundle/profile forms, saved personalization, PXE code cleared, agent lifecycle, journal, cancellation, mobile layout; no JavaScript errors.')
+            print(('Internal mode: ' if internal else 'Authenticated mode: ') + 'Browser smoke passed: authentication, forms, saved settings, lifecycle, journal, Windows report on machine, PDF download, cancellation, mobile layout; no JavaScript errors.')
         finally:
             process.terminate()
             process.wait(timeout=10)

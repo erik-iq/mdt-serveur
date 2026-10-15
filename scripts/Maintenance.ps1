@@ -5,6 +5,7 @@ param([string]$DataPath = 'C:\ProgramData\AtelierPXE', [string]$ToolsPath = 'C:\
 $ErrorActionPreference = 'Stop'
 . (Join-Path $DataPath 'Unattend.ps1')
 . (Join-Path $DataPath 'Updates.ps1')
+if (Test-Path (Join-Path $DataPath 'Reporting.ps1')) { . (Join-Path $DataPath 'Reporting.ps1') }
 $statePath = Join-Path $DataPath 'maintenance.json'
 $logPath = Join-Path $DataPath 'maintenance.log'
 $mutex = New-Object Threading.Mutex($false,'Global\AtelierPXE-Maintenance')
@@ -13,13 +14,24 @@ if (-not $owned) { $mutex.Dispose(); exit 0 }
 $state = [pscustomobject]@{status='running';attempts=0;passes=0;reboots=0;windows=$null;store=$null;message='Preparation des mises a jour';timestamp=''}
 function Save-Maintenance([string]$Status,[int]$Percent,[string]$Message) {
     $state.status=$Status; $state.message=$Message; $state.timestamp=[DateTime]::UtcNow.ToString('o')
-    Write-AtelierVerifiedUtf8File -Path $statePath -Content ($state | ConvertTo-Json -Depth 8) | Out-Null
-    Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message} | ConvertTo-Json) | Out-Null
+    Write-AtelierVerifiedUtf8File -Path $statePath -Content ($state | ConvertTo-Json -Depth 8) -NoBackup | Out-Null
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message;timestamp=$state.timestamp;detail=$script:updateDetail} | ConvertTo-Json -Depth 5) -NoBackup | Out-Null
     Add-Content -LiteralPath $logPath -Value ($state.timestamp + ' ' + $Message) -Encoding UTF8
+    if (Get-Command Send-AtelierWindowsProgress -ErrorAction SilentlyContinue) { Send-AtelierWindowsProgress $DataPath $Status $Percent $Message }
 }
 function Finish-Maintenance {
     Disable-AtelierAutoLogon
-    Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue
+    if (Get-Command Complete-AtelierReport -ErrorAction SilentlyContinue) { Complete-AtelierReport $DataPath $ToolsPath }
+    $configuration=Join-Path $DataPath 'reporting.json'
+    $sent=$false; $expired=$false
+    if (Test-Path (Join-Path $ToolsPath 'Transmission-Rapport.json')) {
+        try { $sent=(Get-Content (Join-Path $ToolsPath 'Transmission-Rapport.json') -Raw | ConvertFrom-Json).status -eq 'sent' } catch { }
+    }
+    if (Test-Path $configuration) {
+        try { $expired=[DateTime]::Parse((Get-Content $configuration -Raw | ConvertFrom-Json).expires) -lt [DateTime]::UtcNow } catch { }
+    }
+    # Keep only the bounded reporting retry alive while the server is offline.
+    if (-not (Test-Path $configuration) -or $sent -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Progress' -Confirm:$false -ErrorAction SilentlyContinue
 }
 function Schedule-Reboot {
@@ -31,6 +43,7 @@ function Schedule-Reboot {
 }
 try {
     if (Test-Path $statePath) { $state = Get-Content $statePath -Raw | ConvertFrom-Json }
+    if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
     if ($state.status -in @('completed','needs_attention')) { Finish-Maintenance; return }
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Raw | ConvertFrom-Json
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Raw | ConvertFrom-Json
@@ -40,8 +53,20 @@ try {
     if ($customization.restart_needed -and $state.reboots -eq 0) { Schedule-Reboot; return }
     if ($payload.settings.windows_update) {
         while ($state.passes -lt 5) {
-            Save-Maintenance 'running' 80 'Recherche et installation des mises a jour Windows...'
-            $state.windows = Invoke-AtelierWindowsUpdates
+            Save-Maintenance 'running' 80 ('Passe Windows Update ' + ($state.passes+1) + '/5 : recherche des mises a jour...')
+            $script:lastUpdateWrite=[DateTime]::MinValue
+            $state.windows = Invoke-AtelierWindowsUpdates -OnProgress {
+                param($Detail)
+                $script:updateDetail=$Detail
+                if (([DateTime]::UtcNow-$script:lastUpdateWrite).TotalSeconds -lt 5) { return }
+                $script:lastUpdateWrite=[DateTime]::UtcNow
+                $phase=@{search='Recherche';download='Telechargement';install='Installation';installed='Installation terminee'}[$Detail.phase]
+                $percent=if ($Detail.percent -ge 0) { ' - ' + $Detail.percent + ' % de cette etape' } else { ' - duree variable' }
+                $title=[string]$Detail.title
+                if ($title.Length -gt 700) { $title=$title.Substring(0,700) + '...' }
+                Save-Maintenance 'running' 80 ($phase + ' Windows Update' + $percent + ' : ' + $title)
+            }
+            $state.windows_history=@($state.windows_history) + @(@{timestamp=[DateTime]::UtcNow.ToString('o');result=$state.windows})
             $state.passes++
             if ($state.windows.reboot_required) {
                 Schedule-Reboot

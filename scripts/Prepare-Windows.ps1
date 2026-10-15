@@ -1,6 +1,10 @@
 ﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 $ErrorActionPreference = 'Stop'
+$power = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
+New-Item -Path $power -Force | Out-Null
+New-ItemProperty -Path $power -Name HiberbootEnabled -Value 0 -PropertyType DWord -Force | Out-Null
+if ((Get-ItemProperty -Path $power -Name HiberbootEnabled).HiberbootEnabled -ne 0) { throw 'Desactivation du demarrage rapide Windows non verifiee.' }
 $dataPath = Join-Path $env:ProgramData 'AtelierPXE'
 $payload = Get-Content (Join-Path $dataPath 'personalization.json') -Raw | ConvertFrom-Json
 if (-not $payload.settings.unattended) { return }

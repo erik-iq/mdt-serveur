@@ -40,8 +40,22 @@ Le code utilise 20 caractères aléatoires d’un alphabet de 32 caractères (10
 
 `settings` comprend `keyboard`, `timezone`, `user_locale`, `registered_owner`, `organization`, `theme`, `wallpaper_asset_id`, `application_ids`, `bundle_ids`. Les claviers/fuseaux proposés sont retournés dans les options ; le thème vaut `unchanged`, `light` ou `dark`. Les applications ont un constructeur cible `all`, `hp` ou `lenovo`. Le filtrage matériel est réalisé dans WinPE puis revérifié au premier démarrage. Les IDs issus de bundles et de sélections directes sont dédupliqués.
 
-Les booléens `unattended`, `windows_update` et `store_update` valent false par défaut. `automatic_windows=true` préremplit les trois à true pour les profils des nouvelles autorisations, y compris les profils existants. `unattended` prépare le compte intégré Administrateur sans mot de passe et la première session automatique. Les résultats des mises à jour sont locaux dans `maintenance.json` ; `store.status=requested` confirme seulement l'acceptation de la demande, pas l'achèvement du Store. Le plan expose `internal_mode` pour adapter le récapitulatif d'effacement.
+Les booléens `unattended`, `windows_update` et `store_update` valent false par défaut. `automatic_windows=true` préremplit les trois à true pour les profils des nouvelles autorisations, y compris les profils existants. `unattended` prépare le compte intégré Administrateur sans mot de passe et la première session automatique. Les résultats détaillés des mises à jour sont conservés dans `maintenance.json` et remontés à la console avec ATELIER-2 ; `store.status=requested` confirme seulement l'acceptation de la demande, pas l'achèvement du Store. Le plan expose `internal_mode` pour adapter le récapitulatif d'effacement.
 
-Les ZIP exigent un point d’entrée relatif EXE/MSI. Le mode `portable` est réservé aux ZIP, sans arguments : copie et raccourci, aucune exécution automatique de l’outil. Les EXE/MSI utilisés sont vérifiés par Authenticode sur le poste avant exécution. L’état `staged` inclut la préparation du bundle ; les résultats du premier démarrage sont écrits dans `C:\ProgramData\AtelierPXE\result.json`, sans retour automatique à la console dans cette version.
+Les ZIP exigent un point d’entrée relatif EXE/MSI. Le mode `portable` est réservé aux ZIP, sans arguments : copie et raccourci ; HPImageAssistant.exe est ouvert sur les HP en fin de maintenance, pour une intervention manuelle. Les EXE/MSI utilisés sont vérifiés par Authenticode sur le poste avant exécution. L’état `staged` inclut la préparation du bundle ; les résultats du premier démarrage sont écrits dans `C:\ProgramData\AtelierPXE\result.json`, avec remontée Windows et rapport dans la console pour les clients ATELIER-2.
 
 Les assets sont immuables par convention, avec taille/date vérifiées côté serveur et SHA-256 vérifié dans WinPE. Un WIM dont le contenu change doit être enregistré sous un nouveau nom. Le serveur ne fournit pas de signatures d’éditeur ni de vérification antivirale des images ; utiliser les sources officielles et vérifier les médias en amont.
+
+## Remontée Windows ATELIER-2
+
+L’appel `POST /api/agent/{id}/claim` fournit également un `report_token`, distinct du jeton WinPE, et sa date `report_expires` (quatorze jours). Il est enregistré uniquement dans le dossier privé du poste. Ce jeton ne permet ni de lire les images/logiciels ni de modifier le disque ou un autre déploiement. Les appels WinPE restent révoqués à `staged`.
+
+| Route | Autorisation et rôle |
+| --- | --- |
+| POST `/api/windows/{id}/progress` | Jeton de rapport ; état, progression et message Windows. |
+| POST `/api/windows/{id}/report` | Jeton de rapport ; inventaire structuré, étapes et avertissements. Corps limité à 128 Kio. |
+| GET `/api/deployments/{id}/report.pdf` | Administrateur ou mode interne ; PDF généré avec l’historique WinPE. |
+
+`GET /api/state` expose `windows_status`, `windows_progress`, `windows_message`, `windows_updated_at` et `has_report` pour chaque déploiement, ainsi qu’une liste `reports` rattachée aux machines. Ces états Windows sont distincts des états WinPE. Une remontée terminale ne peut pas être remplacée par une ancienne progression « running ». Le renvoi d’un même rapport final est accepté, notamment après les tests matériels. Les identifiants de rapport ne sont jamais exposés dans cet état public administrateur.
+
+`GET /health` conserve `version=0.2.0` et annonce `release=ATELIER-2`. Les guides intégrés sont servis à `/static/guide.html` et `/static/upgrade.html`.

@@ -2,3 +2,5 @@
 
 /* Installation profiles and application bundles. */
 #form-dialog{max-height:90vh;overflow:auto}details{border-top:1px solid var(--line,#d9e0db);margin:18px 0;padding-top:14px}summary{font-weight:600;cursor:pointer;margin-bottom:16px}.choice-list{border:1px solid #d9e0db;border-radius:10px;margin:18px 0;padding:14px}.choice-list legend{font-weight:600;padding:0 6px}.choice-list label,.check-row{display:flex;align-items:center;gap:10px;margin:10px 0}.choice-list input[type=checkbox],.check-row input[type=checkbox]{width:18px;min-width:18px;height:18px;margin:0;accent-color:#4b7463}.software-guide{margin-bottom:24px}.software-guide p{max-width:850px}.profile-card ul{padding-left:18px;color:#65756c}.profile-card li{margin:7px 0}#boot-code{font-family:Consolas,monospace;font-size:18px;letter-spacing:1px}
+
+.badge.completed{background:#def5e8;color:#176342}.badge.needs_attention,.badge.retry_pending,.badge.reboot_pending{background:#fff1cd;color:#75540b}

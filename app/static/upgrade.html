@@ -1,0 +1,41 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE — Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> · <a href="/static/guide.html">Guide utilisateur</a> · <a href="/static/upgrade.html">Mise à jour</a></nav><main><h1>Installer la révision ATELIER-2</h1>
+<p>Cette révision complète INTERNE-1 : progression Windows Update par phase, consoles de fond masquées, ouverture de HP Image Assistant, profils Pro/Famille issus du WIM, démarrage rapide Windows désactivé, tests matériels et PDF local/console. L’API de base reste en version 0.2.0 pour compatibilité ; le marqueur de démarrage est <strong>ATELIER-2</strong>.</p>
+<h2>Mettre à jour le serveur existant</h2>
+<p>Attendre la fin de la préparation Windows en cours sur PC-TEST-PXE avant de remplacer la console : l’ancienne version ne sait pas transmettre sa progression ou son rapport. Il n’est pas nécessaire de réinstaller Windows Server, WDS, IIS ou ADK.</p>
+<p>Télécharger la révision validée du dépôt, l’extraire hors de <code>C:\AtelierPXE\console</code>, débloquer ses scripts et lancer son <strong>nouveau</strong> <code>scripts\Update-Console.ps1 -SourcePath &lt;dossier extrait&gt;</code> en PowerShell administrateur sur DEPLOY-01. Le script sauvegarde la console et SQLite et conserve les données et la configuration. Vérifier <code>/health</code>, puis <code>/api/session</code> (<code>internal_mode=True</code>, <code>automatic_windows=True</code>).</p>
+<p>Les migrations SQLite sont additives. Les anciens déploiements restent consultables et n’ont pas artificiellement de statut Windows ni de rapport. Les données des rapports restent hors du partage SMB des images. Les jetons WinPE sont toujours révoqués à la fin de WinPE ; un jeton distinct, propre au déploiement et limité à quatorze jours, sert uniquement à la remontée Windows.</p>
+<h2>Appliquer les trois étapes en une commande</h2>
+<p>Depuis le dossier des nouvelles sources extraites, <code>scripts\Upgrade-Atelier2.ps1</code> enchaîne la mise à jour sauvegardée de la console, la synchronisation des profils Pro/Famille et la construction/import d’une nouvelle image WDS. Lancer ce script en PowerShell administrateur <strong>sur DEPLOY-01</strong>, après la fin des déploiements et de la maintenance Windows en cours :</p>
+<pre><code>&amp; &#x27;.\scripts\Upgrade-Atelier2.ps1&#x27;</code></pre>
+<p>Le clavier WinPE est français AZERTY par défaut. Les paramètres <code>-WinPEKeyboardLayout &#x27;100c:0000100c&#x27;</code>, <code>-DriversPath &#x27;D:\AtelierPXE\Drivers\WinPE-x64&#x27;</code> et <code>-TrustedRootCertificate &#x27;C:\chemin\racine.cer&#x27;</code> permettent d’adapter les valeurs existantes. Le script ne réinstalle ni WDS, ni IIS, ni ADK, ni Windows. Il s’arrête si une étape échoue. Les sections suivantes détaillent ces mêmes étapes pour une exécution séparée ou un diagnostic.</p>
+<h2>Préparer les éditions du WIM</h2>
+<p>Sur DEPLOY-01, dans PowerShell administrateur :</p>
+<pre><code>&amp; &#x27;C:\AtelierPXE\console\scripts\Sync-WindowsEditions.ps1&#x27;</code></pre>
+<p>Le script lit les éditions avec DISM, copie les réglages d’un profil existant du même WIM et ajoute les éditions Pro/Famille manquantes. L’image n’est pas modifiée. Il ignore les langues différentes du profil modèle. S’il n’existe aucun profil modèle, en créer d’abord un avec la bonne langue et le bundle souhaité dans la console. Le choix du menu Édition lors d’une création manuelle est une étiquette ; <strong>l’index doit correspondre à l’édition réelle du WIM</strong>.</p>
+<h2>Reconstruire WinPE</h2>
+<p>Toujours sur DEPLOY-01, PowerShell administrateur :</p>
+<pre><code>&amp; {
+    $ErrorActionPreference = &#x27;Stop&#x27;
+    $atelierStamp = Get-Date -Format &#x27;yyyyMMdd-HHmmss&#x27;
+    $atelierParametres = @{
+        ServerUrl = &#x27;https://192.168.99.250&#x27;
+        OutputPath = &quot;D:\AtelierPXE\WinPE-Atelier2-$atelierStamp&quot;
+        TrustedRootCertificate = &#x27;C:\AtelierPXE\certs\AtelierPXE-lab.cer&#x27;
+        WinPEKeyboardLayout = &#x27;040c:0000040c&#x27;
+        WdsImageName = &quot;Atelier PXE - ATELIER-2 - $atelierStamp&quot;
+        ImportIntoWds = $true
+    }
+    &amp; &#x27;C:\AtelierPXE\console\scripts\Build-WinPE.ps1&#x27; @atelierParametres
+    Import-Module WDS
+    Get-WdsBootImage | Format-Table ImageName, Architecture, FileName
+}</code></pre>
+<p>Pour le suisse romand, utiliser <code>100c:0000100c</code> à la place du clavier français AZERTY. Pour un PC physique nécessitant des pilotes supplémentaires, ajouter un <code>DriversPath</code> contenant les INF signés déjà validés. Les images existantes sont conservées.</p>
+<h2>Valider dans la VM puis sur le HP</h2>
+<p>Créer une <strong>nouvelle autorisation</strong> avec le choix du profil activé, démarrer la <strong>nouvelle image ATELIER-2</strong> et suivre le <a href="/static/guide.html">guide utilisateur</a>. Le nouveau parcours s’applique aux nouveaux déploiements ; un poste déjà démarré avec INTERNE-1 garde ses scripts.</p>
+<p>Dans la VM, vérifier l’absence de console PowerShell vide, les phases Windows Update, une reprise après redémarrage, l’état Windows dans Atelier et le téléchargement du PDF. Vérifier que le rapport signale normalement l’absence de batterie/caméra. Confirmer <code>HiberbootEnabled=0</code> dans <code>HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power</code>.</p>
+<p>Sur le HP, préparer HP Image Assistant sous forme de ZIP extrait officiel avec <code>HPImageAssistant.exe</code> comme point d’entrée, mode portable et constructeur HP. Vérifier qu’il s’ouvre une seule fois en fin de préparation, que le raccourci reste disponible et que les mises à jour de pilotes demandent l’action du technicien. Exécuter ensuite les trois tests matériels et régénérer le PDF.</p>
+<h2>Performances et limites</h2>
+<p>La lecture de la console n’acquiert plus systématiquement un verrou d’écriture SQLite ; les opérations qui réservent ou modifient un déploiement conservent leur transaction exclusive de rédaction. Un index accélère les journaux par déploiement. Le WIM est verrouillé en lecture dès sa vérification SHA-256 et jusqu’à la fin de DISM, ce qui évite de relire une seconde fois toute l’image sur SMB. Les états de progression sont remplacés sans accumulation de sauvegardes ; les écritures critiques des fichiers de réponses restent vérifiées. Les logiciels installés avec succès sont mémorisés par identifiant et SHA-256 pour éviter une réinstallation lors d’une reprise partielle.</p>
+<p>Le moteur Windows Update utilise ses opérations asynchrones et publie la phase réelle. La cadence locale est limitée à cinq secondes ; un serveur inaccessible espace les tentatives de remontée. Cela améliore la visibilité et la réactivité ; aucun gain de durée des mises à jour Microsoft n’est garanti. Les protections d’image, signatures, TLS et vérifications du disque restent actives.</p>
+<p>Le PDF est généré sans navigateur, imprimante PDF, Office ni bibliothèque tierce. Il contient les inventaires CIM accessibles, l’état de licence sans clé produit, les logiciels, les passes Windows Update, les avertissements et les tests opérateur disponibles. Le PDF téléchargé depuis la console ajoute l’historique WinPE. Son état « terminé » ne certifie pas les interventions manuelles effectuées ensuite dans HP Image Assistant.</p>
+<p>Si la console reste indisponible, la tâche terminale retente uniquement la génération/transmission du rapport ; elle ne recommence pas l’installation des logiciels ou de Windows Update. Les délais et limites de la maintenance restent bornés. Le PDF local reste accessible après expiration du jeton.</p></main></body></html>

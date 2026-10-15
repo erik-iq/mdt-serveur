@@ -68,3 +68,17 @@ def test_package_reboot_happens_before_windows_updates(tmp_path):
     assert state['reboots']==1
     state=run_worker(tmp_path,'empty',package_restart=True)
     assert state['status']=='completed' and state['reboots']==1
+
+
+def test_completed_worker_only_retries_report_without_reinstall(tmp_path):
+    run_worker(tmp_path,'empty')
+    (tmp_path/'Reporting.ps1').write_text(r'''
+function Complete-AtelierReport {
+    param($DataPath,$ToolsPath)
+    [IO.File]::WriteAllText((Join-Path $DataPath 'report-retried'),'yes')
+}
+''',encoding='utf-8-sig')
+    # The update engine now throws: completed state must never call it again.
+    state=run_worker(tmp_path,'fail')
+    assert state['status']=='completed' and state['attempts']==1
+    assert (tmp_path/'report-retried').exists()

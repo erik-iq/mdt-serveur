@@ -15,12 +15,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from app.customization import ApplicationInput, BootConnection, BootDiscovery, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
 from app.windows_secrets import read_share_credentials
+from app.reports import ComputerReport, WindowsProgress, make_pdf, report_lines
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -114,12 +115,12 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     db_path = data / "deployment.sqlite3"
 
     @contextmanager
-    def db():
+    def db(write=False):
         con = sqlite3.connect(db_path, timeout=20)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys=ON")
         try:
-            con.execute("BEGIN IMMEDIATE")
+            con.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             yield con
             con.commit()
         except Exception:
@@ -128,7 +129,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         finally:
             con.close()
 
-    with db() as con:
+    with db(write=True) as con:
         con.executescript("""
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS machines (
@@ -160,6 +161,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             CREATE TABLE IF NOT EXISTS bundles (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
                 application_ids_json TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS computer_reports (
+                deployment_id TEXT PRIMARY KEY REFERENCES deployments(id),
+                report_json TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS events_deployment ON events(deployment_id,id);
         """)
 
         # Additive migrations preserve the console installed on DEPLOY-01.
@@ -168,7 +173,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                          'settings_json': "TEXT NOT NULL DEFAULT '{}'"},
             'deployments': {'wizard_enabled': 'INTEGER NOT NULL DEFAULT 0',
                             'catalog_json': "TEXT NOT NULL DEFAULT '{}'", 'selection_json': "TEXT NOT NULL DEFAULT '{}'",
-                            'boot_code_hash': 'TEXT', 'boot_code_expires': 'TEXT'},
+                            'boot_code_hash': 'TEXT', 'boot_code_expires': 'TEXT',
+                            'report_token_hash': 'TEXT', 'report_expires': 'TEXT',
+                            'windows_status': 'TEXT', 'windows_progress': 'INTEGER',
+                            'windows_message': 'TEXT', 'windows_updated_at': 'TEXT'},
         }
         for table, columns in additions.items():
             present = {r['name'] for r in con.execute(f'PRAGMA table_info({table})')}
@@ -182,6 +190,14 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     @api.middleware("http")
     async def security_headers(request: Request, call_next):
+        if request.url.path.startswith('/api/windows/') and request.method == 'POST':
+            # Bound the stream as well as Content-Length (which may be absent).
+            body = bytearray()
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > 128 * 1024:
+                    return PlainTextResponse('Rapport trop volumineux', status_code=413)
+            request._body = bytes(body)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -305,7 +321,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2"}
 
     @api.get('/api/session')
     def session_options():
@@ -319,12 +335,17 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result['profiles'] = [profile_public(r) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
             result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
-                d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name
+                d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name,
+                d.windows_status,d.windows_progress,d.windows_message,d.windows_updated_at,
+                EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report
                 FROM deployments d JOIN machines m ON m.id=d.machine_id JOIN profiles p ON p.id=d.profile_id
                 ORDER BY d.created_at DESC LIMIT 100""")]
             for item in result['deployments']:
                 selection = json.loads(item.pop('selection_json'))
                 item['hostname'] = selection.get('hostname', item['hostname'])
+            result['reports'] = [dict(r) for r in con.execute('''SELECT r.deployment_id,r.created_at,d.machine_id,
+                d.windows_status,json_extract(r.report_json,'$.hostname') AS hostname
+                FROM computer_reports r JOIN deployments d ON d.id=r.deployment_id ORDER BY r.created_at DESC LIMIT 100''')]
             result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
@@ -338,7 +359,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def add_machine(body: MachineInput):
         identifier = str(uuid.uuid4())
         try:
-            with db() as con:
+            with db(write=True) as con:
                 con.execute("INSERT INTO machines VALUES (?,?,?,?,?)", (identifier, body.hostname, body.mac, body.description, now()))
                 return row(con, "machines", identifier)
         except sqlite3.IntegrityError:
@@ -370,7 +391,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             raise HTTPException(409, "Le fichier est en cours de modification")
         identifier = str(uuid.uuid4())
         try:
-            with db() as con:
+            with db(write=True) as con:
                 con.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", (identifier, body.filename, body.kind, checksum, stat.st_size, stat.st_mtime_ns, now()))
                 return row(con, "assets", identifier)
         except sqlite3.IntegrityError:
@@ -380,7 +401,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def add_profile(body: ProfileInput):
         identifier = str(uuid.uuid4())
         try:
-            with db() as con:
+            with db(write=True) as con:
                 asset = row(con, "assets", body.asset_id)
                 if asset["kind"] != "windows":
                     raise HTTPException(400, "Le profil nécessite une image Windows")
@@ -398,7 +419,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def add_application(body: ApplicationInput):
         identifier = str(uuid.uuid4())
         try:
-            with db() as con:
+            with db(write=True) as con:
                 asset = asset_snapshot(con, body.asset_id, 'application')
                 if asset['filename'].lower().endswith('.zip'):
                     if not body.entry_point:
@@ -406,7 +427,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 elif body.entry_point or body.install_mode == 'portable':
                     raise HTTPException(400, 'Le point d’entrée et le mode portable sont réservés aux ZIP')
                 if body.install_mode == 'portable' and body.arguments:
-                    raise HTTPException(400, 'Un outil portable est copié sans être exécuté automatiquement')
+                    raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
                 con.execute('INSERT INTO applications VALUES (?,?,?,?,?,?,?,?,?)',
                             (identifier, body.name, body.version, body.asset_id, body.arguments, body.entry_point,
                              body.install_mode, body.manufacturer, now()))
@@ -418,7 +439,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def add_bundle(body: BundleInput):
         identifier = str(uuid.uuid4())
         try:
-            with db() as con:
+            with db(write=True) as con:
                 for app_id in body.application_ids:
                     application = row(con, 'applications', app_id)
                     asset_snapshot(con, application['asset_id'], 'application')
@@ -433,7 +454,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         identifier, agent_token = str(uuid.uuid4()), secrets.token_urlsafe(32)
         boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled and not internal else None
         try:
-            with db() as con:
+            with db(write=True) as con:
                 machine = row(con, "machines", body.machine_id)
                 profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
@@ -457,7 +478,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         if not internal:
             raise HTTPException(403, 'Connexion automatique desactivee')
         macs = {value.replace('-', ':').upper() for value in body.macs}
-        with db() as con:
+        with db(write=True) as con:
             records = [dict(r) for r in con.execute("""SELECT d.*,m.mac AS matched_mac FROM deployments d
                 JOIN machines m ON m.id=d.machine_id WHERE d.status='queued' AND d.wizard_enabled=1
                 AND d.boot_code_expires>?""", (now(),)) if r['matched_mac'] in macs]
@@ -481,7 +502,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     @api.post('/api/boot/connect')
     def boot_connect(body: BootConnection):
         code = body.code.replace('-', '').strip().upper()
-        with db() as con:
+        with db(write=True) as con:
             record = con.execute("SELECT * FROM deployments WHERE boot_code_hash=? AND status='queued' AND boot_code_expires>?", (digest(code), now())).fetchone()
             if not record:
                 raise HTTPException(401, 'Code d’installation absent, expiré ou déjà utilisé')
@@ -496,7 +517,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     @api.post('/api/agent/{identifier}/configure')
     def configure(identifier: str, body: WizardSelection, authorization: str = Header(default='')):
-        with db() as con:
+        with db(write=True) as con:
             job = agent(con, identifier, authorization)
             if job['status'] != 'queued':
                 raise HTTPException(409, 'Les paramètres sont figés après le début du déploiement')
@@ -532,7 +553,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     @api.post("/api/deployments/{identifier}/cancel", dependencies=[Depends(admin)])
     def cancel(identifier: str):
-        with db() as con:
+        with db(write=True) as con:
             job = row(con, "deployments", identifier)
             if job["status"] in TERMINAL:
                 raise HTTPException(409, "Déploiement déjà terminé")
@@ -557,18 +578,71 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     @api.post("/api/agent/{identifier}/claim")
     def claim(identifier: str, authorization: str = Header(default="")):
-        with db() as con:
+        with db(write=True) as con:
             job = agent(con, identifier, authorization)
             if job["status"] != "queued":
                 raise HTTPException(409, "Ce déploiement a déjà été pris en charge")
             plan_data(con, job)
-            con.execute("UPDATE deployments SET status='running',updated_at=?,boot_code_hash=NULL WHERE id=?", (now(), identifier))
+            report_token = secrets.token_urlsafe(32)
+            expires = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+            con.execute("UPDATE deployments SET status='running',updated_at=?,boot_code_hash=NULL,report_token_hash=?,report_expires=? WHERE id=?", (now(), digest(report_token), expires, identifier))
             event(con, identifier, "running", 0, "L’agent WinPE a réservé le déploiement")
-        return {"claimed": True}
+        return {"claimed": True, "report_token": report_token, "report_expires": expires}
+
+    def windows_agent(con, identifier, authorization):
+        job = row(con, 'deployments', identifier)
+        supplied = authorization.removeprefix('Bearer ') if authorization.startswith('Bearer ') else ''
+        if not job['report_token_hash'] or not hmac.compare_digest(digest(supplied), job['report_token_hash']):
+            raise HTTPException(401, 'Jeton de rapport invalide')
+        if not job['report_expires'] or job['report_expires'] < now():
+            raise HTTPException(401, 'Jeton de rapport expire')
+        if job['status'] not in {'running', 'staged'}:
+            raise HTTPException(409, 'Rapport refuse pour ce deploiement')
+        return job
+
+    @api.post('/api/windows/{identifier}/progress')
+    def windows_progress(identifier: str, body: WindowsProgress, authorization: str = Header(default='')):
+        with db(write=True) as con:
+            job = windows_agent(con, identifier, authorization)
+            if job['windows_status'] in {'completed', 'failed', 'needs_attention'} and body.status != job['windows_status']:
+                raise HTTPException(409, 'Preparation Windows deja terminee')
+            con.execute('UPDATE deployments SET windows_status=?,windows_progress=?,windows_message=?,windows_updated_at=? WHERE id=?',
+                        (body.status, body.progress, body.message, now(), identifier))
+        return {'accepted': True}
+
+    @api.post('/api/windows/{identifier}/report')
+    def receive_computer_report(identifier: str, body: ComputerReport, authorization: str = Header(default='')):
+        snapshot = body.model_dump()
+        if any(len(k) > 100 or len(v) > 2000 for k, v in body.inventory.items()) or any(len(w) > 1500 for w in body.warnings):
+            raise HTTPException(422, 'Champ de rapport trop long')
+        with db(write=True) as con:
+            job = windows_agent(con, identifier, authorization)
+            selected = json.loads(job['selection_json'])
+            hostname = selected.get('hostname') or row(con, 'machines', job['machine_id'])['hostname']
+            if body.hostname.lower() != hostname.lower():
+                raise HTTPException(409, 'Nom different du poste autorise')
+            if job['windows_status'] in {'completed', 'failed', 'needs_attention'} and body.status != job['windows_status']:
+                raise HTTPException(409, 'Etat final different du rapport precedent')
+            con.execute('INSERT INTO computer_reports VALUES (?,?,?) ON CONFLICT(deployment_id) DO UPDATE SET report_json=excluded.report_json,created_at=excluded.created_at',
+                        (identifier, json.dumps(snapshot, ensure_ascii=False), now()))
+            con.execute('UPDATE deployments SET windows_status=?,windows_progress=?,windows_updated_at=? WHERE id=?',
+                        (body.status, 100 if body.status == 'completed' else 90, now(), identifier))
+        return {'accepted': True, 'pdf_path': f'/api/deployments/{identifier}/report.pdf'}
+
+    @api.get('/api/deployments/{identifier}/report.pdf', dependencies=[Depends(admin)])
+    def download_computer_report(identifier: str):
+        with db() as con:
+            record = con.execute('SELECT report_json FROM computer_reports WHERE deployment_id=?', (identifier,)).fetchone()
+            if not record:
+                raise HTTPException(404, 'Rapport pas encore recu')
+            snapshot = json.loads(record['report_json'])
+            entries = [dict(r) for r in con.execute('SELECT * FROM events WHERE deployment_id=? ORDER BY id', (identifier,))]
+        return Response(make_pdf(report_lines(snapshot, entries)), media_type='application/pdf',
+                        headers={'Content-Disposition': f'attachment; filename="Rapport-{snapshot["hostname"]}.pdf"'})
 
     @api.post("/api/agent/{identifier}/events")
     def report(identifier: str, body: EventInput, authorization: str = Header(default="")):
-        with db() as con:
+        with db(write=True) as con:
             job = agent(con, identifier, authorization)
             if job["status"] != "running" or body.progress < job["progress"] or (body.status == "staged" and body.progress != 100):
                 raise HTTPException(409, "Transition ou progression invalide")

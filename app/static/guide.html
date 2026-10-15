@@ -1,0 +1,69 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE — Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> · <a href="/static/guide.html">Guide utilisateur</a> · <a href="/static/upgrade.html">Mise à jour</a></nav><main><h1>Utiliser Atelier PXE</h1>
+<p>Atelier PXE installe Windows sur un ordinateur démarré par le réseau, prépare ses logiciels et produit un rapport de contrôle. Ce guide décrit le serveur déjà installé dans l’atelier et le parcours <strong>ATELIER-2</strong>. L’installation efface le disque choisi : sauvegarder les données avant de commencer.</p>
+<h2>Comprendre les trois machines</h2>
+<div class="table"><table><thead><tr><th>Élément</th><th>Rôle</th><th>Adresse ou emplacement</th></tr></thead><tbody>
+<tr><td>DEPLOY-01</td><td>Serveur des images Windows et de la console Atelier</td><td><code>192.168.99.250</code></td></tr>
+<tr><td>Hôte Hyper-V</td><td>Ordinateur qui héberge les machines virtuelles</td><td><code>192.168.99.253</code></td></tr>
+<tr><td>PC cible</td><td>Ordinateur à installer, physique ou VM <code>PC-TEST-PXE</code></td><td>Son adresse MAC est enregistrée dans Atelier</td></tr>
+</tbody></table></div>
+<p>Ouvrir la console à <strong>https://192.168.99.250</strong>. En mode interne, elle s’ouvre sans jeton. Le réseau de l’atelier doit donc rester accessible aux personnes autorisées à déployer. Le projet utilise WDS pour démarrer une image WinPE personnalisée ; il applique ensuite le WIM avec DISM. Il ne requiert pas une séquence de tâches MDT.</p>
+<p><strong>WinPE</strong> est le petit Windows de démarrage qui affiche l’assistant d’installation. <strong>WIM</strong> est le fichier contenant les éditions de Windows. Un <strong>profil</strong> associe une édition du WIM à une langue et des réglages. Un <strong>bundle</strong> regroupe les logiciels à installer.</p>
+<h2>Préparer un poste</h2>
+<ol>
+<li>Brancher le poste en Ethernet, sur secteur, au réseau de l’atelier. Utiliser un disque dont les données peuvent être effacées.</li>
+<li>Dans <strong>Parc machines</strong>, enregistrer le nom du poste et la MAC de l’interface utilisée pour démarrer en PXE. La MAC d’un dock peut être différente de celle du PC.</li>
+<li>Dans <strong>Profils Windows</strong>, vérifier les profils disponibles. Le choix Pro ou Famille dépend du contenu du WIM et de la licence du poste. Un choix d’édition ne crée pas de licence.</li>
+<li>Dans <strong>Logiciels et outils</strong>, vérifier le bundle, les versions et le fond d’écran. Les applications HP sont réservées aux HP ; les applications Lenovo aux Lenovo.</li>
+<li>Créer une <strong>nouvelle autorisation de déploiement</strong>, avec le bon poste, le profil initial, le numéro du disque et <strong>Autoriser le choix du profil et des paramètres dans l’assistant PXE</strong> coché. Une autorisation expire après deux heures si l’installation n’a pas commencé.</li>
+</ol>
+<h2>Choisir Pro ou Famille</h2>
+<p>Le technicien prépare une fois les profils depuis les véritables métadonnées de l’image. Sur DEPLOY-01, en PowerShell administrateur :</p>
+<pre><code>&amp; &#x27;C:\AtelierPXE\console\scripts\Sync-WindowsEditions.ps1&#x27;</code></pre>
+<p>Un profil existant pour ce WIM sert de modèle pour la langue, le bundle et le bureau. Le script ajoute uniquement les éditions Pro, Famille ou Famille unilingue présentes dans le WIM. Il ne télécharge et ne convertit aucune édition. Si Famille n’est pas proposée, fournir un WIM qui la contient. Ne pas deviner son index : les index varient selon le média Microsoft.</p>
+<p>Créer ensuite une <strong>nouvelle autorisation</strong>, car une autorisation mémorise le catalogue disponible au moment de sa création. Dans WinPE, l’étape <strong>Windows</strong> propose les profils Pro/Famille disponibles. Sans la case de choix dans l’assistant, seul le profil autorisé est accessible.</p>
+<h2>Installer Windows</h2>
+<ol>
+<li>Démarrer le PC en <strong>UEFI IPv4 / réseau</strong>. Dans Hyper-V, utiliser le démarrage réseau de la VM cliente.</li>
+<li>Choisir la nouvelle image <strong>Atelier PXE - ATELIER-2 - date</strong>. Une image ancienne conserve ses anciens scripts.</li>
+<li>L’assistant retrouve la nouvelle autorisation par la MAC. En mode interne, aucun code PXE ni mot de passe SMB n’est à recopier. S’il ne trouve rien, vérifier la MAC et l’autorisation, puis cliquer sur Connexion.</li>
+<li>Choisir le profil Windows et vérifier le nom du PC, la région, le clavier, le fuseau, le bundle et le fond d’écran. Un numéro de série trop court ou générique impose un nom manuel.</li>
+<li>Lire le récapitulatif, surtout l’identité et la capacité du disque. <strong>Installer Windows efface les partitions du disque indiqué.</strong></li>
+<li>Attendre la fin de WinPE. <strong>Image appliquée / staged</strong> signifie que les fichiers Windows et le démarrage sont prêts ; les logiciels et les mises à jour restent à exécuter.</li>
+<li>Éteindre WinPE avec <code>wpeutil shutdown</code>. Placer le disque / Windows Boot Manager avant le réseau, puis redémarrer. Sur un PC physique, utiliser son menu de démarrage si nécessaire.</li>
+</ol>
+<h2>Suivre la préparation dans Windows</h2>
+<p>Le premier démarrage prépare le bureau et les logiciels. La fenêtre de progression affiche leur nom. Les processus PowerShell d’arrière-plan sont masqués.</p>
+<p>Windows Update affiche successivement <strong>Recherche</strong>, <strong>Téléchargement</strong> et <strong>Installation</strong>, avec les titres des mises à jour. La recherche n’expose pas de pourcentage fiable : la barre s’anime et indique une durée variable. Pendant le téléchargement et l’installation, le pourcentage représente l’étape en cours, pas le temps restant de tout le déploiement. Il peut repartir de zéro lors d’une nouvelle étape ou passe.</p>
+<p>La première recherche et les grosses mises à jour cumulatives peuvent être longues. Laisser le PC sur secteur et connecté. Le service Windows Update configuré sur le poste est conservé, y compris WSUS. Les pilotes et les mises à jour facultatives ne sont pas sélectionnés par ce parcours. Des redémarrages automatiques sont annoncés deux minutes à l’avance. La reprise est limitée à cinq passes, quatre redémarrages et six tentatives ; un problème temporaire donne une nouvelle tentative quinze minutes plus tard.</p>
+<p>Sur un HP compatible, le package portable <strong>HP Image Assistant</strong>, enregistré avec le point d’entrée <code>HPImageAssistant.exe</code>, s’ouvre après la maintenance Windows. Le technicien choisit alors les pilotes à installer. Son ouverture n’installe aucun pilote ou BIOS automatiquement. Un raccourci reste sur le bureau si une ouverture manuelle est nécessaire. La disponibilité des pilotes dépend de la prise en charge du modèle par HP Image Assistant.</p>
+<p>Le démarrage rapide <strong>Windows</strong> est désactivé pour tous les nouveaux déploiements. Le réglage Fast Boot du BIOS/UEFI n’est pas modifié.</p>
+<h2>Contrôler le poste dans C:\IQ_</h2>
+<div class="table"><table><thead><tr><th>Outil ou fichier</th><th>Utilisation</th></tr></thead><tbody>
+<tr><td><code>Test-Materiel.cmd</code></td><td>Ouvre les tests du son, de la webcam et du clavier dans le navigateur. Autoriser la webcam, tester et confirmer chaque résultat.</td></tr>
+<tr><td><code>Tests-Materiel.json</code></td><td>Résultats saisis par l’opérateur. « Non testé » ne signifie pas « conforme ».</td></tr>
+<tr><td><code>Test-Batterie.cmd</code></td><td>Génère le rapport batterie ; une VM ou un PC fixe peut légitimement ne pas avoir de batterie.</td></tr>
+<tr><td><code>Verifier-Licence.cmd</code></td><td>Actualise l’état d’activation Windows, sans modifier la licence.</td></tr>
+<tr><td><code>Rapport-Deploiement.pdf</code></td><td>Inventaire, édition et activation Windows, logiciels, mises à jour, avertissements et résultats matériels disponibles.</td></tr>
+<tr><td><code>Generer-Rapport.cmd</code></td><td>Régénère le PDF après les tests, la vérification de garantie ou les interventions manuelles, puis tente la transmission à Atelier.</td></tr>
+<tr><td><code>Transmission-Rapport.json</code></td><td><code>sent</code> : reçu par Atelier ; <code>pending</code> : PDF local conservé et envoi à reprendre.</td></tr>
+<tr><td><code>Verifier-Garantie.cmd</code></td><td>Ouvre la vérification officielle du constructeur et permet de consigner les dates confirmées.</td></tr>
+</tbody></table></div>
+<p>Les lanceurs peuvent demander l’autorisation administrateur pour écrire dans le dossier technique. Le test caméra montre l’image localement, sans l’enregistrer. Le clavier est testé uniquement dans sa zone dédiée ; Fn et certains raccourcis Windows demandent une vérification manuelle. Le son doit être confirmé à l’oreille. Ces outils ne peuvent pas certifier automatiquement l’état physique des périphériques.</p>
+<h2>Lire le rapport dans Atelier</h2>
+<p>Après la fin ou l’arrêt définitif de la préparation, le PDF local est créé dans <code>C:\IQ_</code>. Le poste transmet ses informations à la console. Dans <strong>Activité de déploiement</strong>, le bouton <strong>Rapport PDF</strong> apparaît ; il est aussi disponible sur la ligne du poste dans <strong>Parc machines</strong>.</p>
+<p>La console distingue l’état WinPE et l’état Windows. <strong>Terminé</strong> concerne les opérations automatiques ; vérifier aussi les avertissements du PDF, l’activation, les périphériques et les pilotes. L’actualisation Microsoft Store est une demande à Windows : elle ne garantit pas que toutes les applications ont fini de se mettre à jour. Contrôler la bibliothèque du Store si nécessaire.</p>
+<p>Si la console est momentanément indisponible, le PDF reste local et l’envoi est retenté toutes les quinze minutes. Le jeton de rapport est valable quatorze jours depuis le début du déploiement. Passé ce délai, conserver le PDF local ; une intervention du technicien est nécessaire pour un nouveau rattachement. Ne pas copier les fichiers d’identifiants du dossier ProgramData dans un compte rendu.</p>
+<h2>Que faire en cas de problème</h2>
+<div class="table"><table><thead><tr><th>Symptôme</th><th>Vérification</th></tr></thead><tbody>
+<tr><td>WinPE ne démarre pas</td><td>Démarrage UEFI, câble, DHCP/WDS et choix de la bonne image.</td></tr>
+<tr><td>Réseau ou disque absent dans WinPE</td><td>Pilotes WinPE du modèle ; demander une reconstruction au technicien.</td></tr>
+<tr><td>Pro/Famille manque</td><td>Édition présente dans le WIM, synchronisation des profils, puis nouvelle autorisation avec choix activé.</td></tr>
+<tr><td>Mises à jour lentes</td><td>Phase affichée, titre de la mise à jour, connexion, heure du poste ; ne pas couper l’alimentation pendant l’installation.</td></tr>
+<tr><td>Nouvelle tentative prévue</td><td>Laisser le poste connecté ; consulter <code>maintenance.log</code> si les tentatives se répètent.</td></tr>
+<tr><td>À vérifier / échec</td><td>Lire le PDF et <code>C:\ProgramData\AtelierPXE\maintenance.log</code> ou <code>first-logon.log</code>. Ne pas effacer l’état pour relancer une boucle.</td></tr>
+<tr><td>Pas de PDF dans Atelier</td><td>Vérifier le PDF local et <code>Transmission-Rapport.json</code>, puis lancer <code>Generer-Rapport.cmd</code>. Les anciens clients antérieurs à ATELIER-2 n’ont pas cette remontée.</td></tr>
+<tr><td>Webcam refusée</td><td>Autorisation du navigateur, réglages de confidentialité Windows, cache, pilote. Ce refus ne prouve pas une panne.</td></tr>
+</tbody></table></div>
+<h2>Terminer la recette</h2>
+<p>Vérifier l’édition et l’activation Windows, le nom et le numéro de série, le Gestionnaire de périphériques, le son, la webcam, le clavier et la batterie si présente. Effectuer les mises à jour de pilotes voulues dans l’outil constructeur. Actualiser le rapport après les tests avec <code>Generer-Rapport.cmd</code>, puis vérifier son téléchargement depuis Atelier. Garder le PDF avec la fiche du poste.</p>
+<p>Pour la mise à jour du serveur et la reconstruction WinPE, suivre <a href="/static/upgrade.html">la procédure ATELIER-2</a>. Pour une installation neuve de l’infrastructure, utiliser <a href="https://github.com/erik-iq/mdt-serveur/blob/main/docs/INSTALLATION.md">INSTALLATION.md</a>.</p></main></body></html>

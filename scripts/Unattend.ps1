@@ -16,19 +16,19 @@ function New-AtelierUnattend {
     $identity = ''
     if ($owner) { $identity += "<RegisteredOwner>$owner</RegisteredOwner>" }
     if ($organization) { $identity += "<RegisteredOrganization>$organization</RegisteredOrganization>" }
-    $prepare = ''
-    $automatic = ''
-    if ($settings.unattended) {
-        $prepare = @'
+    # Run on every deployment, including interactive OOBE: disables Windows Fast Startup.
+    $prepare = @'
   <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
    <RunSynchronous>
     <RunSynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" wcm:action="add">
-     <Order>1</Order><Path>powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\Prepare-Windows.ps1"</Path>
-     <Description>Atelier PXE - compte local</Description>
+     <Order>1</Order><Path>powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\Prepare-Windows.ps1"</Path>
+     <Description>Atelier PXE - configuration Windows</Description>
     </RunSynchronousCommand>
    </RunSynchronous>
   </component>
 '@
+    $automatic = ''
+    if ($settings.unattended) {
         $automatic = @"
    <OOBE><HideEULAPage>true</HideEULAPage><HideOEMRegistrationScreen>true</HideOEMRegistrationScreen><HideOnlineAccountScreens>true</HideOnlineAccountScreens><HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE><ProtectYourPC>1</ProtectYourPC></OOBE>
    <UserAccounts><AdministratorPassword><Value></Value><PlainText>true</PlainText></AdministratorPassword></UserAccounts>
@@ -54,7 +54,7 @@ $prepare
    <FirstLogonCommands>
     <SynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" wcm:action="add">
      <Order>1</Order><Description>Atelier PXE - logiciels et personnalisation</Description>
-     <CommandLine>powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\FirstLogon.ps1"</CommandLine>
+     <CommandLine>powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\FirstLogon.ps1"</CommandLine>
     </SynchronousCommand>
    </FirstLogonCommands>
   </component>
@@ -115,7 +115,8 @@ function Write-AtelierVerifiedUtf8File {
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][AllowEmptyString()][string]$Content,
-        [switch]$Unattend
+        [switch]$Unattend,
+        [switch]$NoBackup
     )
     if ([string]::IsNullOrWhiteSpace($Content) -or $Content.IndexOf([char]0) -ge 0) { throw 'Contenu vide ou contenant des caracteres nuls : ecriture refusee.' }
     if ($Unattend) { Assert-AtelierUnattendContent -Content $Content }
@@ -143,6 +144,7 @@ function Write-AtelierVerifiedUtf8File {
         } else { [IO.File]::Move($temporary,$target) }
         if ($Unattend) { Assert-AtelierUnattendFile -Path $target -ExpectedHash $expectedHash }
         elseif ((Get-AtelierBytesHash -Bytes ([IO.File]::ReadAllBytes($target))) -ne $expectedHash) { throw 'Le fichier a change apres son ecriture.' }
+        if ($NoBackup -and $backup) { [IO.File]::Delete($backup); $backup=$null }
         return [pscustomobject]@{path=$target;size_bytes=$bytes.Length;sha256=$expectedHash;backup=$backup}
     } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 }

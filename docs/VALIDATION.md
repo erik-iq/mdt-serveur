@@ -40,7 +40,7 @@ Le correctif d'activation ajoute quatre tests exécutant le véritable contrôle
 
 Les tests PowerShell exécutent le XML automatique, les noms issus du numéro BIOS, les décisions Windows Update avec de faux objets COM (résultats partiels, intervention nécessaire, redémarrage préalable), la reprise durable après redémarrage et l'arrêt des boucles. Les tests IQ_ créent réellement une arborescence temporaire, copient le fond, vérifient les lanceurs et les états actif/non actif/sans batterie ; CIM, powercfg et les droits NTFS sont simulés. Aucun de ces tests n'active un compte ou une licence et aucun n'installe de mise à jour.
 
-Sur Windows, suivre [la recette du mode interne](MODE-INTERNE.md) : génération du secret SMB, premier logon sans OOBE interactif, compte SID 500 et UAC, progression, vrais installateurs, permissions des tâches, maintien/retrait de l'ouverture automatique, mises à jour réelles et rapports IQ_. L'actualisation Store est marquée demandée et non certifiée terminée. Les états après `staged` restent locaux sur le poste.
+Sur Windows, suivre [la recette du mode interne](MODE-INTERNE.md) : génération du secret SMB, premier logon sans OOBE interactif, compte SID 500 et UAC, progression, vrais installateurs, permissions des tâches, maintien/retrait de l'ouverture automatique, mises à jour réelles et rapports IQ_. L'actualisation Store est marquée demandée et non certifiée terminée. Les clients ATELIER-2 remontent leurs états Windows et leur rapport ; les anciens clients conservent leurs états locaux.
 
 ## À exécuter sur Server 2025 et un PC de test
 
@@ -57,6 +57,10 @@ Sur Windows, suivre [la recette du mode interne](MODE-INTERNE.md) : génération
 
 ## Limites de cette version
 
-Un administrateur partagé, sans rôles utilisateurs/SSO ; opérations supervisées ; UEFI x64 uniquement ; images WIM non fractionnées ; pas de jonction AD, capture d’image, injection automatique de drivers Windows par modèle ou multicast. Le mode interne ajoute une reprise locale des mises à jour, sans remontée de maintenance après OOBE vers la console. Les logiciels exigent leurs paramètres silencieux, une signature valide et une première connexion administrateur. Le bureau est personnalisé pour ce premier compte ; pas de configuration des futurs comptes ou de stratégie de domaine. Les images d’installation téléchargées via HTTP par l’API ne sont pas le parcours choisi par l’agent ; il lit un WIM SMB/local indépendant du disque cible.
+Un administrateur partagé, sans rôles utilisateurs/SSO ; opérations supervisées ; UEFI x64 uniquement ; images WIM non fractionnées ; pas de jonction AD, capture d’image, injection automatique de drivers Windows par modèle ou multicast. ATELIER-2 ajoute une reprise locale des mises à jour et leur remontée après OOBE vers la console. Les logiciels exigent leurs paramètres silencieux, une signature valide et une première connexion administrateur. Le bureau est personnalisé pour ce premier compte ; pas de configuration des futurs comptes ou de stratégie de domaine. Les images d’installation téléchargées via HTTP par l’API ne sont pas le parcours choisi par l’agent ; il lit un WIM SMB/local indépendant du disque cible.
 
 La console n’est pas un contrôleur DHCP/TFTP et ne peut pas démarrer le LAN depuis le cloud. Les scripts PowerShell nécessitent une validation Windows réelle avant une utilisation en production. Les tests Python/navigateur ne remplacent pas cette recette.
+
+## Recette ATELIER-2
+
+Exécuter la [recette de mise à jour ATELIER-2](MISE-A-JOUR-ATELIER-2.md) : phases réelles Windows Update, reprise, absence de console vide, ouverture HPIA, choix Pro/Famille et refus d’un index incohérent, HiberbootEnabled=0, tests matériels opérateur, PDF local et téléchargement dans Atelier. Vérifier le renvoi d’un rapport lorsque la console revient en ligne et la garantie assistée sans dates inventées. Le test navigateur IQ simule une caméra : il ne valide pas le matériel réel.
