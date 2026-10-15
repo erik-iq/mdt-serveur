@@ -89,6 +89,7 @@ Les lanceurs `.cmd` demandent une élévation Windows pour pouvoir écrire leurs
 
 ## Diagnostic et retour au mode précédent
 
+- Si une ancienne version de `Enable-InternalMode.ps1` affiche une erreur Python `SyntaxError: '(' was never closed`, puis « Terminez les deploiements », le contrôle n'a pas abouti : ce message ne prouve pas qu'un déploiement est actif. Mettre à jour ce script et relancer l'activation. Le correctif transmet le code Python sur l'entrée standard pour Windows PowerShell 5.1, ouvre SQLite en lecture seule et distingue une erreur de contrôle d'un nombre réel de déploiements en cours. Cette erreur survient avant la création du compte et la modification de la configuration.
 - Une erreur de connexion du partage doit être corrigée sur DEPLOY-01 avec `Enable-InternalMode.ps1`, jamais en copiant un mot de passe dans WinPE.
 - `retry_pending` annonce une nouvelle tentative quinze minutes plus tard ; `needs_attention` signifie arrêt après la limite et désactivation de l'ouverture automatique. Consulter `maintenance.log` avant une reprise manuelle.
 - Après une limite atteinte, vérifier Internet, Windows Update, les services Store et les journaux. Ne pas supprimer l'état ou relancer une boucle sans diagnostic.

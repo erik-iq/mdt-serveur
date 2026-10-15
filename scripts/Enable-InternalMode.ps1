@@ -6,6 +6,25 @@ param(
     [ValidateSet('characters','digits')][string]$HostnameSuffixMode='digits'
 )
 $ErrorActionPreference = 'Stop'
+function Get-AtelierActiveDeploymentCount {
+    param([Parameter(Mandatory)][string]$Runtime, [Parameter(Mandatory)][string]$Database)
+    # Windows PowerShell 5.1 strips embedded quotes in native -c arguments.
+    # Feed Python on stdin instead, keeping SQL out of the native command line.
+    $activeCheck = @'
+import sqlite3, sys
+from pathlib import Path
+uri = Path(sys.argv[1]).resolve().as_uri() + "?mode=ro"
+with sqlite3.connect(uri, uri=True) as connection:
+    print(connection.execute("SELECT COUNT(*) FROM deployments WHERE status=?", ("running",)).fetchone()[0])
+'@
+    $checkOutput = @($activeCheck | & $Runtime - $Database)
+    if ($LASTEXITCODE -ne 0) { throw 'Controle des deploiements impossible : Python ou SQLite a echoue.' }
+    $count = 0
+    if ($checkOutput.Count -ne 1 -or -not [int]::TryParse(([string]$checkOutput[0]).Trim(),[ref]$count) -or $count -lt 0) {
+        throw 'Controle des deploiements impossible : resultat Python invalide.'
+    }
+    return $count
+}
 Add-Type -AssemblyName System.Security
 $configPath = Join-Path $InstallPath 'data-runtime.json'
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
@@ -14,8 +33,8 @@ $artifacts = [IO.Path]::GetFullPath((Join-Path $config.data_dir 'artifacts')).Tr
 $share = Get-SmbShare -Name 'AtelierImages' -ErrorAction Stop
 if ([IO.Path]::GetFullPath($share.Path).TrimEnd('\') -ne $artifacts) { throw 'Le partage AtelierImages ne correspond pas au dossier des fichiers.' }
 $runtime = Join-Path $InstallPath '.venv\Scripts\python.exe'
-$active = & $runtime -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute("SELECT COUNT(*) FROM deployments WHERE status=?", ("running",)).fetchone()[0])' (Join-Path $config.data_dir 'deployment.sqlite3')
-if ($LASTEXITCODE -ne 0 -or [int]$active -gt 0) { throw 'Terminez les deploiements en cours avant cette operation.' }
+$active = Get-AtelierActiveDeploymentCount -Runtime $runtime -Database (Join-Path $config.data_dir 'deployment.sqlite3')
+if ($active -gt 0) { throw 'Terminez les deploiements en cours avant cette operation.' }
 $account = 'AtelierPXERead'
 $secretPath = Join-Path $config.data_dir 'internal-share.json'
 $user = Get-LocalUser -Name $account -ErrorAction SilentlyContinue
