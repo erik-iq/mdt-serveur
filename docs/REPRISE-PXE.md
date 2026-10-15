@@ -4,6 +4,8 @@ Sur **DEPLOY-01 / 192.168.99.250**, reconstruire une image de démarrage avec le
 
 L’image **FR-REPRISE-2** ajoute un menu après fermeture ou erreur, un nouveau processus PowerShell STA à chaque relance, un choix de clavier et un champ de test avant les identifiants. Les erreurs de démarrage et leur emplacement restent affichés. Le journal `X:\Atelier\Logs\startup.log` contient étapes, types d’erreur et lignes de script, sans messages d’erreur, codes PXE, jetons ou mots de passe. Il disparaît au redémarrage de WinPE. L’API reste en **0.2.0** ; FR-REPRISE-2 identifie seulement l’image de démarrage.
 
+Si Windows affiche une erreur de fichier de réponses après le démarrage sur disque, suivre [la collecte des journaux depuis l’hôte Hyper-V](DIAGNOSTIC-PREMIER-DEMARRAGE.md). Cette collecte distingue un fichier absent, vide, rempli d’octets nuls ou un XML invalide, sans modifier le Windows installé.
+
 ## Si l’installation s’est arrêtée après DiskPart
 
 Le message `No MSFT_Partition objects found ... DriveLetter ... S` provient du contrôle après partitionnement, avant l’application du WIM. Le disque de test a déjà été repartitionné : il ne faut pas considérer cet essai comme une installation Windows terminée.
