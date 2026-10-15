@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from app.customization import ApplicationInput, BootConnection, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
+from app.customization import ApplicationInput, BootConnection, BootDiscovery, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
+from app.windows_secrets import read_share_credentials
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -77,7 +78,7 @@ class DeploymentInput(BaseModel):
     machine_id: str
     profile_id: str
     disk_number: int = Field(default=0, ge=0, le=32)
-    confirmation: str
+    confirmation: str = ''
     wizard_enabled: bool = False
 
 
@@ -87,7 +88,9 @@ class EventInput(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
-def create_app(data_dir=None, admin_token=None, base_url=None):
+def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=None, automatic_windows=None):
+    internal = internal_mode if internal_mode is not None else os.getenv('MDT_INTERNAL_MODE', '') == '1'
+    automatic = automatic_windows if automatic_windows is not None else os.getenv('MDT_AUTOMATIC_WINDOWS', '') == '1'
     data = Path(data_dir or os.getenv("MDT_DATA_DIR", ROOT / "data")).resolve()
     data.mkdir(parents=True, exist_ok=True)
     artifacts = data / "artifacts"
@@ -188,7 +191,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    def admin(authorization: str = Header(default="")):
+    def admin(request: Request, authorization: str = Header(default="")):
+        if internal:
+            if request.headers.get('sec-fetch-site') == 'cross-site' or request.headers.get('origin', public_url) != public_url:
+                raise HTTPException(403, 'Origine externe refusee')
+            return
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Jeton administrateur requis")
 
@@ -211,6 +218,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
         result = dict(record)
         saved = json.loads(result.pop('settings_json'))
         result['settings'] = Personalization.model_validate(saved or defaults_for_locale(result['locale'])).model_dump()
+        if automatic:
+            result['settings'].update(unattended=True, windows_update=True, store_update=True)
         return result
 
     def bundle_public(record):
@@ -277,7 +286,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
                 'profile_id': profile['id'], 'profile_name': profile['name'], 'windows_version': profile['windows_version'],
                 'edition': profile['edition'], 'image_index': profile['image_index'], 'locale': profile['locale'],
                 'image_filename': asset['filename'], 'image_size': asset['size'], 'image_sha256': asset['sha256'],
-                'image_path': f"/api/agent/{job['id']}/image", 'wizard_enabled': bool(job['wizard_enabled']), **resolved}
+                'image_path': f"/api/agent/{job['id']}/image", 'wizard_enabled': bool(job['wizard_enabled']), 'internal_mode': bool(internal), **resolved}
 
     def agent(con, identifier, authorization):
         job = row(con, "deployments", identifier)
@@ -298,6 +307,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
             con.execute("SELECT 1").fetchone()
         return {"status": "ok", "version": "0.2.0"}
 
+    @api.get('/api/session')
+    def session_options():
+        return {'internal_mode': bool(internal), 'automatic_windows': bool(automatic)}
+
     @api.get("/api/state", dependencies=[Depends(admin)])
     def state():
         with db() as con:
@@ -317,6 +330,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
         result["base_url"] = public_url
         result['customization_options'] = OPTIONS
+        result['internal_mode'] = bool(internal)
+        result['automatic_windows'] = bool(automatic)
         return result
 
     @api.post("/api/machines", status_code=201, dependencies=[Depends(admin)])
@@ -416,13 +431,13 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
     @api.post("/api/deployments", status_code=201, dependencies=[Depends(admin)])
     def deploy(body: DeploymentInput):
         identifier, agent_token = str(uuid.uuid4()), secrets.token_urlsafe(32)
-        boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled else None
+        boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled and not internal else None
         try:
             with db() as con:
                 machine = row(con, "machines", body.machine_id)
                 profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
-                if body.confirmation != "EFFACER " + machine["hostname"]:
+                if not internal and body.confirmation != "EFFACER " + machine["hostname"]:
                     raise HTTPException(400, "Confirmation d’effacement incorrecte")
                 timestamp = now()
                 catalog = catalogue(con, body.profile_id, body.wizard_enabled)
@@ -430,12 +445,38 @@ def create_app(data_dir=None, admin_token=None, base_url=None):
                 con.execute("INSERT INTO deployments(id,machine_id,profile_id,disk_number,token_hash,status,progress,created_at,updated_at,wizard_enabled,catalog_json,selection_json,boot_code_hash,boot_code_expires) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (identifier, body.machine_id, body.profile_id, body.disk_number, digest(agent_token), 'queued', 0,
                              timestamp, timestamp, int(body.wizard_enabled), json.dumps(catalog), json.dumps(selection),
-                             digest(boot_code) if boot_code else None, (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat() if boot_code else None))
+                             digest(boot_code) if boot_code else None, (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat() if body.wizard_enabled else None))
                 event(con, identifier, "queued", 0, "Déploiement autorisé ; attente de l’agent WinPE")
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Un déploiement est déjà actif sur cette machine")
         return {"id": identifier, "agent_token": agent_token, "base_url": public_url,
                 'boot_code': '-'.join(boot_code[i:i+4] for i in range(0, 20, 4)) if boot_code else None}
+
+    @api.post('/api/boot/discover')
+    def boot_discover(body: BootDiscovery):
+        if not internal:
+            raise HTTPException(403, 'Connexion automatique desactivee')
+        macs = {value.replace('-', ':').upper() for value in body.macs}
+        with db() as con:
+            records = [dict(r) for r in con.execute("""SELECT d.*,m.mac AS matched_mac FROM deployments d
+                JOIN machines m ON m.id=d.machine_id WHERE d.status='queued' AND d.wizard_enabled=1
+                AND d.boot_code_expires>?""", (now(),)) if r['matched_mac'] in macs]
+            if len(records) != 1:
+                raise HTTPException(409, 'Creez une seule autorisation active pour la MAC de ce poste dans la console')
+            job, new_token = records[0], secrets.token_urlsafe(32)
+            con.execute('UPDATE deployments SET token_hash=?,updated_at=? WHERE id=?', (digest(new_token), now(), job['id']))
+            return {'id': job['id'], 'agent_token': new_token, 'plan': plan_data(con, job), 'catalog': json.loads(job['catalog_json'])}
+
+    @api.get('/api/agent/{identifier}/share-credentials')
+    def share_credentials(identifier: str, authorization: str = Header(default='')):
+        if not internal or url.scheme != 'https':
+            raise HTTPException(403, 'Connexion automatique du partage reservee au mode interne HTTPS')
+        with db() as con:
+            agent(con, identifier, authorization)
+        try:
+            return read_share_credentials(data / 'internal-share.json')
+        except Exception:
+            raise HTTPException(503, 'Connexion du partage non preparee : executez Enable-InternalMode.ps1 sur le serveur') from None
 
     @api.post('/api/boot/connect')
     def boot_connect(body: BootConnection):

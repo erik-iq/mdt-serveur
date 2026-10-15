@@ -23,7 +23,7 @@ $envScript = Join-Path $adk 'Deployment Tools\DandISetEnv.bat'
 $copype = Join-Path $peRoot 'copype.cmd'
 $oc = Join-Path $peRoot 'amd64\WinPE_OCs'
 foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complémentaire WinPE absent : $path" } }
-foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','atelier.cmd')) {
+foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','atelier.cmd')) {
     if (-not (Test-Path (Join-Path $PSScriptRoot $script))) { throw "Mettez a jour tous les fichiers du projet avant la construction : $script absent." }
 }
 if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
@@ -47,7 +47,7 @@ try {
     if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
     $target = Join-Path $mount 'Atelier'
     New-Item -ItemType Directory -Path $target | Out-Null
-    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1')) {
+    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1')) {
         Copy-Item (Join-Path $PSScriptRoot $script) -Destination $target
     }
     # GitHub source archives can use LF. Always write a Windows batch file.
@@ -58,7 +58,11 @@ try {
         if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorité de confiance.' }
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
-    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='FR-REPRISE-3'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
+    $internalMode = $false
+    $runtimeConfig = $null
+    $runtimePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'data-runtime.json'
+    if (Test-Path $runtimePath) { $runtimeConfig = Get-Content $runtimePath -Raw | ConvertFrom-Json; $internalMode = [bool]$runtimeConfig.internal_mode }
+    @{hostname_prefix=$runtimeConfig.hostname_prefix;hostname_suffix_mode=$runtimeConfig.hostname_suffix_mode;internal_mode=$internalMode; server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='INTERNE-1'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
     # Each relaunch uses a new STA process; no credentials on its command line.
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null

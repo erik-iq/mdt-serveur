@@ -1,5 +1,5 @@
 'use strict';
-let token = '', state = null, currentForm = '', refreshing = false;
+let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
 const $ = id => document.getElementById(id);
 const labels = {queued:'En attente', running:'En cours', staged:'Image appliquée', failed:'Échec', cancelled:'Annulé'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -25,7 +25,7 @@ function render() {
   $('deployments').innerHTML = state.deployments.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.mac)}</small></td><td>${esc(d.profile_name)}</td><td>${badge(d.status)}</td><td><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td>${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</td></tr>`).join('');
   $('machines-empty').hidden = state.machines.length > 0;
   $('machines').innerHTML = state.machines.map(m=>`<tr><td><b>${esc(m.hostname)}</b></td><td class="hash">${esc(m.mac)}</td><td>${esc(m.description)||'—'}</td><td>${date(m.created_at)}</td></tr>`).join('');
-  $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} · ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} · ${esc(p.locale)}<br>${esc(p.settings.timezone)} · ${esc(p.settings.theme)}<br>${p.settings.bundle_ids.length} bundle(s) · ${p.settings.application_ids.length} logiciel(s)<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Créez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis sélectionnez l’index de l’édition avec DISM /Get-WimInfo.</p></div>';
+  $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} · ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} · ${esc(p.locale)}<br>${esc(p.settings.timezone)} · ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.bundle_ids.length} bundle(s) · ${p.settings.application_ids.length} logiciel(s)<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Créez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis sélectionnez l’index de l’édition avec DISM /Get-WimInfo.</p></div>';
   $('applications').innerHTML = state.applications.length ? state.applications.map(a=>`<article class="panel profile-card"><span class="badge">${esc(a.manufacturer==='all'?'TOUS LES POSTES':a.manufacturer.toUpperCase())}</span><h3>${esc(a.name)}</h3><p>${esc(a.version || 'Version à renseigner')} · ${a.install_mode==='portable'?'Outil portable':'Installation silencieuse'}</p><code>${esc(state.assets.find(x=>x.id===a.asset_id)?.filename)}</code></article>`).join('') : '<div class="panel padding"><h3>Préparez votre bundle.</h3><p>Enregistrez les installateurs VLC, lecteur PDF et Chrome, puis les outils HP et Lenovo.</p></div>';
   $('bundles').innerHTML = state.bundles.map(b=>`<article class="panel profile-card"><span class="badge">BUNDLE</span><h3>${esc(b.name)}</h3><p>${esc(b.description)}</p><ul>${b.application_ids.map(id=>`<li>${esc(state.applications.find(a=>a.id===id)?.name || id)}</li>`).join('')}</ul></article>`).join('');
   $('assets').innerHTML = state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}…</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistré.</td></tr>';
@@ -33,7 +33,7 @@ function render() {
   $('boot-url').textContent = state.base_url+'/boot/menu.ipxe';
 }
 async function refresh() {
-  if (!token || refreshing) return;
+  if ((!token && !internalMode) || refreshing) return;
   refreshing = true;
   try { state = await api('/state'); render(); $('connection').textContent = '● Console connectée'; $('notice').hidden = true; }
   catch(e) { $('connection').textContent = '● Connexion interrompue'; $('notice').textContent = e.message; $('notice').hidden = false; }
@@ -55,7 +55,7 @@ function openForm(kind) {
   if(kind==='profile') content=field('Nom du profil','name','text','maxlength="80" placeholder="Windows 11 Pro · FR"')+select('Image Windows','asset_id',state.assets.filter(a=>a.kind==='windows').map(a=>({id:a.id,name:a.filename})))+optionalField('Version Windows','windows_version','maxlength="24" placeholder="26H2 — version de votre image"')+optionalField('Édition','edition','maxlength="40" placeholder="Pro"')+field('Index de l’édition (DISM /Get-WimInfo)','image_index','number','min="1" max="100" value="1"')+field('Langue de l’image Windows','locale','text','value="fr-FR" pattern="[a-z]{2}-[A-Z]{2}"')+'<details open><summary>Installation et personnalisation</summary>'+select('Clavier','keyboard',state.customization_options.keyboards)+select('Fuseau horaire','timezone',state.customization_options.timezones)+field('Région / formats','user_locale','text','value="fr-FR" pattern="[a-z]{2}-[A-Z]{2}"')+optionalField('Propriétaire enregistré','registered_owner','maxlength="80"')+optionalField('Organisation','organization','maxlength="80"')+select('Thème Windows','theme',state.customization_options.themes)+optionalSelect('Fond d’écran','wallpaper_asset_id',state.assets.filter(a=>a.kind==='wallpaper').map(a=>({id:a.id,name:a.filename})))+choiceList('Bundles inclus','bundle_ids',state.bundles)+choiceList('Logiciels supplémentaires','application_ids',state.applications.map(a=>({id:a.id,name:a.name+' '+a.version})))+'</details>';
   if(kind==='application') content=field('Nom du logiciel','name','text','maxlength="80" placeholder="Google Chrome"')+optionalField('Version du logiciel','version','maxlength="40"')+select('Fichier du logiciel','asset_id',state.assets.filter(a=>a.kind==='application').map(a=>({id:a.id,name:a.filename})))+select('Mode','install_mode',[{id:'install',name:'Installation silencieuse'},{id:'portable',name:'Outil portable — ZIP'}])+optionalField('Programme dans le ZIP','entry_point','maxlength="160" placeholder="HPImageAssistant.exe — uniquement pour un ZIP"')+optionalField('Arguments silencieux','arguments','maxlength="1024" placeholder="/S pour VLC ; vide pour un MSI standard"')+select('Constructeur compatible','manufacturer',[{id:'all',name:'Tous les postes'},{id:'hp',name:'HP uniquement'},{id:'lenovo',name:'Lenovo uniquement'}])+'<p class="muted">Les logiciels seront préparés pendant WinPE puis installés au premier démarrage avec un compte administrateur. Les exécutables doivent avoir une signature éditeur valide.</p>';
   if(kind==='bundle') content=field('Nom du bundle','name','text','maxlength="80" placeholder="Poste standard — VLC / PDF / Chrome"')+optionalField('Description du bundle','description','maxlength="240"')+choiceList('Logiciels du bundle','application_ids',state.applications.map(a=>({id:a.id,name:a.name+' '+a.version+' · '+a.manufacturer})));
-  if(kind==='deployment') content='<p class="warning-text">Ce déploiement supprimera toutes les partitions du disque choisi. Vérifiez sa sauvegarde et son identité avant de confirmer sur le poste.</p>'+select('Poste cible','machine_id',state.machines.map(m=>({id:m.id,name:m.hostname+' · '+m.mac})))+select('Profil Windows','profile_id',state.profiles)+field('Numéro de disque WinPE','disk_number','number','value="0" min="0" max="32"')+'<label class="check-row"><input name="wizard_enabled" type="checkbox" checked><span>Autoriser le choix du profil et des paramètres dans l’assistant PXE</span></label>'+field('Confirmation : EFFACER suivi du nom exact du poste','confirmation','text','placeholder="EFFACER PC-ATELIER-01" autocomplete="off"');
+  if(kind==='deployment') content='<p class="warning-text">Ce déploiement supprimera toutes les partitions du disque choisi. Vérifiez sa sauvegarde et son identité avant de confirmer sur le poste.</p>'+select('Poste cible','machine_id',state.machines.map(m=>({id:m.id,name:m.hostname+' · '+m.mac})))+select('Profil Windows','profile_id',state.profiles)+field('Numéro de disque WinPE','disk_number','number','value="0" min="0" max="32"')+'<label class="check-row"><input name="wizard_enabled" type="checkbox" checked><span>Autoriser le choix du profil et des paramètres dans l’assistant PXE</span></label>'+(internalMode ? '<p>Le disque sera indiqué dans WinPE avant le lancement de l’installation.</p>' : field('Confirmation : EFFACER suivi du nom exact du poste','confirmation','text','placeholder="EFFACER PC-ATELIER-01" autocomplete="off"'));
   $('form-fields').innerHTML=content;
   const defaults={keyboard:'040c:0000040c',timezone:'Romance Standard Time',theme:'unchanged',install_mode:'install',manufacturer:'all'};
   for(const [name,value] of Object.entries(defaults)) {const input=$('resource-form').elements.namedItem(name);if(input) input.value=value;}
@@ -82,7 +82,7 @@ $('resource-form').addEventListener('submit',async e=>{
   const endpoints={machine:'/machines',asset:'/assets',profile:'/profiles',deployment:'/deployments',application:'/applications',bundle:'/bundles'};
   $('submit-resource').disabled=true; $('form-error').textContent='';
   try { const result=await api(endpoints[currentForm],'POST',data); $('form-dialog').close();
-    if(currentForm==='deployment') { $('job-id').value=result.id; $('job-token').value=result.agent_token; $('boot-code').value=result.boot_code || 'Mode texte — utilisez le jeton'; $('copy-token').textContent='Copier le jeton'; $('token-dialog').showModal(); }
+    if(currentForm==='deployment' && !internalMode) { $('job-id').value=result.id; $('job-token').value=result.agent_token; $('boot-code').value=result.boot_code || 'Mode texte — utilisez le jeton'; $('copy-token').textContent='Copier le jeton'; $('token-dialog').showModal(); }
     await refresh();
   } catch(error) { $('form-error').textContent=error.message; }
   finally { $('submit-resource').disabled=false; }
@@ -102,7 +102,25 @@ function clearJobToken() { $('job-token').value=''; $('job-token').type='passwor
 $('token-dialog').addEventListener('close',clearJobToken);
 $('copy-token').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('job-token').value);$('copy-token').textContent='Jeton copié';}catch{ $('job-token').type='text';$('job-token').select();$('copy-token').textContent='Sélectionné — utilisez Ctrl+C'; }});
 $('copy-boot-code').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('boot-code').value);}catch{$('boot-code').select();}});
-$('refresh').addEventListener('click',refresh);
+$('refresh').addEventListener('click',()=> sessionReady ? refresh() : initializeSession());
 $('logout').addEventListener('click',()=>{token='';state=null;document.querySelectorAll('dialog[open]').forEach(d=>d.close());location.reload();});
 setInterval(()=>{if(!document.hidden) refresh();},5000);
-$('login-dialog').showModal();
+initializeSession();
+
+async function initializeSession() {
+  try {
+    const response = await fetch('/api/session', {cache:'no-store'});
+    if (!response.ok) throw new Error('Impossible de lire la configuration de la console');
+    const options = await response.json();
+    internalMode = options.internal_mode === true;
+    sessionReady = true;
+    if (internalMode) {
+      $('logout').hidden = true;
+      await refresh();
+    } else $('login-dialog').showModal();
+  } catch (error) {
+    $('notice').textContent = error.message;
+    $('notice').hidden = false;
+    $('connection').textContent = '● Connexion interrompue';
+  }
+}

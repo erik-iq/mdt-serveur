@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)][string]$Token,
     [Parameter(Mandatory)][string]$ImagePath,
     [string]$LocalConfirmation,
+    [switch]$StartFromWizard,
     [switch]$AllowHttpForLab
 )
 $ErrorActionPreference = 'Stop'
@@ -93,7 +94,7 @@ try {
     Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / série $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
     Write-Host 'Toutes les partitions de ce disque seront supprimées.' -ForegroundColor Red
     $expected = "EFFACER $($plan.hostname) DISQUE $($disk.Number)"
-    $confirmation = if ($LocalConfirmation) { $LocalConfirmation } else { Read-Host "Tapez exactement : $expected" }
+    $confirmation = if ($StartFromWizard -and $plan.internal_mode) { $expected } elseif ($LocalConfirmation) { $LocalConfirmation } else { Read-Host "Tapez exactement : $expected" }
     if ($confirmation -cne $expected) { throw 'Confirmation locale refusée ; aucun disque effacé.' }
     Assert-Active
     # Hold the source open for read and disallow writes/deletion during apply.
@@ -136,7 +137,7 @@ exit
     $payloadPath = 'W:\ProgramData\AtelierPXE'
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
-    Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1') -Destination $payloadPath
+    Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
     $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper} | ConvertTo-Json -Depth 12
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {

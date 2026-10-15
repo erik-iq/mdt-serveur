@@ -2,7 +2,9 @@
 
 Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
 
-La version **0.2** ajoute un assistant graphique directement sur le PC démarré par PXE : sélection de Windows, nom du poste, clavier, région, fuseau horaire, logiciels/bundles, thème et fond d’écran. La console web prépare le catalogue et les autorisations. L’agent vérifie la MAC, l’UEFI, les SHA-256 et le disque, puis exige une confirmation locale avant de supprimer ses partitions.
+La version **0.2** ajoute un assistant graphique directement sur le PC démarré par PXE : sélection de Windows, nom du poste, clavier, région, fuseau horaire, logiciels/bundles, thème et fond d’écran. La console web prépare le catalogue et les autorisations. L’agent vérifie la MAC, l’UEFI, les SHA-256 et le disque avant de supprimer ses partitions.
+
+La révision **INTERNE-1** ajoute un [parcours interne à activer sur le serveur](docs/MODE-INTERNE.md) : console sans jeton, connexion WinPE sans code ni mot de passe SMB à saisir, récapitulatif sans phrase de confirmation, nom `LE-T15-` suivi des quatre derniers chiffres du numéro de série BIOS, compte Administrateur sans mot de passe, progression dans Windows et maintenance automatique. Le dossier **C:\IQ_** reçoit le rapport batterie, le diagnostic de licence et une copie du fond d'écran.
 
 ![Console Atelier PXE avec des données synthétiques de test](docs/console.png)
 
@@ -12,7 +14,7 @@ Cette première version est un atelier **supervisé**, à valider sur un PC de l
 
 Si le premier démarrage Windows est bloqué par le fichier de réponses, [récupérer les journaux depuis l’hôte Hyper-V](docs/DIAGNOSTIC-PREMIER-DEMARRAGE.md). Le collecteur monte le disque de la VM arrêtée en lecture seule et copie le diagnostic sur l’hôte.
 
-Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [la reprise et la reconstruction WinPE FR-REPRISE-3](docs/REPRISE-PXE.md). Elle vérifie les partitions et sécurise l’écriture des fichiers de personnalisation. Si le fichier de réponses contient uniquement des octets nuls, utiliser [la réparation du Windows déjà appliqué](docs/REPARATION-UNATTEND.md).
+Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [l'activation et le test du mode interne](docs/MODE-INTERNE.md). La [reconstruction WinPE](docs/REPRISE-PXE.md) vérifie les partitions et sécurise l’écriture des fichiers de personnalisation. Si un ancien fichier de réponses contient uniquement des octets nuls, utiliser [la réparation du Windows déjà appliqué](docs/REPARATION-UNATTEND.md).
 
 Pour mettre à jour votre VM **DEPLOY-01 / 192.168.99.250** déjà installée, suivre [l’assistant PXE et le test physique HP pas à pas](docs/ASSISTANT-PXE.md). Le premier client est un **HP EliteBook 850 G6**. L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
 

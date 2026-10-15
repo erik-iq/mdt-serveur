@@ -8,6 +8,7 @@ Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
 . (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
+. (Join-Path $PSScriptRoot 'Naming.ps1')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $script:session = $null
 $script:page = 0
@@ -19,11 +20,23 @@ $script:drive = $null
 $script:settings = $null
 $script:selectedProfile = $null
 $script:targetName = ''
+$script:namePrefix = [string]$Config.hostname_prefix
 $script:controls = @{}
 $script:operatorKeyboard = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($Config.winpe_keyboard_layout) { $Config.winpe_keyboard_layout } else { '040c:0000040c' }
 $script:steps = @('Connexion','Windows','Poste & region','Bundle & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
 $script:manufacturer = [string]$computer.Manufacturer
+$script:serialNumber = ''
+$script:proposedName = ''
+$script:namingMessage = ''
+if ($Config.hostname_prefix) {
+    try {
+        $script:serialNumber = [string](Get-CimInstance Win32_BIOS).SerialNumber
+        $mode = if ($Config.hostname_suffix_mode) { $Config.hostname_suffix_mode } else { 'digits' }
+        $script:proposedName = Get-AtelierComputerName -SerialNumber $script:serialNumber -Prefix $Config.hostname_prefix -SuffixMode $mode
+        $script:namingMessage = 'Nom propose depuis le numero de serie BIOS ; vous pouvez le modifier.'
+    } catch { $script:namingMessage = $_.Exception.Message }
+}
 $script:macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-',':').ToUpperInvariant() } | Select-Object -Unique)
 $script:root = $Config.server_url.TrimEnd('/')
 $script:share = if ($Config.image_share) { $Config.image_share } else { '\\' + ([Uri]$script:root).Host + '\AtelierImages' }
@@ -110,6 +123,7 @@ function Save-Page {
             $name = $script:controls.hostname.Text.Trim()
             if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Nom du PC : 1 a 15 caracteres, lettres, chiffres et tirets.' }
             $script:targetName = $name
+            if ($script:controls.hostname_prefix) { $script:namePrefix=$script:controls.hostname_prefix.Text.Trim() }
             $script:settings.keyboard = Choice-Value 'keyboard'
             $script:settings.timezone = Choice-Value 'timezone'
             $script:settings.user_locale = Choice-Value 'user_locale'
@@ -163,12 +177,16 @@ function Show-Page {
                 }
             })
             Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez azerty et 123' | Out-Null
+            if (-not $Config.internal_mode) {
             Add-Text 'Enregistrez cette MAC dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
             Add-Input 'code' 'Code d installation' '' $true | Out-Null
             Add-Text ('Partage des images : ' + $script:share) | Out-Null
             Add-Input 'username' 'Compte de lecture du partage' ([string]$Config.share_account) | Out-Null
             Add-Input 'password' 'Mot de passe du partage' '' $true | Out-Null
             Add-Text 'Le mot de passe reste dans la session WinPE ; il ne sera pas copie dans Windows.' | Out-Null
+            } else {
+                Add-Text 'Connexion automatique au deploiement de ce poste. Creez une autorisation pour cette MAC dans la console, puis cliquez sur Connexion.' | Out-Null
+            }
         }
         1 {
             $items = @($script:session.catalog.profiles | ForEach-Object { [pscustomobject]@{id=$_.id; name=($_.name + ' | ' + $_.windows_version + ' ' + $_.edition + ' | ' + $_.locale)} })
@@ -177,8 +195,23 @@ function Show-Page {
             Add-Text ('Profil initial : ' + $script:session.plan.profile_name) | Out-Null
         }
         2 {
+            Add-Text ('Numero de serie BIOS : ' + $script:serialNumber) | Out-Null
+            if ($script:namingMessage) { Add-Text $script:namingMessage | Out-Null }
             $name = Add-Input 'hostname' 'Nom du PC' $script:targetName
             $name.MaxLength = 15
+            if ($Config.hostname_prefix) {
+                Add-Input 'hostname_prefix' 'Prefixe du nom (ex. LE-T15-)' $script:namePrefix | Out-Null
+                $rename = New-Button 'Recalculer le nom'
+                $rename.Width=200
+                $rename.Add_Click({
+                    try {
+                        $prefix=$script:controls.hostname_prefix.Text.Trim().TrimEnd('-') + '-'
+                        $suffixMode=if ($Config.hostname_suffix_mode) { $Config.hostname_suffix_mode } else { 'digits' }
+                        $script:controls.hostname.Text=Get-AtelierComputerName -SerialNumber $script:serialNumber -Prefix $prefix -SuffixMode $suffixMode
+                    } catch { $script:status.Text=$_.Exception.Message }
+                })
+                $script:body.Controls.Add($rename)
+            }
             Add-Choice 'keyboard' 'Clavier' @($script:session.catalog.options.keyboards) $script:settings.keyboard | Out-Null
             Add-Choice 'timezone' 'Fuseau horaire' @($script:session.catalog.options.timezones) $script:settings.timezone | Out-Null
             Add-Choice 'user_locale' 'Region / formats' @($script:session.catalog.options.regions) $script:settings.user_locale | Out-Null
@@ -198,7 +231,7 @@ function Show-Page {
             Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'Les logiciels sont prepares depuis le partage, puis installes au premier demarrage avec le premier compte administrateur. Les outils portables ne lancent aucune mise a jour du BIOS.' | Out-Null
+            Add-Text 'Les logiciels sont prepares puis installes automatiquement dans Windows. La progression et les mises a jour seront affichees dans Windows. Les outils portables ne lancent aucune mise a jour du BIOS.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number
@@ -209,7 +242,11 @@ function Show-Page {
             Add-Text ('Logiciels de ce poste : ' + ($apps -join ', ')) | Out-Null
             Add-Text 'Toutes les partitions du disque indique seront supprimees. Les controles MAC, UEFI, image et disque seront executes avant cet effacement.' | Out-Null
             $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $disk.Number
-            Add-Input 'confirmation' ('Tapez exactement : ' + $expected) | Out-Null
+            if (-not $script:session.plan.internal_mode) {
+                Add-Input 'confirmation' ('Tapez exactement : ' + $expected) | Out-Null
+            } else {
+                Add-Text 'Installer Windows effacera ce disque et lancera le deploiement.' 11 $true | Out-Null
+            }
         }
         5 {
             $script:stage = Add-Text 'Controle des prerequis...' 13 $true
@@ -227,37 +264,48 @@ function Show-Page {
     $script:body.ResumeLayout()
 }
 function Connect-Post {
-    $code = $script:controls.code.Text.Trim()
     if (-not $script:macs.Count) { throw 'Aucune MAC detectee : verifier le pilote Ethernet WinPE.' }
-    if (-not $script:controls.username.Text.Trim() -or -not $script:controls.password.Text) { throw 'Indiquez le compte et le mot de passe du partage.' }
     $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
-    $connected = Send-Json '/api/boot/connect' @{code=$code;macs=$script:macs} $false
-    $secure = ConvertTo-SecureString $script:controls.password.Text -AsPlainText -Force
-    $credential = New-Object PSCredential($script:controls.username.Text.Trim(), $secure)
+    if ($Config.internal_mode) {
+        $connected = Send-Json '/api/boot/discover' @{macs=$script:macs} $false
+        $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
+        $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders
+        $username = $credentials.username
+        $password = $credentials.password
+        $connectionHeaders.Clear()
+    } else {
+        if (-not $script:controls.username.Text.Trim() -or -not $script:controls.password.Text) { throw 'Indiquez le compte et le mot de passe du partage.' }
+        $connected = Send-Json '/api/boot/connect' @{code=$script:controls.code.Text.Trim();macs=$script:macs} $false
+        $username = $script:controls.username.Text.Trim()
+        $password = $script:controls.password.Text
+    }
+    $secure = ConvertTo-SecureString $password -AsPlainText -Force
+    $credential = New-Object PSCredential($username, $secure)
     try {
         $letter = @('Y','Z','V','U','T') | Where-Object { -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) } | Select-Object -First 1
         if (-not $letter) { throw 'Aucune lettre libre pour le partage des images.' }
         New-PSDrive -Name $letter -PSProvider FileSystem -Root $script:share -Credential $credential -Persist -Scope Global | Out-Null
         $script:drive = $letter
     } finally {
-        $script:controls.password.Clear(); $credential = $null
+        if ($script:controls.password) { $script:controls.password.Clear() }; $credential = $null; $credentials = $null; $password = $null
         if ($secure) { $secure.Dispose() }
     }
     $script:session = $connected
-    $script:targetName = $connected.plan.hostname
+    $script:targetName = if ($script:proposedName) { $script:proposedName } else { $connected.plan.hostname }
     Set-Profile $connected.plan.profile_id
     $script:page = 1; $script:status.Text = 'Poste autorise. Les choix restent modifiables avant installation.'
     Show-Page
 }
 function Begin-Deployment {
     $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $script:session.plan.disk_number
-    if ($script:controls.confirmation.Text -cne $expected) { throw 'Confirmation exacte requise avant installation.' }
+    if (-not $script:session.plan.internal_mode -and $script:controls.confirmation.Text -cne $expected) { throw 'Confirmation exacte requise avant installation.' }
     $plan = Send-Json ('/api/agent/' + $script:session.id + '/configure') @{profile_id=$script:selectedProfile.id;hostname=$script:targetName;settings=$script:settings}
     $image = Join-Path $script:share $plan.image_filename
     $script:running = $true; $script:page = 5
     Show-Page; $script:next.Enabled = $false; $script:back.Enabled = $false
     $script:engine = [PowerShell]::Create()
     $script:engine.AddCommand((Join-Path $PSScriptRoot 'Deploy.ps1')).AddParameter('ServerUrl',$script:root).AddParameter('DeploymentId',$script:session.id).AddParameter('Token',$script:session.agent_token).AddParameter('ImagePath',$image).AddParameter('LocalConfirmation',$expected) | Out-Null
+    if ($script:session.plan.internal_mode) { $script:engine.AddParameter('StartFromWizard',$true) | Out-Null }
     if ($Config.allow_http_for_lab) { $script:engine.AddParameter('AllowHttpForLab',$true) | Out-Null }
     $script:invocation = $script:engine.BeginInvoke()
     $script:timer.Start()
@@ -344,7 +392,7 @@ $script:timer.Add_Tick({
 $form.Add_FormClosing({ param($sender,$eventArgs) if($script:running){$eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'} })
 $script:startupFailure = $null
 $form.Add_Shown({
-    try { Show-Page } catch {
+    try { Show-Page; if ($Config.internal_mode) { try { Connect-Post } catch { $script:status.Text=$_.Exception.Message } } } catch {
         # Return startup errors to Launch.ps1 instead of leaving a blank form.
         $script:startupFailure = $_
         $form.Close()

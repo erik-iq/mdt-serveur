@@ -2,9 +2,12 @@
 
 Les routes de console (`state`, `machines`, `assets`, `profiles`, `applications`, `bundles`, `deployments`) demandent `Authorization: Bearer <jeton administrateur>`. Les routes de l’agent demandent uniquement le jeton propre au déploiement. Aucun jeton ne passe en paramètre d’URL. Les réponses API sont `no-store`.
 
+Après activation explicite du [mode interne](MODE-INTERNE.md), les routes administratives acceptent les requêtes sans jeton et refusent les origines navigateur externes. Les jetons agents restent temporaires et sont obtenus automatiquement ; ils ne sont pas demandés à l'opérateur. Le fichier `data-runtime.json` configure `internal_mode` et `automatic_windows` au lancement par `serve.py`. Les installations non activées conservent le parcours authentifié.
+
 | Méthode / route | Fonction |
 |---|---|
 | GET `/health` | Disponibilité de l’API et de SQLite, sans readiness PXE |
+| GET `/api/session` | Mode de connexion de la console et préparation automatique, sans secret |
 | GET `/api/state` | Machines, fichiers, profils/settings, applications, bundles, options de personnalisation et 100 derniers déploiements, sans secrets |
 | POST `/api/machines` | `{hostname, mac, description}` |
 | POST `/api/assets` | `{filename, kind}` pour un fichier local déjà présent ; calcule SHA-256 |
@@ -13,6 +16,8 @@ Les routes de console (`state`, `machines`, `assets`, `profiles`, `applications`
 | POST `/api/bundles` | `{name, description, application_ids}` ; IDs existants, sans doublons |
 | POST `/api/deployments` | `{machine_id, profile_id, disk_number, confirmation, wizard_enabled}` ; renvoie jeton et éventuel code PXE une seule fois |
 | POST `/api/boot/connect` | `{code, macs}` ; code PXE secret et MAC du poste autorisé, renvoie catalogue figé, plan et nouveau jeton agent |
+| POST `/api/boot/discover` | Mode interne : `{macs}`, retrouve une seule autorisation interactive en attente, non expirée, puis renouvelle le jeton agent |
+| GET `/api/agent/{id}/share-credentials` | Mode interne HTTPS : jeton agent valide requis ; connexion temporaire au partage de lecture géré, jamais incluse dans le plan ou le catalogue |
 | GET `/api/deployments/{id}/events` | Journal ordonné, sans jetons |
 | POST `/api/deployments/{id}/cancel` | Révoque immédiatement le jeton et demande l’arrêt aux points de contrôle |
 | GET `/api/agent/{id}/plan` | Plan, identité MAC, disque, hash, index/locale, settings et fichiers des logiciels/fond d’écran sélectionnés |
@@ -34,6 +39,8 @@ Transactions SQLite et index unique garantissent un seul job actif par machine. 
 Le code utilise 20 caractères aléatoires d’un alphabet de 32 caractères (100 bits), affichés par groupes de quatre. Seul son SHA-256 est stocké. Il expire après deux heures ; le job doit néanmoins être annulé s’il est abandonné. `boot/connect` exige le code et la MAC, puis renouvelle le jeton agent, invalidant le précédent. Une reconnexion reste possible avant la réservation ; `claim` désactive définitivement le code. Les états terminaux empêchent toute reconnexion. Ne pas journaliser les corps de ces requêtes au proxy.
 
 `settings` comprend `keyboard`, `timezone`, `user_locale`, `registered_owner`, `organization`, `theme`, `wallpaper_asset_id`, `application_ids`, `bundle_ids`. Les claviers/fuseaux proposés sont retournés dans les options ; le thème vaut `unchanged`, `light` ou `dark`. Les applications ont un constructeur cible `all`, `hp` ou `lenovo`. Le filtrage matériel est réalisé dans WinPE puis revérifié au premier démarrage. Les IDs issus de bundles et de sélections directes sont dédupliqués.
+
+Les booléens `unattended`, `windows_update` et `store_update` valent false par défaut. `automatic_windows=true` préremplit les trois à true pour les profils des nouvelles autorisations, y compris les profils existants. `unattended` prépare le compte intégré Administrateur sans mot de passe et la première session automatique. Les résultats des mises à jour sont locaux dans `maintenance.json` ; `store.status=requested` confirme seulement l'acceptation de la demande, pas l'achèvement du Store. Le plan expose `internal_mode` pour adapter le récapitulatif d'effacement.
 
 Les ZIP exigent un point d’entrée relatif EXE/MSI. Le mode `portable` est réservé aux ZIP, sans arguments : copie et raccourci, aucune exécution automatique de l’outil. Les EXE/MSI utilisés sont vérifiés par Authenticode sur le poste avant exécution. L’état `staged` inclut la préparation du bundle ; les résultats du premier démarrage sont écrits dans `C:\ProgramData\AtelierPXE\result.json`, sans retour automatique à la console dans cette version.
 

@@ -46,6 +46,9 @@ class Personalization(BaseModel):
     wallpaper_asset_id: str | None = None
     application_ids: list[str] = Field(default_factory=list, max_length=50)
     bundle_ids: list[str] = Field(default_factory=list, max_length=20)
+    unattended: bool = False
+    windows_update: bool = False
+    store_update: bool = False
 
     @field_validator('keyboard')
     @classmethod
@@ -124,4 +127,8 @@ class WizardSelection(BaseModel):
 
 class BootConnection(BaseModel):
     code: str = Field(min_length=16, max_length=24)
+    macs: list[str] = Field(min_length=1, max_length=16)
+
+
+class BootDiscovery(BaseModel):
     macs: list[str] = Field(min_length=1, max_length=16)

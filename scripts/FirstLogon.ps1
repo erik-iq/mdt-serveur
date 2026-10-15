@@ -5,15 +5,40 @@ param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
 $ErrorActionPreference = 'Stop'
 $resultPath = Join-Path $DataPath 'result.json'
 $logPath = Join-Path $DataPath 'first-logon.log'
-if (Test-Path $resultPath) {
-    $previous = Get-Content $resultPath -Raw | ConvertFrom-Json
-    if ($previous.status -eq 'completed') { Write-Host 'Personnalisation Atelier PXE deja terminee.'; exit 0 }
-}
+$previous = if (Test-Path $resultPath) { Get-Content $resultPath -Raw | ConvertFrom-Json } else { $null }
 $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Raw | ConvertFrom-Json
 . (Join-Path $DataPath 'Unattend.ps1')
 $manufacturer = (Get-CimInstance Win32_ComputerSystem).Manufacturer
 $results = New-Object 'System.Collections.Generic.List[object]'
 $restartNeeded = $false
+function Set-Progress([string]$Status,[int]$Percent,[string]$Message) {
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message} | ConvertTo-Json) | Out-Null
+}
+function Start-Maintenance {
+    $needsUpdates = $payload.settings.windows_update -or $payload.settings.store_update
+    if (-not $needsUpdates) { Set-Progress 'completed' 100 'Logiciels, bureau et dossier IQ_ prepares.'; return }
+    $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $action = New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Maintenance.ps1') + '"')
+    $triggers = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(30) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 1)))
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Action $action -Trigger $triggers -Principal $principal -Settings $taskSettings -Force | Out-Null
+    if ($payload.settings.unattended) {
+        # Bounded automatic sessions allow continuation after update reboots.
+        $winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+        foreach ($entry in @{AutoAdminLogon='1';DefaultUserName='Administrateur';DefaultDomainName=$env:COMPUTERNAME;DefaultPassword=''}.GetEnumerator()) {
+            New-ItemProperty $winlogon -Name $entry.Key -Value $entry.Value -PropertyType String -Force | Out-Null
+        }
+        New-ItemProperty $winlogon -Name AutoLogonCount -Value 5 -PropertyType DWord -Force | Out-Null
+        $sid = (Get-LocalUser -Name 'Administrateur').SID.Value
+        $uiAction = New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"')
+        $uiPrincipal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
+        Register-ScheduledTask -TaskName 'AtelierPXE-Progress' -Action $uiAction -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $sid) -Principal $uiPrincipal -Force | Out-Null
+    }
+    Set-Progress 'running' 75 'Logiciels et bureau prepares. Les mises a jour vont commencer...'
+    Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
+}
+
 
 function Write-Trace([string]$Message) {
     $line = '[{0}] {1}' -f (Get-Date).ToString('o'), $Message
@@ -60,6 +85,10 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
 }
 
 try {
+    if ($previous -and $previous.status -eq 'completed') { Start-Maintenance; return }
+    Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
+    $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Start-Process -FilePath $powerShell -ArgumentList ('-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
     Write-Trace 'Debut de la personnalisation du premier compte administrateur.'
     $theme = $payload.settings.theme
     if ($theme -in @('light','dark')) {
@@ -79,7 +108,10 @@ try {
         if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraichir le fond d ecran.' }
         Write-Trace 'Fond d ecran applique.'
     }
+    $appIndex = 0
     foreach ($application in @($payload.applications)) {
+        $appIndex++
+        Set-Progress 'running' (10 + [int](50 * $appIndex / [math]::Max(1,@($payload.applications).Count))) ('Installation de ' + $application.name + '...')
         if (-not (Test-AtelierManufacturer $application.manufacturer $manufacturer)) {
             $results.Add(@{name=$application.name; status='skipped'; reason='Autre constructeur'})
             Write-Trace ("Outil ignore pour ce constructeur : " + $application.name)
@@ -120,10 +152,16 @@ try {
         $results.Add(@{name=$application.name; version=$application.version; status='completed'; exit_code=$exitCode})
         Write-Trace ("Logiciel prepare : " + $application.name)
     }
+    Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
+    & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
     @{status='completed'; timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
+    Start-Maintenance
     Write-Trace 'Personnalisation terminee. Consultez result.json pour les logiciels et le redemarrage eventuel.'
 } catch {
     @{status='failed'; timestamp=(Get-Date).ToString('o'); message=$_.Exception.Message; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
+    Set-Progress 'failed' 0 ('Preparation interrompue : ' + $_.Exception.Message)
+    . (Join-Path $DataPath 'Updates.ps1')
+    if ($payload.settings.unattended) { Disable-AtelierAutoLogon }
     Write-Trace ('Echec : ' + $_.Exception.Message)
     throw
 }

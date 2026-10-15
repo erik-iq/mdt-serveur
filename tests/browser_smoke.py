@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright, expect
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def run():
+def run(internal=False):
     chromium = shutil.which('chromium') or shutil.which('google-chrome')
     if not chromium:
         raise RuntimeError('Chromium est requis pour ce test navigateur.')
@@ -32,7 +32,7 @@ def run():
             port = reservation.getsockname()[1]
         origin = f'http://127.0.0.1:{port}'
         admin = secrets.token_urlsafe(32)
-        env = {**os.environ, 'MDT_DATA_DIR':folder,'MDT_ADMIN_TOKEN':admin,'MDT_BASE_URL':origin}
+        env = {**os.environ, 'MDT_DATA_DIR':folder,'MDT_ADMIN_TOKEN':admin,'MDT_BASE_URL':origin,'MDT_INTERNAL_MODE':'1' if internal else '0','MDT_AUTOMATIC_WINDOWS':'1' if internal else '0'}
         process = subprocess.Popen([sys.executable,'-m','uvicorn','app.main:create_app','--factory','--host','127.0.0.1','--port',str(port)],cwd=ROOT,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         try:
             for _ in range(100):
@@ -52,9 +52,14 @@ def run():
                 errors = []
                 page.on('pageerror',lambda error: errors.append(str(error)))
                 page.goto(origin)
-                page.get_by_label('Jeton administrateur').fill(admin)
-                page.get_by_role('button',name='Ouvrir la console').click()
-                page.wait_for_selector('#login-dialog',state='hidden')
+                if internal:
+                    expect(page.locator('#connection')).to_have_text('● Console connectée')
+                    assert not page.locator('#login-dialog').is_visible()
+                    assert not page.locator('#logout').is_visible()
+                else:
+                    page.get_by_label('Jeton administrateur').fill(admin)
+                    page.get_by_role('button',name='Ouvrir la console').click()
+                    page.wait_for_selector('#login-dialog',state='hidden')
                 page.get_by_role('button',name='Enregistrer une machine',exact=True).click()
                 page.get_by_label('Nom Windows du poste').fill('PC-LAB-01')
                 page.get_by_label('Adresse MAC PXE').fill('00:11:22:33:44:55')
@@ -117,6 +122,15 @@ def run():
                     page.get_by_role('button',name='＋ Nouveau déploiement',exact=True).click()
                     page.get_by_label('Poste cible').select_option(index=1)
                     page.get_by_label('Profil Windows',exact=True).select_option(index=1)
+                    if internal:
+                        assert page.locator('input[name="confirmation"]').count() == 0
+                        with page.expect_response(lambda r: r.url.endswith('/api/deployments') and r.request.method == 'POST') as created:
+                            page.locator('#submit-resource').click()
+                        result = created.value.json()
+                        page.wait_for_selector('#form-dialog',state='hidden')
+                        assert result['boot_code'] is None
+                        assert not page.locator('#token-dialog').is_visible()
+                        return result['id'], result['agent_token']
                     page.get_by_label('Confirmation : EFFACER suivi du nom exact du poste').fill('EFFACER PC-LAB-01')
                     page.locator('#submit-resource').click()
                     page.wait_for_selector('#token-dialog[open]')
@@ -153,7 +167,7 @@ def run():
                 page.screenshot(path='/tmp/atelier-mobile.png',full_page=True)
                 assert not errors, errors
                 browser.close()
-            print('Browser smoke passed: authentication, machine/image/software/bundle/profile forms, saved personalization, PXE code cleared, agent lifecycle, journal, cancellation, mobile layout; no JavaScript errors.')
+            print(('Internal mode: ' if internal else 'Authenticated mode: ') + 'Browser smoke passed: authentication, machine/image/software/bundle/profile forms, saved personalization, PXE code cleared, agent lifecycle, journal, cancellation, mobile layout; no JavaScript errors.')
         finally:
             process.terminate()
             process.wait(timeout=10)
@@ -161,3 +175,4 @@ def run():
 
 if __name__ == '__main__':
     run()
+    run(internal=True)

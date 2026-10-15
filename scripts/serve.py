@@ -13,6 +13,8 @@ sys.path.insert(0, str(root))
 settings = json.loads((root / "data-runtime.json").read_text(encoding="utf-8-sig"))
 os.environ["MDT_BASE_URL"] = settings["base_url"]
 os.environ["MDT_DATA_DIR"] = settings["data_dir"]
+os.environ['MDT_INTERNAL_MODE'] = '1' if settings.get('internal_mode', False) else '0'
+os.environ['MDT_AUTOMATIC_WINDOWS'] = '1' if settings.get('automatic_windows', False) else '0'
 logs = Path(settings["data_dir"]) / "logs"
 logs.mkdir(parents=True, exist_ok=True)
 handler = RotatingFileHandler(logs / "console.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8")

@@ -16,6 +16,25 @@ function New-AtelierUnattend {
     $identity = ''
     if ($owner) { $identity += "<RegisteredOwner>$owner</RegisteredOwner>" }
     if ($organization) { $identity += "<RegisteredOrganization>$organization</RegisteredOrganization>" }
+    $prepare = ''
+    $automatic = ''
+    if ($settings.unattended) {
+        $prepare = @'
+  <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+   <RunSynchronous>
+    <RunSynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" wcm:action="add">
+     <Order>1</Order><Path>powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\Prepare-Windows.ps1"</Path>
+     <Description>Atelier PXE - compte local</Description>
+    </RunSynchronousCommand>
+   </RunSynchronous>
+  </component>
+'@
+        $automatic = @"
+   <OOBE><HideEULAPage>true</HideEULAPage><HideOEMRegistrationScreen>true</HideOEMRegistrationScreen><HideOnlineAccountScreens>true</HideOnlineAccountScreens><HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE><ProtectYourPC>1</ProtectYourPC></OOBE>
+   <UserAccounts><AdministratorPassword><Value></Value><PlainText>true</PlainText></AdministratorPassword></UserAccounts>
+   <AutoLogon><Password><Value></Value><PlainText>true</PlainText></Password><Domain>$hostname</Domain><Enabled>true</Enabled><LogonCount>1</LogonCount><Username>Administrateur</Username></AutoLogon>
+"@
+    }
     $xml = @"
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -24,12 +43,14 @@ function New-AtelierUnattend {
    <ComputerName>$hostname</ComputerName><TimeZone>$zone</TimeZone>
    $identity
   </component>
+$prepare
  </settings>
  <settings pass="oobeSystem">
   <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
    <InputLocale>$keyboard</InputLocale><SystemLocale>$language</SystemLocale><UILanguage>$language</UILanguage><UserLocale>$region</UserLocale>
   </component>
   <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+   $automatic
    <FirstLogonCommands>
     <SynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" wcm:action="add">
      <Order>1</Order><Description>Atelier PXE - logiciels et personnalisation</Description>

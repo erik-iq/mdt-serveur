@@ -1,12 +1,12 @@
 # Reprise du test PXE dans Hyper-V
 
-Sur **DEPLOY-01 / 192.168.99.250**, reconstruire une image de démarrage avec les nouveaux scripts. Le client est **PC-TEST-PXE**, sur l’hôte Hyper-V **192.168.99.253**. Conserver WDS, IIS, ADK, le certificat, les profils, logiciels et images dans `D:\AtelierPXE\data`. Ne pas relancer `Install-Console.ps1` ou `Install-Wds.ps1` sur le serveur déjà installé.
+Sur **DEPLOY-01 / 192.168.99.250**, reconstruire une image de démarrage avec les nouveaux scripts. Le client est **PC-TEST-PXE**, sur l’hôte Hyper-V **192.168.99.253**. Pour le parcours sans saisies demandé, suivre d'abord [le mode interne](MODE-INTERNE.md). Conserver WDS, IIS, ADK, le certificat, les profils, logiciels et images dans `D:\AtelierPXE\data`. Ne pas relancer `Install-Console.ps1` ou `Install-Wds.ps1` sur le serveur déjà installé.
 
-L’image **FR-REPRISE-3** conserve un menu après fermeture ou erreur, un nouveau processus PowerShell STA à chaque relance, un choix de clavier et un champ de test avant les identifiants. Les erreurs de démarrage et leur emplacement restent affichés. Le journal `X:\Atelier\Logs\startup.log` contient étapes, types d’erreur et lignes de script, sans messages d’erreur, codes PXE, jetons ou mots de passe. Il disparaît au redémarrage de WinPE. L’API reste en **0.2.0** ; FR-REPRISE-3 identifie l’image de démarrage avec les écritures XML vérifiées.
+L’image **INTERNE-1** conserve un menu après fermeture ou erreur, un nouveau processus PowerShell STA à chaque relance, un choix de clavier et un champ de test avant les identifiants. Les erreurs de démarrage et leur emplacement restent affichés. Le journal `X:\Atelier\Logs\startup.log` contient étapes, types d’erreur et lignes de script, sans messages d’erreur, codes PXE, jetons ou mots de passe. Il disparaît au redémarrage de WinPE. L’API reste en **0.2.0** ; INTERNE-1 identifie l’image de démarrage avec les écritures XML vérifiées.
 
 Si Windows affiche une erreur de fichier de réponses après le démarrage sur disque, suivre [la collecte des journaux depuis l’hôte Hyper-V](DIAGNOSTIC-PREMIER-DEMARRAGE.md). Cette collecte distingue un fichier absent, vide, rempli d’octets nuls ou un XML invalide, sans modifier le Windows installé.
 
-Si le diagnostic confirme un fichier de réponses intégralement nul, [réparer ce fichier dans la VM arrêtée](REPARATION-UNATTEND.md) avant de recommencer une installation. Les prochains supports FR-REPRISE-3 conservent une copie XML vérifiée et son empreinte dans le poste.
+Si le diagnostic confirme un fichier de réponses intégralement nul, [réparer ce fichier dans la VM arrêtée](REPARATION-UNATTEND.md) avant de recommencer une installation. Les prochains supports INTERNE-1 conservent une copie XML vérifiée et son empreinte dans le poste.
 
 ## Si l’installation s’est arrêtée après DiskPart
 
@@ -14,7 +14,7 @@ Le message `No MSFT_Partition objects found ... DriveLetter ... S` provient du c
 
 La révision **FR-REPRISE-2** remplace la recherche par `Get-Partition -DriveLetter` par une énumération sur le disque cible après rafraîchissement de l’inventaire. Elle vérifie les quatre rôles GPT, les tailles minimales et l’identité du disque. Elle résout les lettres S/W/R avec `mountvol /L` et compare leurs GUID aux chemins des partitions, puis vérifie FAT32/NTFS. Une partition EFI sans propriété DriveLetter peut ainsi être contrôlée ; un volume étranger ou absent bloque toujours DISM. L’attente est limitée à vingt contrôles, espacés d’une demi-seconde, hors durée des commandes.
 
-Fermer l’assistant interrompu et éteindre la VM cliente. Suivre les étapes 1 et 2 ci-dessous : **mettre à jour les scripts ne modifie pas une ancienne image WDS**. Démarrer ensuite la nouvelle image FR-REPRISE-3 et créer une nouvelle autorisation. Conserver l’ancien déploiement en échec dans l’historique ; il ne peut pas être repris avec son ancien code. La nouvelle installation effacera à nouveau uniquement le disque de test confirmé.
+Fermer l’assistant interrompu et éteindre la VM cliente. Suivre les étapes 1 et 2 ci-dessous : **mettre à jour les scripts ne modifie pas une ancienne image WDS**. Démarrer ensuite la nouvelle image INTERNE-1 et créer une nouvelle autorisation. Conserver l’ancien déploiement en échec dans l’historique ; il ne peut pas être repris avec son ancien code. La nouvelle installation effacera à nouveau uniquement le disque de test confirmé.
 
 Pour diagnostiquer un nouvel arrêt, ces commandes WinPE ne modifient aucun disque :
 
@@ -63,7 +63,7 @@ Toujours dans PowerShell administrateur sur **DEPLOY-01** :
         OutputPath = "D:\AtelierPXE\WinPE-Reprise-$atelierStamp"
         TrustedRootCertificate = 'C:\AtelierPXE\certs\AtelierPXE-lab.cer'
         WinPEKeyboardLayout = '040c:0000040c'
-        WdsImageName = "Atelier PXE - FR-REPRISE-3 - $atelierStamp"
+        WdsImageName = "Atelier PXE - INTERNE-1 - $atelierStamp"
         ImportIntoWds = $true
     }
     & 'C:\AtelierPXE\console\scripts\Build-WinPE.ps1' @atelierParametres
@@ -76,14 +76,14 @@ Toujours dans PowerShell administrateur sur **DEPLOY-01** :
 
 Le dossier et le nom WDS sont nouveaux à chaque exécution. Les anciennes images restent disponibles. Ce test Hyper-V utilise les pilotes inclus dans WinPE. Pour ajouter un dossier de pilotes supplémentaires déjà testé, inclure `DriversPath = 'D:\AtelierPXE\Drivers\WinPE-x64'` dans les paramètres. Pour un clavier suisse romand, remplacer la valeur par `100c:0000100c` ; pour l’anglais US, `0409:00000409`.
 
-Attendre le succès et l’apparition de **Atelier PXE - FR-REPRISE-3 - date** dans WDS. Ne pas poursuivre si une étape échoue. Une erreur UEFI avant le chargement de WinPE nécessite un diagnostic WDS distinct : le menu de reprise s’exécute après ce chargement.
+Attendre le succès et l’apparition de **Atelier PXE - INTERNE-1 - date** dans WDS. Ne pas poursuivre si une étape échoue. Une erreur UEFI avant le chargement de WinPE nécessite un diagnostic WDS distinct : le menu de reprise s’exécute après ce chargement.
 
 ## 3. Démarrer PC-TEST-PXE
 
 1. Vérifier que l’ancien PXE **192.168.99.3** ne répond pas pendant cet essai. Si nécessaire, arrêter temporairement **son** service `WDSServer`, depuis une session sur **.3**, pendant la fenêtre de test. Garder le DHCP du routeur **.1** actif.
 2. Conserver **PC-TEST-PXE** de génération 2, sa carte sur **vSwitch-LAN** et sa MAC enregistrée. Mettre le réseau IPv4 avant le disque et tout ISO. Garder Secure Boot avec le modèle **Microsoft Windows** et le TPM virtuel pour Windows 11.
-3. Démarrer la VM, confirmer le PXE si demandé et sélectionner exactement **Atelier PXE - FR-REPRISE-3 - date** dans WDS.
-4. La barre de titre doit contenir **FR-REPRISE-3**. Dans **Connexion**, choisir le clavier et essayer `azerty` et `123` dans le champ de test. Le collage Hyper-V standard simule une frappe et dépend aussi du clavier de l’hôte ; commencer par une saisie manuelle.
+3. Démarrer la VM, confirmer le PXE si demandé et sélectionner exactement **Atelier PXE - INTERNE-1 - date** dans WDS.
+4. La barre de titre doit contenir **INTERNE-1**. Dans **Connexion**, choisir le clavier et essayer `azerty` et `123` dans le champ de test. Le collage Hyper-V standard simule une frappe et dépend aussi du clavier de l’hôte ; commencer par une saisie manuelle.
 
 Après fermeture ou erreur, le menu propose **1** pour relancer, **2/3/4** pour choisir le clavier et relancer, **5** pour le journal/réseau, **0** pour le terminal. Au terminal, **`atelier`** rouvre l’assistant et ce menu. Une relance ne démarre aucune installation sans connexion et confirmation.
 

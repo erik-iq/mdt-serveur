@@ -1,3 +1,5 @@
+> Pour le nouveau parcours sans jeton/code, avec compte automatique, nom BIOS, mises à jour et dossier IQ_, suivre [MODE-INTERNE.md](MODE-INTERNE.md). Ce guide conserve le parcours authentifié.
+
 # Assistant PXE 0.2 — reprise sur DEPLOY-01
 
 Votre serveur de déploiement est **DEPLOY-01 / 192.168.99.250**. L’hôte Hyper-V est **192.168.99.253**, le routeur/DHCP **192.168.99.1**. IIS, Python, WDS, ADK et le module WinPE sont déjà installés. Ce guide reprend à la mise à jour du logiciel ; il ne faut pas relancer l’installation initiale.

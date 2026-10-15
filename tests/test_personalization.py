@@ -62,3 +62,20 @@ $cases=@(
 ConvertTo-Json -InputObject $cases -Compress
 """)
     assert json.loads(output) == [True,True,False,True,False,True,False]
+
+
+def test_automatic_windows_builtin_account_and_oobe(tmp_path):
+    fixture = tmp_path / 'plan.json'
+    fixture.write_text(json.dumps({'hostname':'LE-T15-2378', 'locale':'fr-FR', 'settings':{
+        'unattended':True,'keyboard':'040c:0000040c','timezone':'Romance Standard Time','user_locale':'fr-FR'}}))
+    xml = execute(tmp_path, "$plan=Get-Content -LiteralPath '"+str(fixture).replace("'","''")+"' -Raw | ConvertFrom-Json\nNew-AtelierUnattend -Plan $plan")
+    document=ET.fromstring(xml)
+    assert document.find('.//u:AutoLogon/u:Username',NS).text == 'Administrateur'
+    assert document.find('.//u:AutoLogon/u:Password/u:Value',NS).text is None
+    assert document.find('.//u:AdministratorPassword/u:Value',NS).text is None
+    assert document.find('.//u:AutoLogon/u:Enabled',NS).text == 'true'
+    assert 'Prepare-Windows.ps1' in document.find('.//u:RunSynchronousCommand/u:Path',NS).text
+    assert document.find('.//u:HideOnlineAccountScreens',NS).text == 'true'
+    assert document.find('.//u:SkipMachineOOBE',NS) is None
+    assert document.find('.//u:SkipUserOOBE',NS) is None
+    assert 'BypassNRO' not in xml
