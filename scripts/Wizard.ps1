@@ -7,6 +7,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
+. (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $script:session = $null
 $script:page = 0
@@ -19,6 +20,7 @@ $script:settings = $null
 $script:selectedProfile = $null
 $script:targetName = ''
 $script:controls = @{}
+$script:operatorKeyboard = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($Config.winpe_keyboard_layout) { $Config.winpe_keyboard_layout } else { '040c:0000040c' }
 $script:steps = @('Connexion','Windows','Poste & region','Bundle & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
 $script:manufacturer = [string]$computer.Manufacturer
@@ -145,6 +147,22 @@ function Show-Page {
         0 {
             Add-Text ($script:manufacturer + ' / ' + $computer.Model) 12 $true | Out-Null
             Add-Text ('MAC Ethernet : ' + ($script:macs -join ' / ')) | Out-Null
+            $keyboard = Add-Choice 'operator_keyboard' 'Clavier de cet assistant' @(
+                [pscustomobject]@{id='040c:0000040c';name='Francais - AZERTY'},
+                [pscustomobject]@{id='100c:0000100c';name='Suisse romand - QWERTZ'},
+                [pscustomobject]@{id='0409:00000409';name='Anglais US - QWERTY'}
+            ) $script:operatorKeyboard
+            $keyboard.Add_SelectedIndexChanged({
+                try {
+                    $operatorLayout = Choice-Value 'operator_keyboard'
+                    Set-AtelierOperatorKeyboard -Layout $operatorLayout
+                    $script:operatorKeyboard = $operatorLayout
+                    $script:status.Text = 'Clavier applique. Verifiez la saisie dans le champ de test.'
+                } catch {
+                    [void][Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'Clavier WinPE','OK','Warning')
+                }
+            })
+            Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez azerty et 123' | Out-Null
             Add-Text 'Enregistrez cette MAC dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
             Add-Input 'code' 'Code d installation' '' $true | Out-Null
             Add-Text ('Partage des images : ' + $script:share) | Out-Null
@@ -246,7 +264,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'Atelier PXE | Assistant Windows'
+$form.Text = 'Atelier PXE | Assistant Windows | ' + $Config.boot_release
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.ClientSize = New-Object Drawing.Size(([math]::Min(980,$bounds.Width-30)),([math]::Min(690,$bounds.Height-50)))
@@ -324,10 +342,18 @@ $script:timer.Add_Tick({
     }
 })
 $form.Add_FormClosing({ param($sender,$eventArgs) if($script:running){$eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'} })
-$form.Add_Shown({ Show-Page })
+$script:startupFailure = $null
+$form.Add_Shown({
+    try { Show-Page } catch {
+        # Return startup errors to Launch.ps1 instead of leaving a blank form.
+        $script:startupFailure = $_
+        $form.Close()
+    }
+})
 try { [void]$form.ShowDialog() }
 finally {
     $script:timer.Dispose();$form.Dispose()
     if($script:drive){Remove-PSDrive -Name $script:drive -Force -ErrorAction SilentlyContinue}
     $script:session=$null
 }
+if ($script:startupFailure) { throw $script:startupFailure }

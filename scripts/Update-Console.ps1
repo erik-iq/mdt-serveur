@@ -21,7 +21,7 @@ foreach ($base in @($source,$installed)) {
 if (Test-Path -LiteralPath $backup) { throw 'Le dossier de sauvegarde existe deja. Choisissez un nouveau chemin.' }
 $files = @('README.md','.gitignore','.env.example','requirements.txt','requirements-dev.txt','requirements-browser.txt','constraints.txt')
 $folders = @('app','scripts','docs','tests')
-foreach ($name in @('app\main.py','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1') + $files + $folders) {
+foreach ($name in @('app\main.py','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\atelier.cmd') + $files + $folders) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Archive incomplete : $name absent." }
 }
 $configPath = Join-Path $installed 'data-runtime.json'

@@ -74,6 +74,8 @@ Le clavier opérateur de WinPE est français AZERTY par défaut, initialisé ava
 
 Le paramètre `-AllowHttpForLab` sert uniquement à un réseau de laboratoire isolé et expose les jetons en clair sur le réseau. Le parcours normal utilise HTTPS. Secure Boot doit rester activé si votre matériel et la chaîne de démarrage le permettent ; l’image ADK/WDS doit être à jour des exigences de signature/révocation de votre parc.
 
+Les images **FR-REPRISE-1** proposent un choix de clavier et un champ de test avant les identifiants. Après fermeture ou échec, le menu permet de relancer ou de consulter `X:\Atelier\Logs\startup.log`. Au terminal, taper `atelier` pour rouvrir l’assistant. Pour un serveur existant et le test Hyper-V, suivre [la procédure de reprise](REPRISE-PXE.md).
+
 ## 6. Préparer une image et un partage SMB
 
 Utiliser une image Windows provenant d’une source Microsoft/licenciée. La console accepte un **WIM non fractionné**, pas un ISO, un ESD ou un SWM. Pour un média avec `install.esd`, exporter l’édition souhaitée vers un WIM :

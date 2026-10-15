@@ -23,7 +23,7 @@ $envScript = Join-Path $adk 'Deployment Tools\DandISetEnv.bat'
 $copype = Join-Path $peRoot 'copype.cmd'
 $oc = Join-Path $peRoot 'amd64\WinPE_OCs'
 foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complémentaire WinPE absent : $path" } }
-foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1')) {
+foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','atelier.cmd')) {
     if (-not (Test-Path (Join-Path $PSScriptRoot $script))) { throw "Mettez a jour tous les fichiers du projet avant la construction : $script absent." }
 }
 if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
@@ -47,18 +47,20 @@ try {
     if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
     $target = Join-Path $mount 'Atelier'
     New-Item -ItemType Directory -Path $target | Out-Null
-    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1')) {
+    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1')) {
         Copy-Item (Join-Path $PSScriptRoot $script) -Destination $target
     }
+    # GitHub source archives can use LF. Always write a Windows batch file.
+    $recoveryMenu = (Get-Content (Join-Path $PSScriptRoot 'atelier.cmd') -Raw) -replace '\r?\n', "`r`n"
+    Set-Content (Join-Path $mount 'Windows\System32\atelier.cmd') -Value $recoveryMenu -Encoding ASCII
     if ($TrustedRootCertificate) {
         $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($TrustedRootCertificate)
         if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorité de confiance.' }
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
-    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
-    # Set the operator's keyboard before credentials are entered. The profile's
-    # keyboard configures installed Windows separately from this WinPE session.
-    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`nwpeutil SetKeyboardLayout $WinPEKeyboardLayout`r`npowershell.exe -STA -NoLogo -NoProfile -ExecutionPolicy Bypass -File X:\Atelier\Launch.ps1`r`ncmd.exe"
+    @{server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='FR-REPRISE-1'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
+    # Each relaunch uses a new STA process; no credentials on its command line.
+    Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
 } finally {

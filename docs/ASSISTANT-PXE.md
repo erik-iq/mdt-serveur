@@ -6,6 +6,8 @@ Le premier PC physique est un **HP EliteBook 850 G6**, connecté en Ethernet au 
 
 ![Catalogue logiciels et bundles dans la console 0.2, avec données synthétiques de test](logiciels.png)
 
+Pour reprendre le test dans **PC-TEST-PXE** avec une nouvelle image et le menu de relance **FR-REPRISE-1**, suivre [la procédure de reconstruction et de test Hyper-V](REPRISE-PXE.md).
+
 ## 1. Mettre à jour la console existante
 
 Télécharger [le ZIP du projet](https://github.com/erik-iq/mdt-serveur/archive/refs/heads/main.zip). Dans les propriétés du ZIP, cliquer **Débloquer** si proposé. Extraire dans **C:\AtelierPXE\mise-a-jour**, hors de la console actuelle. Vérifier le dossier réel :
@@ -62,7 +64,9 @@ Utiliser un autre nouveau dossier si `WinPE-v3` existe déjà. Si aucun pilote s
 
 Les nouvelles images démarrent avec le clavier **français AZERTY**. Pour un autre clavier opérateur, fournir `-WinPEKeyboardLayout '100c:0000100c'` pour le suisse romand, ou `'0409:00000409'` pour l’anglais US. Ce réglage concerne la saisie dans WinPE ; le profil définit séparément le clavier du Windows installé.
 
-Sur une image déjà construite qui démarre en QWERTY, fermer l’assistant avant le début d’une installation pour retrouver le terminal, puis exécuter :
+L’écran Connexion propose aussi le choix du clavier et un champ de test avant les identifiants. Après fermeture ou erreur, le menu permet de relancer dans un nouveau processus. Au terminal, taper **`atelier`** suffit sur les images **FR-REPRISE-1** ; le choix **5** affiche le journal de démarrage et le réseau.
+
+Sur une ancienne image qui démarre en QWERTY, fermer l’assistant avant le début d’une installation pour retrouver le terminal, puis exécuter :
 
 ```cmd
 wpeutil SetKeyboardLayout 040c:0000040c

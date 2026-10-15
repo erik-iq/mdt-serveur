@@ -10,6 +10,8 @@ Cette première version est un atelier **supervisé**, à valider sur un PC de l
 
 ## Installer sur votre serveur
 
+Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [la reconstruction WinPE FR-REPRISE-1 et la reprise du test](docs/REPRISE-PXE.md). Elle ajoute un menu de relance, le choix du clavier avant les identifiants et un journal de démarrage.
+
 Pour mettre à jour votre VM **DEPLOY-01 / 192.168.99.250** déjà installée, suivre [l’assistant PXE et le test physique HP pas à pas](docs/ASSISTANT-PXE.md). Le premier client est un **HP EliteBook 850 G6**. L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
 
 Les bundles accueillent VLC, un lecteur PDF, Chrome et les outils constructeurs. HP Image Assistant est proposé sur HP, Lenovo System Update sur Lenovo. Les autres marques reçoivent les logiciels communs. Les logiciels sont préparés pendant WinPE, puis installés à la première connexion administrateur ; le fond d’écran et le thème s’appliquent au premier compte. Les installateurs et médias Microsoft sont fournis séparément par leurs éditeurs.

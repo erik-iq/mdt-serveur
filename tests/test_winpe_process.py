@@ -1,6 +1,7 @@
 """Windows regression checks for ADK batch invocation, without DISM or WDS."""
 
 import ctypes
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -89,4 +90,13 @@ function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) 
     assert (output / 'media' / 'sources' / 'boot.wim').exists()
     assert (output / 'mount' / 'Atelier' / 'Deploy.ps1').exists()
     assert (output / 'mount' / 'Atelier' / 'Launch.ps1').exists()
-    assert 'X:\\Atelier\\Launch.ps1' in (output / 'mount' / 'Windows' / 'System32' / 'startnet.cmd').read_text()
+    system32 = output / 'mount' / 'Windows' / 'System32'
+    assert 'atelier.cmd' in (system32 / 'startnet.cmd').read_text()
+    assert 'X:\\Atelier\\Launch.ps1' in (system32 / 'atelier.cmd').read_text()
+    assert '-STA' in (system32 / 'atelier.cmd').read_text()
+    menu_bytes = (system32 / 'atelier.cmd').read_bytes()
+    assert b'\r\n' in menu_bytes and b'\n' not in menu_bytes.replace(b'\r\n', b'')
+    assert (output / 'mount' / 'Atelier' / 'WinPE-Session.ps1').exists()
+    configuration = json.loads((output / 'mount' / 'Atelier' / 'config.json').read_text(encoding='utf-8-sig'))
+    assert configuration['winpe_keyboard_layout'] == '040c:0000040c'
+    assert configuration['boot_release'] == 'FR-REPRISE-1'
