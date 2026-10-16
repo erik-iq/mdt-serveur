@@ -90,6 +90,7 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
 }
 
 try {
+    Initialize-AtelierReportTrust -DataPath $DataPath
     if ($previous -and $previous.status -eq 'completed') { Start-Maintenance; return }
     Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -113,6 +114,13 @@ try {
         if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraichir le fond d ecran.' }
         Write-Trace 'Fond d ecran applique.'
     }
+    if ($payload.settings.software_mode -eq 'winget') {
+        . (Join-Path $DataPath 'Client-Software.ps1')
+        foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages @($payload.settings.winget_packages) -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
+            $results.Add($entry)
+            if ($entry.exit_code -in @(3010,1641)) { $restartNeeded=$true }
+        }
+    }
     $appIndex = 0
     $readyTools=New-Object 'Collections.Generic.List[object]'
     $checkpointPath=Join-Path $DataPath 'packages-state.json'
@@ -120,9 +128,28 @@ try {
     if (Test-Path $checkpointPath) {
         foreach ($entry in @(Get-Content $checkpointPath -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
     }
-    foreach ($application in @($payload.applications)) {
+    $applicationsToPrepare=@($payload.applications)
+    if ($payload.settings.software_mode -eq 'winget') {
+        $applicationsToPrepare=@()
+        foreach ($tool in @($payload.tools)) {
+            if (-not $tool -or -not (Test-AtelierManufacturer $tool.manufacturer $manufacturer)) { continue }
+            try {
+                Set-Progress 'running' 58 ('Téléchargement de l outil constructeur : ' + $tool.name)
+                $folder=Join-Path $DataPath 'Packages'
+                New-Item -ItemType Directory -Path $folder -Force | Out-Null
+                $target=Join-Path $folder $tool.asset.filename
+                $reporter=Get-Content (Join-Path $DataPath 'reporting.json') -Raw | ConvertFrom-Json
+                if (-not (Test-Path $target)) {
+                    Invoke-WebRequest -UseBasicParsing -Uri ($reporter.server_url + '/api/windows/' + $reporter.id + '/tools/' + $tool.asset.id) -Headers @{Authorization=('Bearer ' + $reporter.token)} -OutFile $target -TimeoutSec 300 | Out-Null
+                }
+                Assert-FileHash $target $tool.asset.sha256
+                $applicationsToPrepare += $tool
+            } catch { if ($target -and (Test-Path $target)) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue };$results.Add(@{name=$tool.name;status='failed';reason='Outil constructeur à préparer manuellement ; consulter first-logon.log.'});Write-Trace $_.Exception.Message }
+        }
+    }
+    foreach ($application in $applicationsToPrepare) {
         $appIndex++
-        Set-Progress 'running' (10 + [int](50 * $appIndex / [math]::Max(1,@($payload.applications).Count))) ('Installation de ' + $application.name + '...')
+        Set-Progress 'running' (10 + [int](50 * $appIndex / [math]::Max(1,$applicationsToPrepare.Count))) ('Installation de ' + $application.name + '...')
         if (-not (Test-AtelierManufacturer $application.manufacturer $manufacturer)) {
             $results.Add(@{name=$application.name; status='skipped'; reason='Autre constructeur'})
             Write-Trace ("Outil ignore pour ce constructeur : " + $application.name)
@@ -176,7 +203,16 @@ try {
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'ready-tools.json') -Content (ConvertTo-Json -InputObject @($readyTools.ToArray()) -Depth 4) -NoBackup | Out-Null
     Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
-    @{status='completed'; timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
+    if ($payload.settings.central_inventory) {
+        $cache=Join-Path $DataPath 'Inventory'
+        try {
+            & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $cache | Out-Null
+            . (Join-Path $DataPath 'Inventory-Transfer.ps1')
+            Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $cache | Out-Null
+        } catch { Write-Trace 'Inventaire à reprendre après les mises à jour Windows.' }
+    }
+    $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { 'completed' }
+    @{status='completed';software_status=$softwareStatus; timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
     Start-Maintenance
     Write-Trace 'Personnalisation terminee. Consultez result.json pour les logiciels et le redemarrage eventuel.'
 } catch {

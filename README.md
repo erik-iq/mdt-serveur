@@ -72,3 +72,5 @@ Le transport iPXE/wimboot est disponible en option avec `/boot/menu.ipxe`. WDS e
 Consultez [l’API et les états](docs/API.md) et [les limites et la recette de validation](docs/VALIDATION.md).
 
 La révision **ATELIER-2.2** ajoute le bouton **Mettre à jour les logiciels** dans **Logiciels & bundles** : téléchargement WinGet vérifié, suivi des étapes et ajout aux bundles sélectionnés sans remplacer leur contenu. Préparer une fois l’agent Windows interactif avec `scripts/Enable-SoftwareSync.ps1` ; voir [le guide des logiciels](docs/LOGICIELS-AUTOMATIQUES.md). Mise à jour de la console seule, sans changement WDS/WinPE.
+
+Le parcours **ATELIER-3** inscrit automatiquement les postes depuis WinPE, installe les logiciels via WinGet dans Windows et centralise XML/CSV dans un dossier par PC sur le serveur. Le raccourci « Dossier inventaire » se trouve dans l’activité. [Installation, nouveau WinPE et nettoyage des anciennes images](docs/ATELIER-3.md).

@@ -23,6 +23,7 @@ from app.customization import ApplicationInput, BootConnection, BootDiscovery, B
 from app.windows_secrets import read_share_credentials
 from app.reports import ComputerReport, WindowsProgress, make_pdf, report_lines
 from app.software_jobs import SoftwareJobs, BundleApplications
+from app.inventories import Inventories, MAX_INVENTORY
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -90,9 +91,13 @@ class EventInput(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
-def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=None, automatic_windows=None):
+def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=None, automatic_windows=None, client_software=None, auto_enroll=None):
     internal = internal_mode if internal_mode is not None else os.getenv('MDT_INTERNAL_MODE', '') == '1'
     automatic = automatic_windows if automatic_windows is not None else os.getenv('MDT_AUTOMATIC_WINDOWS', '') == '1'
+    client_apps = client_software if client_software is not None else os.getenv('MDT_CLIENT_SOFTWARE', '') == '1'
+    enrollment = auto_enroll if auto_enroll is not None else os.getenv('MDT_AUTO_ENROLL', '') == '1'
+    if enrollment and not internal:
+        raise ValueError('L’arrivée automatique WinPE exige le mode interne')
     data = Path(data_dir or os.getenv("MDT_DATA_DIR", ROOT / "data")).resolve()
     data.mkdir(parents=True, exist_ok=True)
     artifacts = data / "artifacts"
@@ -193,10 +198,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     async def security_headers(request: Request, call_next):
         if request.url.path.startswith('/api/windows/') and request.method == 'POST':
             # Bound the stream as well as Content-Length (which may be absent).
+            limit = MAX_INVENTORY if '/inventory/' in request.url.path else 128 * 1024
             body = bytearray()
             async for chunk in request.stream():
                 body.extend(chunk)
-                if len(body) > 128 * 1024:
+                if len(body) > limit:
                     return PlainTextResponse('Rapport trop volumineux', status_code=413)
             request._body = bytes(body)
         response = await call_next(request)
@@ -216,6 +222,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Jeton administrateur requis")
 
+    inventories = Inventories(data, db)
     software = SoftwareJobs(api, db, data, admin, ROOT / 'scripts' / 'software-sources.json')
 
     def row(con, table, identifier):
@@ -237,6 +244,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         result = dict(record)
         saved = json.loads(result.pop('settings_json'))
         result['settings'] = Personalization.model_validate(saved or defaults_for_locale(result['locale'])).model_dump()
+        if client_apps:
+            result['settings'].update(software_mode='winget', central_inventory=True, application_ids=[], bundle_ids=[])
         if automatic:
             result['settings'].update(unattended=True, windows_update=True, store_update=True)
         return result
@@ -255,8 +264,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     def resolved_settings(con, settings):
         settings = Personalization.model_validate(settings).model_dump()
-        ids = list(settings['application_ids'])
-        for identifier in settings['bundle_ids']:
+        if client_apps:
+            settings.update(software_mode='winget', central_inventory=True, application_ids=[], bundle_ids=[])
+        ids = [] if settings['software_mode'] == 'winget' else list(settings['application_ids'])
+        for identifier in ([] if settings['software_mode'] == 'winget' else settings['bundle_ids']):
             bundle = bundle_public(row(con, 'bundles', identifier))
             ids.extend(bundle['application_ids'])
         apps = []
@@ -266,6 +277,22 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             apps.append(application)
         wallpaper = asset_snapshot(con, settings['wallpaper_asset_id'], 'wallpaper') if settings['wallpaper_asset_id'] else None
         return {'settings': settings, 'applications': apps, 'wallpaper': wallpaper}
+
+    def client_portable_tools(con):
+        # Keep the existing HP tool independent of software bundles and WinPE staging.
+        if not client_apps:
+            return []
+        for record in con.execute("SELECT * FROM applications WHERE install_mode='portable' AND manufacturer='hp' ORDER BY created_at DESC"):
+            app = dict(record)
+            if app['entry_point'].split('/')[-1].lower() != 'hpimageassistant.exe':
+                continue
+            try:
+                app['asset'] = asset_snapshot(con, app['asset_id'], 'application')
+            except HTTPException:
+                continue
+            if app['asset']['filename'].lower().endswith('.zip'):
+                return [app]
+        return []
 
     def catalogue(con, profile_id, interactive):
         profile_rows = con.execute('SELECT * FROM profiles ORDER BY name').fetchall() if interactive else [row(con, 'profiles', profile_id)]
@@ -279,13 +306,13 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             selected = resolved_settings(con, profiles[0]['settings'])
             selected_bundles = [bundle_public(row(con, 'bundles', i)) for i in profiles[0]['settings']['bundle_ids']]
             return {'profiles': profiles, 'applications': selected['applications'], 'bundles': selected_bundles,
-                    'wallpapers': [selected['wallpaper']] if selected['wallpaper'] else [], 'options': OPTIONS}
-        apps = [dict(r) for r in con.execute('SELECT * FROM applications ORDER BY name,version')]
+                    'wallpapers': [selected['wallpaper']] if selected['wallpaper'] else [], 'options': OPTIONS, 'tools': client_portable_tools(con)}
+        apps = [] if client_apps else [dict(r) for r in con.execute('SELECT * FROM applications ORDER BY name,version')]
         for app in apps:
             app['asset'] = asset_snapshot(con, app['asset_id'], 'application')
-        bundles = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY name')]
+        bundles = [] if client_apps else [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY name')]
         wallpapers = [asset_snapshot(con, r['id'], 'wallpaper') for r in con.execute("SELECT id FROM assets WHERE kind='wallpaper'")]
-        return {'profiles': profiles, 'applications': apps, 'bundles': bundles, 'wallpapers': wallpapers, 'options': OPTIONS}
+        return {'profiles': profiles, 'applications': apps, 'bundles': bundles, 'wallpapers': wallpapers, 'options': OPTIONS, 'tools': client_portable_tools(con)}
 
     def job_selection(con, job):
         selected = json.loads(job['selection_json'])
@@ -305,7 +332,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 'profile_id': profile['id'], 'profile_name': profile['name'], 'windows_version': profile['windows_version'],
                 'edition': profile['edition'], 'image_index': profile['image_index'], 'locale': profile['locale'],
                 'image_filename': asset['filename'], 'image_size': asset['size'], 'image_sha256': asset['sha256'],
-                'image_path': f"/api/agent/{job['id']}/image", 'wizard_enabled': bool(job['wizard_enabled']), 'internal_mode': bool(internal), **resolved}
+                'image_path': f"/api/agent/{job['id']}/image", 'wizard_enabled': bool(job['wizard_enabled']), 'internal_mode': bool(internal),
+                'tools': json.loads(job['catalog_json']).get('tools', []) if client_apps else [], **resolved}
 
     def agent(con, identifier, authorization):
         job = row(con, "deployments", identifier)
@@ -324,11 +352,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "2.3"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "3.0"}
 
     @api.get('/api/session')
     def session_options():
-        return {'internal_mode': bool(internal), 'automatic_windows': bool(automatic)}
+        return {'internal_mode': bool(internal), 'automatic_windows': bool(automatic), **({'auto_enroll': True} if enrollment else {}), **({'client_software': True} if client_apps else {})}
 
     @api.get("/api/state", dependencies=[Depends(admin)])
     def state():
@@ -340,7 +368,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
                 d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name,
                 d.windows_status,d.windows_progress,d.windows_message,d.windows_updated_at,
-                EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report
+                EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report,
+                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory
                 FROM deployments d JOIN machines m ON m.id=d.machine_id JOIN profiles p ON p.id=d.profile_id
                 ORDER BY d.created_at DESC LIMIT 100""")]
             for item in result['deployments']:
@@ -357,6 +386,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         result['customization_options'] = OPTIONS
         result['internal_mode'] = bool(internal)
         result['automatic_windows'] = bool(automatic)
+        result['auto_enroll'] = bool(enrollment)
+        result['client_software'] = bool(client_apps)
         return result
 
     @api.post("/api/machines", status_code=201, dependencies=[Depends(admin)])
@@ -495,7 +526,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled and not internal else None
         try:
             with db(write=True) as con:
-                software.no_active(con)
+                if not client_apps:
+                    software.no_active(con)
                 machine = row(con, "machines", body.machine_id)
                 profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
@@ -515,17 +547,58 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 'boot_code': '-'.join(boot_code[i:i+4] for i in range(0, 20, 4)) if boot_code else None}
 
     @api.post('/api/boot/discover')
-    def boot_discover(body: BootDiscovery):
+    def boot_discover(body: BootDiscovery, request: Request):
         if not internal:
-            raise HTTPException(403, 'Connexion automatique desactivee')
-        macs = {value.replace('-', ':').upper() for value in body.macs}
+            raise HTTPException(403, 'Connexion automatique désactivée')
+        if request.headers.get('sec-fetch-site') == 'cross-site' or request.headers.get('origin', public_url) != public_url:
+            raise HTTPException(403, 'Origine externe refusée')
+        if enrollment and body.release != 'ATELIER-3':
+            raise HTTPException(409, 'Démarrer sur la nouvelle image ATELIER-3 ; cette ancienne version WinPE ne prépare pas les logiciels et inventaires du nouveau parcours')
+        try:
+            macs = list(dict.fromkeys(MachineInput.validate_mac(value) for value in body.macs))
+        except ValueError as exc:
+            raise HTTPException(422, 'Adresse MAC unicast invalide') from exc
         with db(write=True) as con:
             records = [dict(r) for r in con.execute("""SELECT d.*,m.mac AS matched_mac FROM deployments d
-                JOIN machines m ON m.id=d.machine_id WHERE d.status='queued' AND d.wizard_enabled=1
-                AND d.boot_code_expires>?""", (now(),)) if r['matched_mac'] in macs]
-            if len(records) != 1:
-                raise HTTPException(409, 'Creez une seule autorisation active pour la MAC de ce poste dans la console')
-            job, new_token = records[0], secrets.token_urlsafe(32)
+                JOIN machines m ON m.id=d.machine_id WHERE d.status IN ('queued','running')""") if r['matched_mac'] in macs]
+            if len(records) > 1 or any(r['status'] == 'running' for r in records):
+                raise HTTPException(409, 'Un déploiement est déjà actif ou plusieurs postes correspondent')
+            valid = [r for r in records if (enrollment or r['wizard_enabled']) and (enrollment or (r['boot_code_expires'] or '') > now())]
+            if not valid and enrollment:
+                if records:
+                    raise HTTPException(409, 'Annuler la demande manuelle existante avant une arrivée automatique')
+                machines = [dict(r) for r in con.execute('SELECT * FROM machines') if r['mac'] in macs]
+                if len(machines) > 1:
+                    raise HTTPException(409, 'Plusieurs machines connues correspondent aux MAC du poste')
+                if machines:
+                    machine = machines[0]
+                    latest = con.execute('SELECT * FROM deployments WHERE machine_id=? ORDER BY created_at DESC LIMIT 1', (machine['id'],)).fetchone()
+                    if latest and latest['status'] == 'staged' and latest['windows_status'] not in {'completed', 'failed', 'needs_attention'}:
+                        raise HTTPException(409, 'Windows est déjà préparé : démarrer sur le disque local pour terminer')
+                else:
+                    machine = {'id': str(uuid.uuid4()), 'hostname': 'PC-' + macs[0].replace(':', ''), 'mac': macs[0]}
+                profiles = [profile_public(r) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
+                if not profiles:
+                    raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les éditions sur le serveur')
+                profile = profiles[0]
+                catalog = catalogue(con, profile['id'], True)
+                if not machines:
+                    con.execute('INSERT INTO machines VALUES (?,?,?,?,?)', (machine['id'], machine['hostname'], machine['mac'], 'Arrivée automatique WinPE', now()))
+                identifier, timestamp = str(uuid.uuid4()), now()
+                selection = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
+                con.execute("""INSERT INTO deployments(id,machine_id,profile_id,disk_number,token_hash,status,progress,created_at,updated_at,wizard_enabled,catalog_json,selection_json,boot_code_expires)
+                    VALUES (?,?,?,0,?,'queued',0,?,?,1,?,?,?)""",
+                    (identifier, machine['id'], profile['id'], digest(secrets.token_urlsafe(32)), timestamp, timestamp,
+                     json.dumps(catalog), json.dumps(selection), (datetime.now(timezone.utc)+timedelta(hours=2)).isoformat()))
+                event(con, identifier, 'queued', 0, 'Poste détecté automatiquement ; attente du choix Windows et de la confirmation locale du disque')
+                valid = [row(con, 'deployments', identifier)]
+            if len(valid) != 1:
+                raise HTTPException(409, 'Créer une autorisation pour cette MAC ou activer l’arrivée automatique WinPE')
+            job, new_token = valid[0], secrets.token_urlsafe(32)
+            if enrollment:
+                refreshed = catalogue(con, job['profile_id'], True)
+                con.execute('UPDATE deployments SET wizard_enabled=1,catalog_json=? WHERE id=?', (json.dumps(refreshed), job['id']))
+                job = row(con, 'deployments', job['id'])
             con.execute('UPDATE deployments SET token_hash=?,updated_at=? WHERE id=?', (digest(new_token), now(), job['id']))
             return {'id': job['id'], 'agent_token': new_token, 'plan': plan_data(con, job), 'catalog': json.loads(job['catalog_json'])}
 
@@ -581,8 +654,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 if json.loads(active['selection_json']).get('hostname', '').lower() == body.hostname.lower():
                     raise HTTPException(409, 'Ce nom est déjà utilisé par un autre déploiement actif')
             resolved_settings(con, settings)
-            con.execute('UPDATE deployments SET profile_id=?,selection_json=?,updated_at=? WHERE id=?',
-                        (body.profile_id, json.dumps(body.model_dump()), now(), identifier))
+            if enrollment:
+                con.execute('UPDATE machines SET hostname=? WHERE id=?', (body.hostname, job['machine_id']))
+            selected = body.model_dump(exclude={'disk_number'})
+            con.execute('UPDATE deployments SET profile_id=?,selection_json=?,disk_number=?,updated_at=? WHERE id=?',
+                        (body.profile_id, json.dumps(selected), body.disk_number if body.disk_number is not None else job['disk_number'], now(), identifier))
             event(con, identifier, 'queued', 0, f'Assistant : profil et paramètres validés pour {body.hostname}')
             return plan_data(con, row(con, 'deployments', identifier))
 
@@ -640,6 +716,22 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         if job['status'] not in {'running', 'staged'}:
             raise HTTPException(409, 'Rapport refuse pour ce deploiement')
         return job
+
+    @api.get('/api/windows/{identifier}/tools/{asset_id}')
+    def windows_tool(identifier: str, asset_id: str, authorization: str = Header(default='')):
+        with db() as con:
+            job = windows_agent(con, identifier, authorization)
+            tools = json.loads(job['catalog_json']).get('tools', [])
+            allowed = next((tool['asset'] for tool in tools if tool['asset']['id'] == asset_id), None)
+            if not allowed:
+                raise HTTPException(403, 'Outil absent de ce déploiement')
+            asset = row(con, 'assets', asset_id)
+            if asset['sha256'] != allowed['sha256']:
+                raise HTTPException(409, 'Outil modifié depuis le démarrage')
+            path = asset_path(asset)
+        return FileResponse(path, media_type='application/octet-stream', filename=asset['filename'])
+
+    inventories.routes(api, windows_agent, admin, now)
 
     @api.post('/api/windows/{identifier}/progress')
     def windows_progress(identifier: str, body: WindowsProgress, authorization: str = Header(default='')):

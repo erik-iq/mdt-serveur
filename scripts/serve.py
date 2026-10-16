@@ -15,6 +15,8 @@ os.environ["MDT_BASE_URL"] = settings["base_url"]
 os.environ["MDT_DATA_DIR"] = settings["data_dir"]
 os.environ['MDT_INTERNAL_MODE'] = '1' if settings.get('internal_mode', False) else '0'
 os.environ['MDT_AUTOMATIC_WINDOWS'] = '1' if settings.get('automatic_windows', False) else '0'
+os.environ['MDT_CLIENT_SOFTWARE'] = '1' if settings.get('client_software', False) else '0'
+os.environ['MDT_AUTO_ENROLL'] = '1' if settings.get('auto_enroll', False) else '0'
 logs = Path(settings["data_dir"]) / "logs"
 logs.mkdir(parents=True, exist_ok=True)
 handler = RotatingFileHandler(logs / "console.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8")

@@ -100,8 +100,8 @@ function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) 
     assert (output / 'mount' / 'Atelier' / 'Partitions.ps1').exists()
     configuration = json.loads((output / 'mount' / 'Atelier' / 'config.json').read_text(encoding='utf-8-sig'))
     assert configuration['winpe_keyboard_layout'] == '040c:0000040c'
-    assert configuration['boot_release'] == 'INTERNE-1'
+    assert configuration['boot_release'] == 'ATELIER-3'
     assert configuration['internal_mode'] is False
     for name in ['Prepare-Windows.ps1', 'Maintenance.ps1', 'Updates.ps1', 'Progress.ps1',
-                 'Prepare-IQTools.ps1', 'Test-Batterie.ps1', 'Verifier-Licence.ps1']:
+                 'Prepare-IQTools.ps1', 'Test-Batterie.ps1', 'Verifier-Licence.ps1', 'Client-Software.ps1', 'Inventory-Transfer.ps1', 'Install-WinGet.ps1', 'software-sources.json']:
         assert (output / 'mount' / 'Atelier' / name).exists()

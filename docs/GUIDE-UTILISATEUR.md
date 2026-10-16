@@ -1,5 +1,7 @@
 # Utiliser Atelier PXE
 
+**Nouveau parcours ATELIER-3 :** arrivée automatique des PC, logiciels silencieux après Windows et inventaires sur .250. Consulter [le guide ATELIER-3](ATELIER-3.md) pour cette configuration.
+
 Atelier PXE installe Windows sur un ordinateur démarré par le réseau, prépare ses logiciels et produit un rapport de contrôle. Ce guide décrit le serveur déjà installé dans l’atelier et le parcours **ATELIER-2**. L’installation efface le disque choisi : sauvegarder les données avant de commencer.
 
 ## Actualiser les logiciels et obtenir le détail technique

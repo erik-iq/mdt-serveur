@@ -9,5 +9,8 @@ Install-PackageProvider -Name NuGet -Force | Out-Null
 Install-Module -Name Microsoft.WinGet.Client -Scope AllUsers -Force -Repository PSGallery
 Import-Module Microsoft.WinGet.Client
 Repair-WinGetPackageManager -AllUsers
-if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) { throw 'WinGet prepare ; rouvrir PowerShell sous le meme compte pour actualiser son enregistrement et son PATH.' }
+if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+    $package=Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($package -and (Test-Path (Join-Path $package.InstallLocation 'winget.exe'))) { & (Join-Path $package.InstallLocation 'winget.exe') --version;return }
+    throw 'WinGet prepare ; rouvrir PowerShell sous le meme compte pour actualiser son enregistrement et son PATH.' }
 & winget.exe --version

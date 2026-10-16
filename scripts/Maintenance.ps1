@@ -85,7 +85,9 @@ try {
         try { & $licenseScript } catch { Add-Content -LiteralPath $logPath -Value 'Diagnostic de licence a relancer dans C:\IQ_.' -Encoding UTF8 }
     }
     $message = if ($payload.settings.store_update) { 'Windows et logiciels prepares. Actualisation Microsoft Store demandee ; consultez sa bibliotheque pour son avancement.' } else { 'Preparation de Windows et des logiciels terminee.' }
-    Save-Maintenance 'completed' 100 $message
+    $finalStatus=if ($customization.software_status -eq 'needs_attention') { 'needs_attention' } else { 'completed' }
+    if ($finalStatus -eq 'needs_attention') { $message='Windows préparé ; certains logiciels WinGet nécessitent une intervention. Consulter le rapport.' }
+    Save-Maintenance $finalStatus 100 $message
     Finish-Maintenance
 } catch {
     if ($state.attempts -ge 6 -or $state.passes -ge 5 -or $state.reboots -ge 4) {

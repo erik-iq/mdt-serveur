@@ -26,10 +26,21 @@ param()
 & (Join-Path $env:ProgramData 'AtelierPXE\New-DeploymentReport.ps1') -OutputDirectory $PSScriptRoot -RefreshInventory
 '@
 Set-Content -LiteralPath (Join-Path $OutputDirectory 'Generer-Rapport.ps1') -Value $reportLauncher -Encoding UTF8
+if ($payload.settings.central_inventory) {
+    $centralLauncher=@'
+param()
+$atelierData=Join-Path $env:ProgramData 'AtelierPXE'
+$atelierCache=Join-Path $atelierData 'Inventory'
+& (Join-Path $atelierData 'Export-Inventaire.ps1') -OutputDirectory $atelierCache | Out-Null
+. (Join-Path $atelierData 'Inventory-Transfer.ps1')
+if (-not (Send-AtelierInventory -DataPath $atelierData -InventoryDirectory $atelierCache)) { Write-Warning 'Transmission en attente ; cache privé conservé.' }
+'@
+    Set-Content -LiteralPath (Join-Path $OutputDirectory 'Export-Inventaire.ps1') -Value $centralLauncher -Encoding UTF8
+}
 $diagnostics=@()
 foreach ($name in @('Test-Batterie.ps1','Verifier-Licence.ps1')) {
     try { & (Join-Path $OutputDirectory $name) -OutputDirectory $OutputDirectory; $diagnostics += @{script=$name;status='completed'} }
     catch { $diagnostics += @{script=$name;status='failed';message=$_.Exception.Message} }
 }
 $diagnostics | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDirectory 'Diagnostics.json') -Encoding UTF8
-@('Dossier technique IQ_', '', 'Test-Batterie.cmd : genere Rapport-batterie.html (ou Batterie-absente.txt sur une VM).', 'Verifier-Licence.cmd : actualise Licence-Windows.txt et Licence-Windows.json.', 'Test-Materiel.cmd : test guide son, webcam et clavier dans le navigateur ; enregistre Tests-Materiel.json.', 'Generer-Rapport.cmd : actualise Rapport-Deploiement.pdf et .json, puis tente leur transmission a la console.', 'Verifier-Garantie.cmd : ouvre le site officiel du constructeur et permet de saisir les dates verifiees.', 'La garantie peut rester non verifiee ; aucune date n est inventee depuis le numero de serie.', 'Export-Inventaire.cmd : actualise Inventaire-Technique.xml et .csv avec les proprietes materielles, Windows, pilotes, logiciels et licences disponibles.', 'Les categories absentes ou inaccessibles sont signalees ; aucune cle produit, cle BitLocker ou TPM n est exportee.', 'Le fond d ecran selectionne est copie ici sous son nom d origine.', 'Les scripts de diagnostic ne changent ni la licence ni la configuration de la batterie.') | Set-Content (Join-Path $OutputDirectory 'Lisez-moi.txt') -Encoding UTF8
+@('Dossier technique IQ_', '', 'Test-Batterie.cmd : genere Rapport-batterie.html (ou Batterie-absente.txt sur une VM).', 'Verifier-Licence.cmd : actualise Licence-Windows.txt et Licence-Windows.json.', 'Test-Materiel.cmd : test guide son, webcam et clavier dans le navigateur ; enregistre Tests-Materiel.json.', 'Generer-Rapport.cmd : actualise Rapport-Deploiement.pdf et .json, puis tente leur transmission a la console.', 'Verifier-Garantie.cmd : ouvre le site officiel du constructeur et permet de saisir les dates verifiees.', 'La garantie peut rester non verifiee ; aucune date n est inventee depuis le numero de serie.', 'Export-Inventaire.cmd : actualise Inventaire-Technique.xml et .csv avec les proprietes materielles, Windows, pilotes, logiciels et licences disponibles.', 'Les categories absentes ou inaccessibles sont signalees ; aucune cle produit, cle BitLocker ou TPM n est exportee.', 'Le fond d ecran selectionne est copie ici sous son nom d origine.', 'Les scripts de diagnostic ne changent ni la licence ni la configuration de la batterie.', $(if($payload.settings.central_inventory){'Inventaire XML/CSV : enregistré sur le serveur .250. Cache de reprise privé dans ProgramData\AtelierPXE\Inventory ; accès depuis Dossier inventaire dans Atelier.'}else{'Inventaire XML/CSV local dans IQ_.'})) | Set-Content (Join-Path $OutputDirectory 'Lisez-moi.txt') -Encoding UTF8

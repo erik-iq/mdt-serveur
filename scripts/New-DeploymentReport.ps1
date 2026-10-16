@@ -5,11 +5,14 @@ $ErrorActionPreference='Stop'
 . (Join-Path $DataPath 'Reporting.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
-$xmlInventory=Join-Path $OutputDirectory 'Inventaire-Technique.xml'
-$csvInventory=Join-Path $OutputDirectory 'Inventaire-Technique.csv'
+$payloadPath=Join-Path $DataPath 'personalization.json'
+$payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Raw | ConvertFrom-Json } else { $null }
+$inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { $OutputDirectory }
+$xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
+$csvInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.csv'
 if ($RefreshInventory -or -not (Test-Path $xmlInventory) -or -not (Test-Path $csvInventory)) {
     try {
-        $export= & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $OutputDirectory
+        $export= & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $inventoryDirectory
         if ($export.SectionsIndisponibles) { $warnings.Add('Certaines categories de l inventaire technique sont indisponibles ; consulter les etats dans XML/CSV.') }
     } catch { $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.') }
 }
@@ -44,7 +47,6 @@ try {
 $license=Read-ReportJson (Join-Path $OutputDirectory 'Licence-Windows.json')
 $inventory['Activation Windows']=if ($license) { [string]$license.etat } else { 'INDETERMINE' }
 if (-not $license -or $license.etat -ne 'ACTIVE') { $warnings.Add('Activation Windows a verifier ; aucune cle produit n est collecte ici.') }
-$payload=Read-ReportJson (Join-Path $DataPath 'personalization.json')
 if ($payload.deployment) { $inventory['Profil deploye']=[string]$payload.deployment.profile_name; $inventory['Image / index']=([string]$payload.deployment.image_filename + ' / ' + $payload.deployment.image_index) }
 $steps=New-Object 'Collections.Generic.List[object]'
 $apps=Read-ReportJson (Join-Path $DataPath 'result.json')
@@ -84,7 +86,8 @@ if ($warranty) {
         $steps.Add(@{name='Garantie constructeur';status=[string]$warranty.statut;message=('Verification operateur sur ' + $warranty.source_url);timestamp=[string]$warranty.verifie_le})
     } else { $warnings.Add('Garantie constructeur non verifiee.') }
 }
-$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed') { 'completed' } else { 'needs_attention' }
+if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en échec ; consulter software-logs et les étapes du rapport.') }
+$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 if ($steps.Count -gt 230) { $warnings.Add('Historique PDF limite aux 230 dernieres entrees. Les journaux complets restent dans ProgramData.') }
 $report=[ordered]@{hostname=$env:COMPUTERNAME;status=$status;generated_at=[DateTime]::UtcNow.ToString('o');inventory=$inventory;steps=@($steps.ToArray() | Select-Object -Last 230);warnings=@($warnings.ToArray())}
@@ -102,6 +105,10 @@ if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','need
         $config=Get-Content $configuration -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
         Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 15 | Out-Null
+        if ($payload.settings.central_inventory) {
+            . (Join-Path $DataPath 'Inventory-Transfer.ps1')
+            if (-not (Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $inventoryDirectory)) { throw 'Transmission inventaire en attente.' }
+        }
         @{status='sent';date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8
     } catch {
         @{status='pending';message='Rapport local conserve. Relancer Generer-Rapport.cmd lorsque la console est joignable.'} | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8

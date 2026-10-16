@@ -24,7 +24,9 @@ TIMEZONES = [
     {'id': 'Tokyo Standard Time', 'name': 'Tokyo'},
 ]
 REGIONS = [{'id': x, 'name': x} for x in ['fr-FR', 'fr-BE', 'fr-CH', 'en-US', 'en-GB', 'de-DE']]
-OPTIONS = {'keyboards': KEYBOARDS, 'timezones': TIMEZONES, 'regions': REGIONS,
+SOFTWARE_PACKAGES = [{'id': 'vlc', 'name': 'VLC'}, {'id': 'reader', 'name': 'Adobe Reader'},
+                     {'id': 'chrome', 'name': 'Google Chrome'}, {'id': 'anydesk', 'name': 'AnyDesk'}]
+OPTIONS = {'software_packages': SOFTWARE_PACKAGES, 'keyboards': KEYBOARDS, 'timezones': TIMEZONES, 'regions': REGIONS,
            'themes': [{'id': 'unchanged', 'name': 'Conserver le thème Windows'},
                       {'id': 'light', 'name': 'Clair'}, {'id': 'dark', 'name': 'Sombre'}]}
 
@@ -46,6 +48,9 @@ class Personalization(BaseModel):
     wallpaper_asset_id: str | None = None
     application_ids: list[str] = Field(default_factory=list, max_length=50)
     bundle_ids: list[str] = Field(default_factory=list, max_length=20)
+    central_inventory: bool = False
+    software_mode: Literal['catalogue', 'winget'] = 'catalogue'
+    winget_packages: list[Literal['vlc', 'reader', 'chrome', 'anydesk']] = Field(default_factory=lambda: ['vlc', 'reader', 'chrome', 'anydesk'], max_length=4)
     unattended: bool = False
     windows_update: bool = False
     store_update: bool = False
@@ -71,7 +76,7 @@ class Personalization(BaseModel):
             raise ValueError('Caractères de contrôle interdits')
         return value
 
-    @field_validator('application_ids', 'bundle_ids')
+    @field_validator('application_ids', 'bundle_ids', 'winget_packages')
     @classmethod
     def unique_ids(cls, value):
         if len(value) != len(set(value)):
@@ -123,6 +128,7 @@ class WizardSelection(BaseModel):
     profile_id: str
     hostname: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9-]{0,14}$')
     settings: Personalization
+    disk_number: int | None = Field(default=None, ge=0, le=32)
 
 
 class BootConnection(BaseModel):
@@ -131,4 +137,5 @@ class BootConnection(BaseModel):
 
 
 class BootDiscovery(BaseModel):
+    release: str = Field(default='', max_length=40)
     macs: list[str] = Field(min_length=1, max_length=16)

@@ -11,7 +11,7 @@ if (-not $config.internal_mode) {
     $token=Get-Content (Join-Path $config.data_dir 'admin-token') -Raw
     $headers.Authorization='Bearer ' + $token.Trim()
 }
-$base=[string]$config.base_url
+$base=if ($config.port) { 'http://127.0.0.1:' + $config.port } else { [string]$config.base_url }
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $state=Invoke-RestMethod -Uri ($base + '/api/state') -Headers $headers
 foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
@@ -31,4 +31,4 @@ foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
         Write-Host ('Profil cree : ' + $name + ' (index ' + $image.ImageIndex + ')')
     }
 }
-Write-Host 'Profils verifies. Creer une NOUVELLE autorisation avec le choix dans WinPE active.'
+Write-Host 'Profils vérifiés. En mode ATELIER-3, choisir Pro ou Famille directement dans WinPE.'

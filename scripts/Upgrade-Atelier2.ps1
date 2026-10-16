@@ -21,7 +21,7 @@ $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath
 $config=Get-Content $configPath -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod -Uri ($config.base_url + '/health') -TimeoutSec 10
-if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '2.3') { throw 'La console ne confirme pas la revision ATELIER-2.3.' }
+if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '3.0') { throw 'La console ne confirme pas la revision ATELIER-3.0.' }
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath
 $parameters=@{
     ServerUrl=$config.base_url

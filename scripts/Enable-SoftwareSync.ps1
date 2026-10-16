@@ -7,7 +7,7 @@ $ErrorActionPreference='Stop'
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 10
-if ($health.revision -ne '2.3') { throw 'Mettre à jour la console avant de configurer son agent WinGet.' }
+if ($health.revision -ne '3.0') { throw 'Mettre à jour la console avant de configurer son agent WinGet.' }
 if (-not (Test-Path (Join-Path $config.data_dir 'software-sync\worker-key'))) { throw 'Clé agent absente. Vérifier le démarrage de la console.' }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $existing=Get-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' -ErrorAction SilentlyContinue

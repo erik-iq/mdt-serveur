@@ -23,7 +23,7 @@ $script:targetName = ''
 $script:namePrefix = [string]$Config.hostname_prefix
 $script:controls = @{}
 $script:operatorKeyboard = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($Config.winpe_keyboard_layout) { $Config.winpe_keyboard_layout } else { '040c:0000040c' }
-$script:steps = @('Connexion','Windows','Poste & region','Bundle & bureau','Recapitulatif','Installation')
+$script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
 $script:manufacturer = [string]$computer.Manufacturer
 $script:serialNumber = ''
@@ -134,8 +134,13 @@ function Save-Page {
             $script:settings.theme = Choice-Value 'theme'
             $wallpaper = Choice-Value 'wallpaper'
             $script:settings.wallpaper_asset_id = if ($wallpaper) { $wallpaper } else { $null }
+            if ($script:settings.software_mode -eq 'winget') {
+                $script:settings.winget_packages = @($script:session.catalog.options.software_packages | Where-Object { $script:controls[('winget-' + $_.id)].Checked } | ForEach-Object { $_.id })
+                $script:settings.bundle_ids=@();$script:settings.application_ids=@()
+            } else {
             $script:settings.bundle_ids = @($script:session.catalog.bundles | Where-Object { $script:controls[('bundle-' + $_.id)].Checked } | ForEach-Object { $_.id })
             $script:settings.application_ids = @($script:session.catalog.applications | Where-Object { $script:controls[('app-' + $_.id)].Checked } | ForEach-Object { $_.id })
+            }
         }
     }
 }
@@ -149,7 +154,7 @@ function Show-Page {
     foreach ($control in @($script:body.Controls)) { $control.Dispose() }
     $script:body.Controls.Clear(); $script:controls = @{}
     $script:title.Text = $script:steps[$script:page]
-    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Preparez le nom, le clavier et le fuseau horaire.','Choisissez votre bundle et votre personnalisation.','Verifiez la cible avant de confirmer l installation.','Application de Windows et preparation du premier demarrage.')[$script:page]
+    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Preparez le nom, le clavier et le fuseau horaire.','Choisissez les logiciels à installer après Windows et votre personnalisation.','Verifiez la cible avant de confirmer l installation.','Application de Windows et preparation du premier demarrage.')[$script:page]
     $script:back.Enabled = $script:page -gt 1 -and -not $script:running
     $script:next.Enabled = -not $script:running
     $script:next.Text = if ($script:page -eq 0) { 'Connexion' } elseif ($script:page -eq 4) { 'Installer Windows' } else { 'Continuer' }
@@ -185,7 +190,7 @@ function Show-Page {
             Add-Input 'password' 'Mot de passe du partage' '' $true | Out-Null
             Add-Text 'Le mot de passe reste dans la session WinPE ; il ne sera pas copie dans Windows.' | Out-Null
             } else {
-                Add-Text 'Connexion automatique au deploiement de ce poste. Creez une autorisation pour cette MAC dans la console, puis cliquez sur Connexion.' | Out-Null
+                Add-Text $(if($Config.auto_enroll){'Le poste est enregistré automatiquement. Aucune autorisation préalable sur le site. Le disque sera confirmé ici avant installation.'}else{'Connexion au poste enregistré dans la console.'}) | Out-Null
             }
         }
         1 {
@@ -219,6 +224,10 @@ function Show-Page {
             Add-Input 'organization' 'Organisation (facultatif)' $script:settings.organization | Out-Null
         }
         3 {
+            if ($script:settings.software_mode -eq 'winget') {
+                Add-Text 'Installation silencieuse après le démarrage Windows' 12 $true | Out-Null
+                foreach ($package in @($script:session.catalog.options.software_packages)) { Add-Check ('winget-' + $package.id) $package.name ($package.id -in @($script:settings.winget_packages)) }
+            } else {
             Add-Text 'Bundles' 12 $true | Out-Null
             foreach ($bundle in @($script:session.catalog.bundles)) { Add-Check ('bundle-' + $bundle.id) $bundle.name ($bundle.id -in @($script:settings.bundle_ids)) }
             Add-Text 'Logiciels supplementaires' 12 $true | Out-Null
@@ -228,17 +237,24 @@ function Show-Page {
                 if (-not $compatible) { $label += ' (autre constructeur)' }
                 Add-Check ('app-' + $application.id) $label ($compatible -and $application.id -in @($script:settings.application_ids)) $compatible
             }
+            }
             Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
             Add-Text 'Les logiciels sont prepares puis installes automatiquement dans Windows. La progression et les mises a jour seront affichees dans Windows. Les outils portables ne lancent aucune mise a jour du BIOS.' | Out-Null
         }
         4 {
-            $disk = Get-Disk -Number $script:session.plan.disk_number
+            $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
+            if ($Config.auto_enroll) {
+                $disks=@(Get-Disk | Where-Object { -not $_.IsBoot -and -not $_.IsSystem -and -not $_.IsOffline -and -not $_.IsReadOnly -and $_.BusType -ne 'USB' -and $_.Size -ge 64GB })
+                if (-not $disks.Count) { throw 'Aucun disque interne compatible disponible.' }
+                Add-Choice 'target_disk' 'Disque à effacer et installer' @($disks | ForEach-Object { [pscustomobject]@{id=[string]$_.Number;name=('Disque ' + $_.Number + ' | ' + $_.FriendlyName + ' | ' + [math]::Round($_.Size/1GB) + ' Go | SN ' + $_.SerialNumber)} }) ([string]$script:session.plan.disk_number) | Out-Null
+            }
+
             Add-Text ($script:selectedProfile.name + ' -> ' + $script:targetName) 16 $true | Out-Null
             Add-Text ('Clavier : ' + $script:settings.keyboard + ' | Fuseau : ' + $script:settings.timezone) | Out-Null
-            Add-Text ('Disque ' + $disk.Number + ' : ' + $disk.FriendlyName + ' | ' + [math]::Round($disk.Size/1GB) + ' Go | Serie ' + $disk.SerialNumber) 11 $true | Out-Null
-            $apps = @(Selected-Applications | ForEach-Object { $_.name })
+            if ($disk -and -not $Config.auto_enroll) { Add-Text ('Disque ' + $disk.Number + ' : ' + $disk.FriendlyName + ' | ' + [math]::Round($disk.Size/1GB) + ' Go | Serie ' + $disk.SerialNumber) 11 $true | Out-Null }
+            $apps = if ($script:settings.software_mode -eq 'winget') { @($script:session.catalog.options.software_packages | Where-Object { $_.id -in @($script:settings.winget_packages) } | ForEach-Object { $_.name }) } else { @(Selected-Applications | ForEach-Object { $_.name }) }
             Add-Text ('Logiciels de ce poste : ' + ($apps -join ', ')) | Out-Null
             Add-Text 'Toutes les partitions du disque indique seront supprimees. Les controles MAC, UEFI, image et disque seront executes avant cet effacement.' | Out-Null
             $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $disk.Number
@@ -267,7 +283,7 @@ function Connect-Post {
     if (-not $script:macs.Count) { throw 'Aucune MAC detectee : verifier le pilote Ethernet WinPE.' }
     $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
     if ($Config.internal_mode) {
-        $connected = Send-Json '/api/boot/discover' @{macs=$script:macs} $false
+        $connected = Send-Json '/api/boot/discover' @{macs=$script:macs;release=[string]$Config.boot_release} $false
         $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
         $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders
         $username = $credentials.username
@@ -297,9 +313,10 @@ function Connect-Post {
     Show-Page
 }
 function Begin-Deployment {
+    if ($Config.auto_enroll) { $script:session.plan.disk_number=[int](Choice-Value 'target_disk') }
     $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $script:session.plan.disk_number
     if (-not $script:session.plan.internal_mode -and $script:controls.confirmation.Text -cne $expected) { throw 'Confirmation exacte requise avant installation.' }
-    $plan = Send-Json ('/api/agent/' + $script:session.id + '/configure') @{profile_id=$script:selectedProfile.id;hostname=$script:targetName;settings=$script:settings}
+    $plan = Send-Json ('/api/agent/' + $script:session.id + '/configure') @{profile_id=$script:selectedProfile.id;hostname=$script:targetName;settings=$script:settings;disk_number=[int]$script:session.plan.disk_number}
     $image = Join-Path $script:share $plan.image_filename
     $script:running = $true; $script:page = 5
     Show-Page; $script:next.Enabled = $false; $script:back.Enabled = $false

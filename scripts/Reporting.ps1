@@ -1,4 +1,16 @@
 ﻿# Shared reporting functions. No inventory collection or network access on import.
+function Initialize-AtelierReportTrust {
+    param([string]$DataPath)
+    $path=Join-Path $DataPath 'trusted-root.cer'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+    # The same public certificate was embedded and trusted in WinPE by the administrator.
+    $certificate=New-Object Security.Cryptography.X509Certificates.X509Certificate2($path)
+    if ($certificate.HasPrivateKey) { throw 'Le certificat de confiance doit être public, sans clé privée.' }
+    $store=New-Object Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine')
+    $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    try { $store.Add($certificate) } finally { $store.Close();$certificate.Dispose() }
+}
+
 function Send-AtelierWindowsProgress {
     param([string]$DataPath,[string]$Status,[int]$Percent,[string]$Message)
     $configuration = Join-Path $DataPath 'reporting.json'

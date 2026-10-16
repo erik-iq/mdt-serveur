@@ -71,7 +71,7 @@ try {
     # One full WIM hash: keep a read-only lock from validation through DISM.
     # Denying writes/deletion avoids a second multi-gigabyte read over SMB.
     $imageLock = [IO.File]::Open($source.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-    $checksum = (Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $checksum = (Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
     if ($checksum -ne $plan.image_sha256) { throw 'Le SHA-256 de l''image ne correspond pas au profil autorisé.' }
     # DismCmdlets rejects a missing edition/index before touching the disk.
     $edition = Get-WindowsImage -ImagePath $source.FullName -Index $plan.image_index
@@ -80,7 +80,7 @@ try {
     if ($expectedEdition -and $edition.EditionId -ne $expectedEdition) { throw 'L index WIM ne correspond pas a l edition Pro/Famille du profil. Synchroniser les profils avant de poursuivre.' }
     if ($edition.Languages -and $plan.locale -notin @($edition.Languages)) { throw 'La langue du profil n est pas presente dans cette image Windows.' }
     $manufacturer = [string](Get-CimInstance Win32_ComputerSystem).Manufacturer
-    $selectedApplications = @($plan.applications | Where-Object { Test-AtelierManufacturer $_.manufacturer $manufacturer })
+    $selectedApplications = @($plan.applications | Where-Object { $plan.settings.software_mode -ne 'winget' } | Where-Object { Test-AtelierManufacturer $_.manufacturer $manufacturer })
     $sourceFolder = Split-Path $source.FullName -Parent
     $extraFiles = New-Object 'System.Collections.Generic.List[object]'
     foreach ($application in $selectedApplications) {
@@ -90,7 +90,7 @@ try {
     foreach ($extra in $extraFiles) {
         $path = Join-Path $sourceFolder $extra.asset.filename
         $file = Get-Item -LiteralPath $path
-        if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -ne $extra.asset.size -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $extra.asset.sha256) {
+        if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -ne $extra.asset.size -or (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ne $extra.asset.sha256) {
             throw ("Fichier supplementaire invalide avant effacement : " + $extra.asset.filename)
         }
     }
@@ -136,17 +136,19 @@ exit
         Assert-Active
         Send-Event 'running' 35 'Application de l''image Windows (DISM)'
         Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
-    } finally { $imageLock.Dispose(); $imageLock=$null }
+    } finally { if ($imageLock) { $imageLock.Dispose(); $imageLock=$null } }
     Assert-Active
     Send-Event 'running' 80 'Configuration du nom du poste et du démarrage UEFI'
     $payloadPath = 'W:\ProgramData\AtelierPXE'
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    $publicRoot=Join-Path $PSScriptRoot 'trusted-root.cer'
+    if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'reporting.json') -Content $reporting | Out-Null
-    $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
+    $personalization = @{tools=$plan.tools;settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active
@@ -159,7 +161,7 @@ exit
         }
         $target = Join-Path $folder $extra.asset.filename
         Copy-Item -LiteralPath (Join-Path $sourceFolder $extra.asset.filename) -Destination $target
-        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $extra.asset.sha256) { throw 'Integrite du bundle refusee apres copie.' }
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ne $extra.asset.sha256) { throw 'Integrite du bundle refusee apres copie.' }
     }
     # specialize/oobeSystem are processed at first boot, not by DISM's
     # offlineServicing pass. Cache the answer file for Windows setup.
@@ -178,7 +180,7 @@ exit
     Assert-Active
     Assert-AtelierUnattendFile -Path $answer.path -ExpectedHash $answer.sha256
     Assert-AtelierUnattendFile -Path $answerBackup.path -ExpectedHash $answerBackup.sha256
-    Send-Event 'staged' 100 'Image appliquee et bundle prepare. Premier demarrage, logiciels, bureau et OOBE restent a valider.'
+    Send-Event 'staged' 100 'Image appliquée. Les logiciels seront téléchargés et installés silencieusement après le démarrage Windows.'
     Write-Host 'Installation préparée. Vérifiez le journal, puis redémarrez avec wpeutil reboot. Le premier démarrage Windows reste à contrôler.' -ForegroundColor Green
 } catch {
     $failure = $_
