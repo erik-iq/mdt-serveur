@@ -26,7 +26,7 @@ Le certificat public de confiance intégré à WinPE est également transmis et 
 
 Le sous-dossier par déploiement évite d’écraser l’historique si un PC est réinstallé. Dans l’activité, cliquer sur **Dossier inventaire** sur la ligne du PC. La fenêtre affiche les fichiers reçus, leurs liens de téléchargement et le chemin Windows à copier sur .250. C’est une vue web du dossier : les navigateurs ne lancent pas automatiquement l’Explorateur du serveur.
 
-Les XML/CSV ne sont plus générés à la racine IQ dans le nouveau parcours. Un cache privé de reprise est conservé sur le PC dans `C:\ProgramData\AtelierPXE\Inventory`. En cas de coupure, seuls les fichiers non transmis ou modifiés sont renvoyés. Les reprises du rapport réutilisent ce cache sans refaire systématiquement toute la collecte matérielle. `C:\IQ_\Export-Inventaire.cmd` collecte et transmet également vers le serveur dans ce mode.
+Les XML/CSV ne sont plus générés à la racine IQ dans le nouveau parcours. Un cache privé de reprise est conservé sur le PC dans `C:\ProgramData\AtelierPXE\Inventory`. En cas de coupure, seuls les fichiers non transmis ou modifiés sont renvoyés. Un second relevé actualise les informations à la fin des mises à jour Windows ; les reprises de transmission réutilisent ensuite ce cache final sans refaire systématiquement toute la collecte matérielle. `C:\IQ_\Export-Inventaire.cmd` collecte et transmet également vers le serveur dans ce mode.
 
 Les inventaires contiennent les informations exposées par Windows : RAM, CPU, disques, série, modèle, BIOS, pilotes, Windows, activation, logiciels, etc. Les fournisseurs absents sont signalés. Les clés de produit complètes, mots de passe et clés BitLocker/TPM ne sont pas collectés.
 

@@ -10,11 +10,26 @@ $payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Raw | ConvertFr
 $inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { $OutputDirectory }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
 $csvInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.csv'
-if ($RefreshInventory -or -not (Test-Path $xmlInventory) -or -not (Test-Path $csvInventory)) {
+$finalMarker=Join-Path $DataPath 'inventory-finalized.json'
+$maintenancePath=Join-Path $DataPath 'maintenance.json'
+$finalInventory=$false
+if ($payload.settings.central_inventory -and (Test-Path $maintenancePath)) {
+    try { $finalInventory=(Get-Content $maintenancePath -Raw | ConvertFrom-Json).status -in @('completed','needs_attention') } catch { }
+}
+$inventoryPending=$false
+$refreshFinal=$finalInventory -and -not (Test-Path $finalMarker)
+if ($RefreshInventory -or $refreshFinal -or -not (Test-Path $xmlInventory) -or -not (Test-Path $csvInventory)) {
     try {
         $export= & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $inventoryDirectory
+        if ($finalInventory) { @{date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $finalMarker -Encoding UTF8 }
         if ($export.SectionsIndisponibles) { $warnings.Add('Certaines categories de l inventaire technique sont indisponibles ; consulter les etats dans XML/CSV.') }
-    } catch { $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.') }
+    } catch {
+        $warnings.Add('Inventaire XML/CSV à régénérer avec Export-Inventaire.cmd.')
+        if ($payload.settings.central_inventory) {
+            $inventoryPending=$true
+            if (Test-Path $finalMarker) { Remove-Item -LiteralPath $finalMarker -Force }
+        }
+    }
 }
 function Read-ReportJson([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
@@ -107,7 +122,7 @@ if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','need
         Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 15 | Out-Null
         if ($payload.settings.central_inventory) {
             . (Join-Path $DataPath 'Inventory-Transfer.ps1')
-            if (-not (Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $inventoryDirectory)) { throw 'Transmission inventaire en attente.' }
+            if ($inventoryPending -or -not (Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $inventoryDirectory)) { throw 'Transmission inventaire en attente.' }
         }
         @{status='sent';date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8
     } catch {
