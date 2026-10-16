@@ -11,11 +11,13 @@ Import-Module WDS
 $keep=[IO.Path]::GetFullPath($KeepOutputPath).TrimEnd('\')
 $marker=Join-Path $keep 'atelier-winpe.json'
 if (-not (Test-Path $marker) -or (Get-Content $marker -Raw | ConvertFrom-Json).release -ne 'ATELIER-4') { throw 'Nouvelle image ATELIER-4 validee absente ; aucune ancienne image supprimee.' }
+$newWim=Join-Path $keep 'media\sources\boot.wim'
+if (-not (Test-Path $newWim -PathType Leaf) -or (Get-Item -LiteralPath $newWim).Length -eq 0) { throw 'Nouveau boot.wim absent ou vide ; nettoyage refuse.' }
 $images=@(Get-WdsBootImage)
 if (@($images | Where-Object { $_.ImageName -eq $KeepImageName }).Count -ne 1) { throw 'La nouvelle image doit etre importee dans WDS avant tout nettoyage.' }
 $mounted=@(Get-WindowsImage -Mounted)
 foreach ($image in $images) {
-    if ($image.ImageName -eq $KeepImageName -or $image.ImageName -notmatch '^Atelier(?:\s*PXE)?(?:\s|[-_])') { continue }
+    if ($image.ImageName -eq $KeepImageName -or $image.ImageName -match '(?i)(MDT|LiteTouch)' -or $image.ImageName -notmatch '^Atelier(?:\s*PXE)?(?:\s|[-_])') { continue }
     if ($PSCmdlet.ShouldProcess($image.ImageName,'Supprimer cette ancienne image de demarrage Atelier dans WDS')) {
         Write-Host ('Suppression image WDS Atelier : ' + $image.ImageName)
         & wdsutil.exe '/Remove-Image' ('/Image:' + $image.ImageName) '/ImageType:Boot' ('/Architecture:' + $image.Architecture) ('/Filename:' + $image.FileName)
@@ -24,10 +26,19 @@ foreach ($image in $images) {
 }
 foreach ($root in $SearchRoots | Select-Object -Unique) {
     if (-not (Test-Path $root -PathType Container)) { continue }
+    # An alias root could refer to KeepOutputPath under another drive letter.
+    $rootInfo=Get-Item -LiteralPath $root -Force
+    $linked=$false
+    while ($rootInfo) {
+        if ($rootInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) { $linked=$true;break }
+        $rootInfo=$rootInfo.Parent
+    }
+    if ($linked) { continue }
     foreach ($folder in @(Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -match '^WinPE(?:$|-)' })) {
         $full=[IO.Path]::GetFullPath($folder.FullName).TrimEnd('\')
-        if ($full -eq $keep -or ($folder.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+        if ($full -eq $keep -or $folder.Name -match '(?i)(MDT|LiteTouch)' -or ($folder.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
         if (-not (Test-Path (Join-Path $full 'media\sources\boot.wim') -PathType Leaf)) { continue }
+        if (@(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } | Select-Object -First 1).Count) { continue }
         if (@($mounted | Where-Object { $_.ImagePath -like ($full + '\*') -or $_.Path -like ($full + '\*') }).Count) {
             Write-Warning ('Image montee conservee : ' + $full);continue
         }

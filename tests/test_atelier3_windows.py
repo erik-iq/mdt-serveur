@@ -74,11 +74,18 @@ if(-not(Send-AtelierInventory 'DATA' 'CACHE')){throw 'Changed upload failed'}
 
 @pytest.mark.parametrize('old_name',['WinPE-Atelier2-old','WinPE-Reprise-old','WinPE-v1'])
 @pytest.mark.parametrize('keep_registered',[True,False])
-def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tmp_path,old_name,keep_registered):
+@pytest.mark.parametrize('root_alias',[True,False])
+def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tmp_path,old_name,keep_registered,root_alias):
     keep=tmp_path/'WinPE-Atelier3-new';keep.mkdir()
     (keep/'atelier-winpe.json').write_text('{"release":"ATELIER-4"}')
+    (keep/'media'/'sources').mkdir(parents=True);(keep/'media'/'sources'/'boot.wim').write_bytes(b'new')
     old=tmp_path/old_name;(old/'media'/'sources').mkdir(parents=True);(old/'media'/'sources'/'boot.wim').write_bytes(b'old')
     unrelated=tmp_path/'MDT-WinPE';unrelated.mkdir()
+    mdt=tmp_path/'WinPE-MDT';(mdt/'media'/'sources').mkdir(parents=True);(mdt/'media'/'sources'/'boot.wim').write_bytes(b'mdt')
+    search_root=tmp_path
+    if root_alias:
+        search_root=tmp_path/'alias'
+        search_root.symlink_to(tmp_path,target_is_directory=True)
     wrapper=tmp_path/'cleanup.ps1'
     wrapper.write_text("""$ErrorActionPreference='Stop'
 function Import-Module {param($Name)}
@@ -86,18 +93,19 @@ function Get-WdsBootImage {
  if(REGISTERED){[pscustomobject]@{ImageName='Atelier PXE - ATELIER-4 - new';Architecture='x64';FileName='new.wim'}}
  [pscustomobject]@{ImageName='Atelier PXE - ATELIER-2 - old';Architecture='x64';FileName='old.wim'}
  [pscustomobject]@{ImageName='MDT Production';Architecture='x64';FileName='mdt.wim'}
+ [pscustomobject]@{ImageName='Atelier MDT Production';Architecture='x64';FileName='litetouch.wim'}
 }
 function Get-WindowsImage {param([switch]$Mounted)}
 function wdsutil.exe {Add-Content 'LOG' ($args -join '|');$global:LASTEXITCODE=0}
 & 'SCRIPT' -KeepImageName 'Atelier PXE - ATELIER-4 - new' -KeepOutputPath 'KEEP' -SearchRoots @('ROOT') -Confirm:$false
-""".replace('REGISTERED','$true' if keep_registered else '$false').replace('LOG',ps(tmp_path/'removed')).replace('SCRIPT',ps(ROOT/'scripts'/'Remove-OldAtelierWinPE.ps1')).replace('KEEP',ps(keep)).replace('ROOT',ps(tmp_path)),encoding='utf-8-sig')
+""".replace('REGISTERED','$true' if keep_registered else '$false').replace('LOG',ps(tmp_path/'removed')).replace('SCRIPT',ps(ROOT/'scripts'/'Remove-OldAtelierWinPE.ps1')).replace('KEEP',ps(keep)).replace('ROOT',ps(search_root)),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=20)
     if not keep_registered:
         assert run.returncode!=0
         assert old.exists() and keep.exists() and not (tmp_path/'removed').exists()
         return
     assert run.returncode==0,run.stderr
-    assert not old.exists() and keep.exists() and unrelated.exists()
+    assert old.exists()==root_alias and keep.exists() and unrelated.exists() and mdt.exists()
     log=(tmp_path/'removed').read_text()
     assert '/Image:Atelier PXE - ATELIER-2 - old' in log and 'MDT Production' not in log and '/Filename:new.wim' not in log
 
