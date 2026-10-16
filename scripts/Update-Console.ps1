@@ -27,7 +27,7 @@ foreach ($name in @('scripts\Upgrade-Atelier4.ps1','scripts\Start-Preparation.ps
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Archive incomplete : $name absent." }
 }
 $configPath = Join-Path $installed 'data-runtime.json'
-$config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath $configPath -Encoding UTF8 -Raw | ConvertFrom-Json
 $database = Join-Path $config.data_dir 'deployment.sqlite3'
 $runtime = Join-Path $installed '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $database) -or -not (Test-Path -LiteralPath $runtime)) { throw 'Installation existante incomplete : base SQLite ou Python absent.' }

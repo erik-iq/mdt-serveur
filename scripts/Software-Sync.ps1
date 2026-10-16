@@ -14,7 +14,7 @@ function Get-AtelierDownloadedInstaller {
     param([string]$Directory,$Source)
     $candidates=@()
     foreach ($manifest in @(Get-ChildItem -LiteralPath $Directory -Filter '*.yaml' -File)) {
-        $text=Get-Content -LiteralPath $manifest.FullName -Raw
+        $text=Get-Content -LiteralPath $manifest.FullName -Encoding UTF8 -Raw
         if ((Get-AtelierManifestScalar $text 'PackageIdentifier') -ne $Source.winget_id) { continue }
         $path=[IO.Path]::ChangeExtension($manifest.FullName,$Source.extension)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Installateur correspondant au manifeste absent.' }

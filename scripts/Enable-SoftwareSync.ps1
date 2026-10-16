@@ -5,7 +5,7 @@ param([string]$InstallPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Console-Installation.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
-$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
+$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 10
 if ($health.revision -ne '4.0') { throw 'Mettre a jour la console avant de configurer son agent WinGet.' }
 if (-not (Test-Path (Join-Path $config.data_dir 'software-sync\worker-key'))) { throw 'Cle agent absente. Verifier le demarrage de la console.' }

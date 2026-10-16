@@ -4,9 +4,9 @@
 param([Parameter(Mandatory)][string]$InstallPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Software-Sync.ps1')
-$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
+$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $directory=Join-Path $config.data_dir 'software-sync'
-$headers=@{Authorization='Bearer ' + (Get-Content (Join-Path $directory 'worker-key') -Raw).Trim()}
+$headers=@{Authorization='Bearer ' + (Get-Content (Join-Path $directory 'worker-key') -Encoding UTF8 -Raw).Trim()}
 $base='http://127.0.0.1:' + $config.port + '/api/software-sync'
 $workerId=[guid]::NewGuid().ToString()
 function Invoke-WorkerApi([string]$Path,$Body) {
@@ -60,7 +60,7 @@ try {
                     $resultPath=Join-Path (Join-Path $directory 'job-results') ($job.id + '.json')
                     $result=@{};$status='failed';$message='Echec de la synchronisation.'
                     if (Test-Path -LiteralPath $resultPath) {
-                        $result=Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+                        $result=Get-Content -LiteralPath $resultPath -Encoding UTF8 -Raw | ConvertFrom-Json
                         $failures=@(@($result.applications)+@($result.bundles) | Where-Object { $_.status -eq 'failed' })
                         $successes=@($result.applications | Where-Object { $_.status -ne 'failed' })
                         $status='completed';$message='Logiciels et bundles a jour'

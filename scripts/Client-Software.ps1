@@ -29,12 +29,12 @@ function Invoke-AtelierClientInstall {
 function Install-AtelierClientSoftware {
     param([string]$DataPath,[string[]]$Packages,[scriptblock]$OnProgress)
     if (-not $Packages.Count) { return }
-    $sources=Get-Content (Join-Path $DataPath 'software-sources.json') -Raw | ConvertFrom-Json
+    $sources=Get-Content (Join-Path $DataPath 'software-sources.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     $results=New-Object 'Collections.Generic.List[object]'
     $statePath=Join-Path $DataPath 'winget-client-state.json'
     $saved=@{}
     if (Test-Path $statePath) {
-        $entries=Get-Content $statePath -Raw | ConvertFrom-Json
+        $entries=Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json
         foreach ($entry in $entries) { if ($entry.status -eq 'completed') { $saved[$entry.id]=$entry } }
     }
     $logs=Join-Path $DataPath 'software-logs'

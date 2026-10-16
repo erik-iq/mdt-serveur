@@ -51,7 +51,7 @@ try {
         Copy-Item (Join-Path $PSScriptRoot $script) -Destination $target
     }
     # GitHub source archives can use LF. Always write a Windows batch file.
-    $recoveryMenu = (Get-Content (Join-Path $PSScriptRoot 'atelier.cmd') -Raw) -replace '\r?\n', "`r`n"
+    $recoveryMenu = (Get-Content (Join-Path $PSScriptRoot 'atelier.cmd') -Encoding UTF8 -Raw) -replace '\r?\n', "`r`n"
     Set-Content (Join-Path $mount 'Windows\System32\atelier.cmd') -Value $recoveryMenu -Encoding ASCII
     if ($TrustedRootCertificate) {
         $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($TrustedRootCertificate)
@@ -61,7 +61,7 @@ try {
     $internalMode = $false
     $runtimeConfig = $null
     $runtimePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'data-runtime.json'
-    if (Test-Path $runtimePath) { $runtimeConfig = Get-Content $runtimePath -Raw | ConvertFrom-Json; $internalMode = [bool]$runtimeConfig.internal_mode }
+    if (Test-Path $runtimePath) { $runtimeConfig = Get-Content $runtimePath -Encoding UTF8 -Raw | ConvertFrom-Json; $internalMode = [bool]$runtimeConfig.internal_mode }
     @{auto_enroll=[bool]$runtimeConfig.auto_enroll;hostname_prefix=$runtimeConfig.hostname_prefix;hostname_suffix_mode=$runtimeConfig.hostname_suffix_mode;internal_mode=$internalMode; server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='ATELIER-4'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
     # Each relaunch uses a new STA process; no credentials on its command line.
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"

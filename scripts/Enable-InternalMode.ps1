@@ -27,7 +27,7 @@ with sqlite3.connect(uri, uri=True) as connection:
 }
 Add-Type -AssemblyName System.Security
 $configPath = Join-Path $InstallPath 'data-runtime.json'
-$config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath $configPath -Encoding UTF8 -Raw | ConvertFrom-Json
 if (([Uri]$config.base_url).Scheme -ne 'https') { throw 'Le mode interne exige une origine HTTPS.' }
 $artifacts = [IO.Path]::GetFullPath((Join-Path $config.data_dir 'artifacts')).TrimEnd('\')
 $share = Get-SmbShare -Name 'AtelierImages' -ErrorAction Stop
@@ -41,7 +41,7 @@ $user = Get-LocalUser -Name $account -ErrorAction SilentlyContinue
 if ($user -and -not (Test-Path $secretPath)) { throw 'Le compte AtelierPXERead existe sans configuration geree. Aucun mot de passe modifie.' }
 $identity = "$env:COMPUTERNAME\$account"
 if (Test-Path $secretPath) {
-    $saved = Get-Content -LiteralPath $secretPath -Raw | ConvertFrom-Json
+    $saved = Get-Content -LiteralPath $secretPath -Encoding UTF8 -Raw | ConvertFrom-Json
     if ($saved.username -ne $identity) { throw 'Le compte du secret ne correspond pas au serveur.' }
     $bytes = [Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($saved.password_dpapi),$null,[Security.Cryptography.DataProtectionScope]::LocalMachine)
     try { $password = [Text.Encoding]::UTF8.GetString($bytes) } finally { [Array]::Clear($bytes,0,$bytes.Length) }

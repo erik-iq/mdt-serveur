@@ -58,4 +58,5 @@ function Get-AppxPackage { param([switch]$AllUsers,$ErrorAction);[pscustomobject
     assert any(r['Valeur']=="'=@SUM(1)" for r in rows)
     assert 'SECRET-' not in (tmp_path/'Inventaire-Technique.csv').read_text()
     assert any(p.text=='=@SUM(1)' for p in document.findall('./Proprietes/Propriete'))
+    assert any(p.text=='\u00c9cran & SSD <test>' for p in document.findall('./Proprietes/Propriete'))
     assert not list(tmp_path.glob('*.tmp'))

@@ -1,5 +1,5 @@
 # One palette for WinPE and the interactive Windows tools.
-$script:AtelierTheme=Get-Content (Join-Path $PSScriptRoot 'theme.json') -Raw | ConvertFrom-Json
+$script:AtelierTheme=Get-Content (Join-Path $PSScriptRoot 'theme.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 function Get-AtelierColor([string]$Name) { return [Drawing.ColorTranslator]::FromHtml($script:AtelierTheme.$Name) }
 function New-AtelierLogo {
     $picture=New-Object Windows.Forms.PictureBox

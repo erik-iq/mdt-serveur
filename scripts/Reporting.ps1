@@ -17,7 +17,7 @@ function Send-AtelierWindowsProgress {
     if (-not (Test-Path -LiteralPath $configuration)) { return }
     if ($script:nextReportingAttempt -and [DateTime]::UtcNow -lt $script:nextReportingAttempt -and $Status -eq 'running') { return }
     try {
-        $config = Get-Content $configuration -Raw | ConvertFrom-Json
+        $config = Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $body = @{status=$Status;progress=$Percent;message=$Message} | ConvertTo-Json -Compress
         Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/progress') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null

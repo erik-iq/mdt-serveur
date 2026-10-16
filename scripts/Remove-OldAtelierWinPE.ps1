@@ -10,7 +10,7 @@ $ErrorActionPreference='Stop'
 Import-Module WDS
 $keep=[IO.Path]::GetFullPath($KeepOutputPath).TrimEnd('\')
 $marker=Join-Path $keep 'atelier-winpe.json'
-if (-not (Test-Path $marker) -or (Get-Content $marker -Raw | ConvertFrom-Json).release -ne 'ATELIER-4') { throw 'Nouvelle image ATELIER-4 validee absente ; aucune ancienne image supprimee.' }
+if (-not (Test-Path $marker) -or (Get-Content $marker -Encoding UTF8 -Raw | ConvertFrom-Json).release -ne 'ATELIER-4') { throw 'Nouvelle image ATELIER-4 validee absente ; aucune ancienne image supprimee.' }
 $newWim=Join-Path $keep 'media\sources\boot.wim'
 if (-not (Test-Path $newWim -PathType Leaf) -or (Get-Item -LiteralPath $newWim).Length -eq 0) { throw 'Nouveau boot.wim absent ou vide ; nettoyage refuse.' }
 $images=@(Get-WdsBootImage)

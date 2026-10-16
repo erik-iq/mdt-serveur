@@ -6,10 +6,10 @@ function Send-AtelierInventory {
     $receiptPath=Join-Path $DataPath 'inventory-sent.json'
     $saved=@{}
     if (Test-Path $receiptPath) {
-        try { (Get-Content $receiptPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $saved[$_.Name]=[string]$_.Value } } catch { }
+        try { (Get-Content $receiptPath -Encoding UTF8 -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $saved[$_.Name]=[string]$_.Value } } catch { }
     }
     try {
-        $config=Get-Content $configuration -Raw | ConvertFrom-Json
+        $config=Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
         foreach ($kind in @('xml','csv')) {
             $path=Join-Path $InventoryDirectory ('Inventaire-Technique.' + $kind)

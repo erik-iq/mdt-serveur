@@ -5,8 +5,8 @@ param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
 $ErrorActionPreference = 'Stop'
 $resultPath = Join-Path $DataPath 'result.json'
 $logPath = Join-Path $DataPath 'first-logon.log'
-$previous = if (Test-Path $resultPath) { Get-Content $resultPath -Raw | ConvertFrom-Json } else { $null }
-$payload = Get-Content (Join-Path $DataPath 'personalization.json') -Raw | ConvertFrom-Json
+$previous = if (Test-Path $resultPath) { Get-Content $resultPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
+$payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 . (Join-Path $DataPath 'Unattend.ps1')
 . (Join-Path $DataPath 'Reporting.ps1')
 $manufacturer = (Get-CimInstance Win32_ComputerSystem).Manufacturer
@@ -121,7 +121,7 @@ try {
     $checkpointPath=Join-Path $DataPath 'packages-state.json'
     $checkpoints=@{}
     if (Test-Path $checkpointPath) {
-        foreach ($entry in @(Get-Content $checkpointPath -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
+        foreach ($entry in @(Get-Content $checkpointPath -Encoding UTF8 -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
     }
     $applicationsToPrepare=@($payload.applications)
     if ($payload.settings.software_mode -eq 'winget') {
@@ -133,7 +133,7 @@ try {
                 $folder=Join-Path $DataPath 'Packages'
                 New-Item -ItemType Directory -Path $folder -Force | Out-Null
                 $target=Join-Path $folder $tool.asset.filename
-                $reporter=Get-Content (Join-Path $DataPath 'reporting.json') -Raw | ConvertFrom-Json
+                $reporter=Get-Content (Join-Path $DataPath 'reporting.json') -Encoding UTF8 -Raw | ConvertFrom-Json
                 if (-not (Test-Path $target)) {
                     Invoke-WebRequest -UseBasicParsing -Uri ($reporter.server_url + '/api/windows/' + $reporter.id + '/tools/' + $tool.asset.id) -Headers @{Authorization=('Bearer ' + $reporter.token)} -OutFile $target -TimeoutSec 300 | Out-Null
                 }

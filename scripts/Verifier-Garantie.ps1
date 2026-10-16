@@ -31,7 +31,7 @@ $url=switch -Regex ([string]$computer.Manufacturer) {
 $report=[ordered]@{ordinateur=$env:COMPUTERNAME;constructeur=[string]$computer.Manufacturer;modele=[string]$computer.Model;produit=[string]$computer.SystemSKUNumber;numero_serie=$serial;source_url=$url;statut='non_verifie';verifie_le='';debut='';fin='';mois_couverture=$null;mois_restants=$null;jours_restants=$null;observation='Dates non confirmees sur le site constructeur.'}
 $previous=$null
 if (Test-Path (Join-Path $OutputDirectory 'Garantie.json')) {
-    try { $previous=Get-Content (Join-Path $OutputDirectory 'Garantie.json') -Raw | ConvertFrom-Json } catch { }
+    try { $previous=Get-Content (Join-Path $OutputDirectory 'Garantie.json') -Encoding UTF8 -Raw | ConvertFrom-Json } catch { }
 }
 if (-not $previous -or $previous.numero_serie -ne $serial) { Save-AtelierWarranty $report $OutputDirectory }
 Add-Type -AssemblyName System.Windows.Forms

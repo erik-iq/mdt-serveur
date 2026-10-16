@@ -27,10 +27,10 @@ function Finish-Maintenance {
     $sent=$false; $expired=$false
     $receipt=Get-AtelierIQFile $ToolsPath 'Rapports' 'Transmission-Rapport.json'
     if (Test-Path $receipt) {
-        try { $sent=(Get-Content $receipt -Raw | ConvertFrom-Json).status -eq 'sent' } catch { }
+        try { $sent=(Get-Content $receipt -Encoding UTF8 -Raw | ConvertFrom-Json).status -eq 'sent' } catch { }
     }
     if (Test-Path $configuration) {
-        try { $expired=[DateTime]::Parse((Get-Content $configuration -Raw | ConvertFrom-Json).expires) -lt [DateTime]::UtcNow } catch { }
+        try { $expired=[DateTime]::Parse((Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json).expires) -lt [DateTime]::UtcNow } catch { }
     }
     # Keep only the bounded reporting retry alive while the server is offline.
     if (-not (Test-Path $configuration) -or $sent -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
@@ -38,11 +38,11 @@ function Finish-Maintenance {
 }
 
 try {
-    if (Test-Path $statePath) { $state = Get-Content $statePath -Raw | ConvertFrom-Json }
+    if (Test-Path $statePath) { $state = Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json }
     if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
     if ($state.status -in @('completed','needs_attention')) { Finish-Maintenance; return }
-    $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Raw | ConvertFrom-Json
-    $customization = Get-Content (Join-Path $DataPath 'result.json') -Raw | ConvertFrom-Json
+    $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+    $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent etre termines avant les mises a jour.' }
     $state.attempts++
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }

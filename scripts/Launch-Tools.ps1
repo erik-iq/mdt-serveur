@@ -6,11 +6,11 @@ if (-not $mutex.WaitOne(0)) { $mutex.Dispose(); return }
 try {
     $statePath=Join-Path $DataPath 'maintenance.json'
     if (-not (Test-Path $statePath)) { return }
-    $state=Get-Content $statePath -Raw | ConvertFrom-Json
+    $state=Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json
     if ($state.status -notin @('completed','needs_attention')) { return }
     $path=Join-Path $DataPath 'ready-tools.json'
     if (Test-Path $path) {
-        foreach ($tool in @(Get-Content $path -Raw | ConvertFrom-Json)) {
+        foreach ($tool in @(Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json)) {
             $marker=Join-Path $DataPath ('tool-opened-' + $tool.sha256)
             if (Test-Path $marker) { continue }
             $root=[IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'AtelierPXE\Tools')).TrimEnd('\') + '\'

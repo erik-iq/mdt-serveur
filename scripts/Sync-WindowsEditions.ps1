@@ -5,10 +5,10 @@ param([string]$InstallPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Console-Installation.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation -InstallPath $InstallPath
-$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
+$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $headers=@{}
 if (-not $config.internal_mode) {
-    $token=Get-Content (Join-Path $config.data_dir 'admin-token') -Raw
+    $token=Get-Content (Join-Path $config.data_dir 'admin-token') -Encoding UTF8 -Raw
     $headers.Authorization='Bearer ' + $token.Trim()
 }
 $base=if ($config.port) { 'http://127.0.0.1:' + $config.port } else { [string]$config.base_url }

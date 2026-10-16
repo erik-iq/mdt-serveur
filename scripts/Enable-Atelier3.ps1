@@ -7,7 +7,7 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
 $path=Join-Path $InstallPath 'data-runtime.json'
-$config=Get-Content $path -Raw | ConvertFrom-Json
+$config=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json
 if (-not $config.internal_mode) { throw 'Activer prealablement le mode interne de cet atelier avec Enable-InternalMode.ps1.' }
 if (-not (Test-Path (Join-Path $config.data_dir 'internal-share.json'))) { throw 'Connexion SMB interne absente : configurer Enable-InternalMode.ps1.' }
 foreach ($name in @('auto_enroll','client_software','automatic_windows')) { $config | Add-Member NoteProperty $name $true -Force }

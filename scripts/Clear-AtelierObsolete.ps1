@@ -10,7 +10,7 @@ param(
     [ValidateRange(0,8760)][int]$MinimumAgeHours=1
 )
 $ErrorActionPreference='Stop'
-$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
+$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $separator=[IO.Path]::DirectorySeparatorChar
 function Full-Path([string]$Path) { return [IO.Path]::GetFullPath($Path).TrimEnd($separator) }
 $protected=@($InstallPath,$config.data_dir,$PSScriptRoot,(Split-Path $PSScriptRoot -Parent)) + $ProtectedPaths

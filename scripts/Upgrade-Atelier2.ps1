@@ -19,7 +19,7 @@ if (-not (Test-Path -LiteralPath $TrustedRootCertificate -PathType Leaf)) { thro
 if ($DriversPath -and -not (Test-Path -LiteralPath $DriversPath -PathType Container)) { throw 'Dossier de pilotes WinPE absent.' }
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath
-$config=Get-Content $configPath -Raw | ConvertFrom-Json
+$config=Get-Content $configPath -Encoding UTF8 -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod -Uri ($config.base_url + '/health') -TimeoutSec 10
 if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '4.0') { throw 'La console ne confirme pas la revision ATELIER-4.0.' }
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath

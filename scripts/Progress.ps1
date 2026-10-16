@@ -38,7 +38,7 @@ $timer=New-Object Windows.Forms.Timer
 $timer.Interval=1000
 $timer.Add_Tick({
     try {
-        $state=Get-Content (Join-Path $DataPath 'progress.json') -Raw | ConvertFrom-Json
+        $state=Get-Content (Join-Path $DataPath 'progress.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         $message.Text=$state.message
         $elapsed=(Get-Date)-$started
         $note.Text='Session : ' + $elapsed.ToString('hh\:mm\:ss') + ' | Bureau disponible ; preparation en arriere-plan.'

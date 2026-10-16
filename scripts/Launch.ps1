@@ -5,7 +5,7 @@ $bootLog = Join-Path $PSScriptRoot 'Logs\startup.log'
 . (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
 Write-AtelierBootEvent -Path $bootLog -Stage Starting
 try {
-    $config = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
+    $config = Get-Content (Join-Path $PSScriptRoot 'config.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     if (-not $config.server_url) { throw 'Adresse du serveur absente de config.json.' }
     Write-Host ('Atelier PXE | ' + $config.boot_release + ' | ' + $config.server_url) -ForegroundColor Cyan
     Write-AtelierBootEvent -Path $bootLog -Stage ConfigurationReady

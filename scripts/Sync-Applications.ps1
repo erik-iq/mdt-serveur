@@ -7,14 +7,14 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Software-Sync.ps1')
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
-$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
+$config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $winget=Get-Command winget.exe -ErrorAction SilentlyContinue
 if (-not $winget) { throw 'WinGet absent. Executer scripts\Install-WinGet.ps1 une fois, puis rouvrir PowerShell.' }
 # Assign directly: Windows PowerShell 5.1 emits a root JSON array as one object.
-$sources=Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-Json
+$sources=Get-Content -LiteralPath $SourcesPath -Encoding UTF8 -Raw | ConvertFrom-Json
 foreach ($key in $Packages) { if (@($sources | Where-Object { $_.key -eq $key }).Count -ne 1) { throw ('Source inconnue ou dupliquee : ' + $key) } }
 $headers=@{}
-if (-not $config.internal_mode) { $headers.Authorization='Bearer ' + (Get-Content (Join-Path $config.data_dir 'admin-token') -Raw).Trim() }
+if (-not $config.internal_mode) { $headers.Authorization='Bearer ' + (Get-Content (Join-Path $config.data_dir 'admin-token') -Encoding UTF8 -Raw).Trim() }
 $workerHeaders=@{}
 $apiBase=$config.base_url
 if ($WebJobId) {
@@ -22,7 +22,7 @@ if ($WebJobId) {
     $apiBase='http://127.0.0.1:' + $config.port
     $parsed=[guid]::Empty
     if (-not [guid]::TryParse($WebJobId,[ref]$parsed) -or -not [guid]::TryParse($WorkerId,[ref]$parsed)) { throw 'Identifiant agent ou synchronisation invalide.' }
-    $key=(Get-Content (Join-Path $config.data_dir 'software-sync\worker-key') -Raw).Trim()
+    $key=(Get-Content (Join-Path $config.data_dir 'software-sync\worker-key') -Encoding UTF8 -Raw).Trim()
     $headers['X-Atelier-Software-Job']=$WebJobId
     $headers['X-Atelier-Software-Key']=$key
     $workerHeaders.Authorization='Bearer ' + $key
@@ -48,7 +48,7 @@ try {
     $directory=Join-Path $config.data_dir 'software-sync'
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $bindings=@{};$bindingPath=Join-Path $directory 'bindings.json'
-    if (Test-Path $bindingPath) { (Get-Content $bindingPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $bindings[$_.Name]=[string]$_.Value } }
+    if (Test-Path $bindingPath) { (Get-Content $bindingPath -Encoding UTF8 -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $bindings[$_.Name]=[string]$_.Value } }
     foreach ($entry in $ApplicationBindings.GetEnumerator()) { $bindings[$entry.Key]=$entry.Value }
     $results=@();$bundleResults=@();$completed=0
     Send-SoftwareProgress 0 'Preparation du catalogue'

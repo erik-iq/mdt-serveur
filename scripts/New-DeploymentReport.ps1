@@ -8,7 +8,7 @@ $toolsRoot=$OutputDirectory
 $OutputDirectory=Get-AtelierIQDirectory $toolsRoot 'Rapports'
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
 $payloadPath=Join-Path $DataPath 'personalization.json'
-$payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Raw | ConvertFrom-Json } else { $null }
+$payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
 $inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
 $csvInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.csv'
@@ -16,7 +16,7 @@ $finalMarker=Join-Path $DataPath 'inventory-finalized.json'
 $maintenancePath=Join-Path $DataPath 'maintenance.json'
 $finalInventory=$false
 if ($payload.settings.central_inventory -and (Test-Path $maintenancePath)) {
-    try { $finalInventory=(Get-Content $maintenancePath -Raw | ConvertFrom-Json).status -in @('completed','needs_attention') } catch { }
+    try { $finalInventory=(Get-Content $maintenancePath -Encoding UTF8 -Raw | ConvertFrom-Json).status -in @('completed','needs_attention') } catch { }
 }
 $inventoryPending=$false
 $refreshFinal=$finalInventory -and -not (Test-Path $finalMarker)
@@ -35,7 +35,7 @@ if ($RefreshInventory -or $refreshFinal -or -not (Test-Path $xmlInventory) -or -
 }
 function Read-ReportJson([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
-        try { return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+        try { return Get-Content -LiteralPath $Path -Encoding UTF8 -Raw | ConvertFrom-Json }
         catch { $warnings.Add('Fichier de diagnostic illisible : ' + [IO.Path]::GetFileName($Path)) }
     }
     return $null
@@ -121,7 +121,7 @@ Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -L
 $configuration=Join-Path $DataPath 'reporting.json'
 if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','needs_attention') -or $apps.status -eq 'failed')) {
     try {
-        $config=Get-Content $configuration -Raw | ConvertFrom-Json
+        $config=Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
         Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 15 | Out-Null
         if ($payload.settings.central_inventory) {

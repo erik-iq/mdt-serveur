@@ -29,7 +29,7 @@ param()
 & (Join-Path $env:ProgramData 'AtelierPXE\New-DeploymentReport.ps1') -OutputDirectory (Split-Path $PSScriptRoot -Parent) -RefreshInventory
 '@
 Set-Content -LiteralPath (Join-Path $OutputDirectory 'Rapports\Generer-Rapport.ps1') -Value $reportLauncher -Encoding UTF8
-$payload=Get-Content (Join-Path $DataPath 'personalization.json') -Raw | ConvertFrom-Json
+$payload=Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 if ($payload.settings.central_inventory) {
     $centralLauncher=@'
 param()
