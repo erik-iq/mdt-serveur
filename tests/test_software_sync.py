@@ -67,7 +67,8 @@ catch { @{status='rejected'} | ConvertTo-Json -Compress }
 @pytest.mark.skipif(not PWSH or os.name=='nt',reason='Linux executable shim for WinGet')
 @pytest.mark.parametrize('partial',[False,True])
 @pytest.mark.parametrize('web',[False,True])
-def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path,partial,web):
+@pytest.mark.parametrize('legacy_json',[False,True])
+def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path,partial,web,legacy_json):
     import hashlib
     import uuid
     identifier=str(uuid.uuid4());worker_id=str(uuid.uuid4())
@@ -92,6 +93,14 @@ payload=b'new signed installer fixture'
     wrapper=tmp_path/'run-sync.ps1'
     wrapper.write_text(r'''
 $ErrorActionPreference='Stop'
+if (LEGACYJSON) {
+    # Windows PowerShell 5.1 emits a root JSON array as one pipeline object.
+    function ConvertFrom-Json {
+        [CmdletBinding()]
+        param([Parameter(ValueFromPipeline)]$InputObject)
+        process { Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $InputObject -NoEnumerate }
+    }
+}
 function Get-AuthenticodeSignature { param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=VideoLAN, O=VideoLAN, C=FR'}} }
 function Invoke-RestMethod {
     param($Uri,$Method,$Headers,$TimeoutSec,$ContentType,$Body)
@@ -122,7 +131,7 @@ function Invoke-RestMethod {
 }
 try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard WEBARGS } catch { if (-not 'PARTIAL') { throw } }
 try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard WEBARGS } catch { if (-not 'PARTIAL') { throw } }
-'''.replace('WEBARGS',('-WebJobId '+identifier+' -WorkerId '+worker_id) if web else '').replace('WEB','$true' if web else '$false').replace("'PARTIAL'",'$true' if partial else '$false').replace('PACKAGES','vlc,chrome' if partial else 'vlc').replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
+'''.replace('LEGACYJSON','$true' if legacy_json else '$false').replace('WEBARGS',('-WebJobId '+identifier+' -WorkerId '+worker_id) if web else '').replace('WEB','$true' if web else '$false').replace("'PARTIAL'",'$true' if partial else '$false').replace('PACKAGES','vlc,chrome' if partial else 'vlc').replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
     env={**os.environ,'PATH':str(tmp_path)+os.pathsep+os.environ['PATH']}
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30,env=env)
     assert run.returncode==0,run.stderr

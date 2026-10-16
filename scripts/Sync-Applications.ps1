@@ -10,7 +10,8 @@ $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
 $winget=Get-Command winget.exe -ErrorAction SilentlyContinue
 if (-not $winget) { throw 'WinGet absent. Executer scripts\Install-WinGet.ps1 une fois, puis rouvrir PowerShell.' }
-$sources=@(Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-Json)
+# Assign directly: Windows PowerShell 5.1 emits a root JSON array as one object.
+$sources=Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-Json
 foreach ($key in $Packages) { if (@($sources | Where-Object { $_.key -eq $key }).Count -ne 1) { throw ('Source inconnue ou dupliquee : ' + $key) } }
 $headers=@{}
 if (-not $config.internal_mode) { $headers.Authorization='Bearer ' + (Get-Content (Join-Path $config.data_dir 'admin-token') -Raw).Trim() }

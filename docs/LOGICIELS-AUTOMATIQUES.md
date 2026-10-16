@@ -70,6 +70,12 @@ Les demandes du bouton utilisent l’API sur `127.0.0.1`, déjà employée par l
 
 Un échec avant la première étape conserve une progression de 0 %, au lieu d’afficher automatiquement 100 %. Mettre à jour la console avec `Update-Console.ps1`, puis relancer le bouton : le bilan précédent n’est pas réécrit rétroactivement. La mise à jour redémarre l’agent qui était actif et ne modifie pas WDS/WinPE. La capture de l’ancien message seule ne permet pas d’identifier la cause initiale ; si le nouvel essai échoue, transmettre le message précis du bilan.
 
+### Erreur System.Object[] sur le paramètre Message
+
+Windows PowerShell 5.1 émet le tableau JSON des sources comme un seul objet du pipeline. L’ancienne expression `@(Get-Content ... | ConvertFrom-Json)` ajoutait une enveloppe : la recherche de VLC renvoyait alors la liste des quatre logiciels, et le journal échouait avec « Impossible de convertir System.Object[] en System.String, requis par le paramètre Message ». Le chargement affecte maintenant directement le résultat de `ConvertFrom-Json` pour conserver le tableau au bon niveau.
+
+Ce correctif ne demande que le remplacement de `scripts\Sync-Applications.ps1`. Le processus de synchronisation recharge ce script à chaque clic : il n’est pas nécessaire de réinstaller WinGet ou de redémarrer la console. Le test de régression reproduit le comportement JSON de Windows PowerShell 5.1 ; il échoue avec l’ancienne ligne et réussit après correction. Les essais sous PowerShell 7 seuls ne reproduisaient pas ce comportement.
+
 ## Actualiser les quatre logiciels
 
 Terminer ou annuler les autorisations WinPE encore actives, puis lancer :
