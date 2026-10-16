@@ -66,20 +66,25 @@ catch { @{status='rejected'} | ConvertTo-Json -Compress }
 
 @pytest.mark.skipif(not PWSH or os.name=='nt',reason='Linux executable shim for WinGet')
 @pytest.mark.parametrize('partial',[False,True])
-def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path,partial):
+@pytest.mark.parametrize('web',[False,True])
+def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path,partial,web):
     import hashlib
+    import uuid
+    identifier=str(uuid.uuid4());worker_id=str(uuid.uuid4())
     data=tmp_path/'data';data.mkdir();(data/'artifacts').mkdir()
     (data/'artifacts'/'old-vlc.exe').write_bytes(b'previous version')
     install=tmp_path/'installed';install.mkdir()
-    (install/'data-runtime.json').write_text(json.dumps({'data_dir':str(data),'base_url':'https://console.invalid','internal_mode':True}))
+    (install/'data-runtime.json').write_text(json.dumps({'data_dir':str(data),'base_url':'https://console.invalid','internal_mode':True,'port':12345}))
     state={'applications':[{'id':'stable-app','name':'VLC','version':'old','asset_id':'old-asset','install_mode':'install','manufacturer':'all','arguments':'/S'}],
            'assets':[],'bundles':[{'id':'standard','name':'Standard','application_ids':['hp-tool','stable-app']}],'profiles':[],'deployments':[]}
+    (data/'software-sync').mkdir();(data/'software-sync'/'worker-key').write_text('private-worker-key')
     statefile=tmp_path/'state.json';statefile.write_text(json.dumps(state))
     executable=tmp_path/'winget.exe'
     executable.write_text('''#!/usr/bin/env python3
 import sys, pathlib, hashlib
 folder=pathlib.Path(sys.argv[sys.argv.index('--download-directory')+1])
 assert sys.argv[1]=='download' and '--ignore-security-hash' not in sys.argv
+print('Informational native stderr',file=sys.stderr)
 payload=b'new signed installer fixture'
 (folder/'VLC.exe').write_bytes(payload)
 (folder/'VLC.yaml').write_text('PackageIdentifier: VideoLAN.VLC\\nPackageVersion: 3.0.99\\nInstallers:\\n- Architecture: x64\\n  InstallerUrl: https://download.videolan.org/vlc/test.exe\\n  InstallerSha256: '+hashlib.sha256(payload).hexdigest()+'\\n')
@@ -90,6 +95,14 @@ $ErrorActionPreference='Stop'
 function Get-AuthenticodeSignature { param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=VideoLAN, O=VideoLAN, C=FR'}} }
 function Invoke-RestMethod {
     param($Uri,$Method,$Headers,$TimeoutSec,$ContentType,$Body)
+    if (WEB) {
+        if (-not $Uri.StartsWith('http://127.0.0.1:12345/api/')) { throw 'Web request used public HTTPS instead of loopback' }
+        if ($Uri.EndsWith('/progress')) {
+            if ($Headers.Authorization -ne 'Bearer private-worker-key') { throw 'Missing progress credential' }
+            return @{accepted=$true}
+        }
+        if ($Headers['X-Atelier-Software-Key'] -ne 'private-worker-key') { throw 'Missing publication credential' }
+    }
     $state=Get-Content 'STATE' -Raw | ConvertFrom-Json
     if ($Method -eq 'GET') { return $state }
     $bodyObject=[Text.Encoding]::UTF8.GetString($Body) | ConvertFrom-Json
@@ -107,9 +120,9 @@ function Invoke-RestMethod {
     $state | ConvertTo-Json -Depth 8 | Set-Content 'STATE'
     return $result
 }
-try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard } catch { if (-not 'PARTIAL') { throw } }
-try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard } catch { if (-not 'PARTIAL') { throw } }
-'''.replace("'PARTIAL'",'$true' if partial else '$false').replace('PACKAGES','vlc,chrome' if partial else 'vlc').replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
+try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard WEBARGS } catch { if (-not 'PARTIAL') { throw } }
+try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard WEBARGS } catch { if (-not 'PARTIAL') { throw } }
+'''.replace('WEBARGS',('-WebJobId '+identifier+' -WorkerId '+worker_id) if web else '').replace('WEB','$true' if web else '$false').replace("'PARTIAL'",'$true' if partial else '$false').replace('PACKAGES','vlc,chrome' if partial else 'vlc').replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
     env={**os.environ,'PATH':str(tmp_path)+os.pathsep+os.environ['PATH']}
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30,env=env)
     assert run.returncode==0,run.stderr
@@ -122,3 +135,21 @@ try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard }
     assert result['bundles'][0]['status']=='updated'
     if partial:
         assert result['applications'][1]['status']=='failed'
+    if web:
+        assert json.loads((data/'software-sync'/'job-results'/(identifier+'.json')).read_text(encoding='utf-8-sig'))==result
+
+
+@pytest.mark.skipif(not PWSH or os.name=='nt',reason='Linux native command fixture')
+def test_winget_failure_keeps_exit_code_and_tool_output(tmp_path):
+    executable=tmp_path/'winget.exe'
+    executable.write_text('#!/bin/sh\necho "Fixture source unavailable" >&2\nexit 12\n');executable.chmod(0o755)
+    wrapper=tmp_path/'run-native.ps1'
+    wrapper.write_text("""$ErrorActionPreference='Stop'
+. 'HELPER'
+try { Invoke-AtelierWinGetDownload -Executable 'EXE' -Arguments @('download');throw 'Unexpected success' }
+catch { @{message=$_.Exception.Message}|ConvertTo-Json -Compress }
+""".replace('HELPER',str(ROOT/'scripts'/'Software-Sync.ps1')).replace('EXE',str(executable)),encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=20)
+    assert run.returncode==0,run.stderr
+    message=json.loads(run.stdout)['message']
+    assert 'Fixture source unavailable' in message and '0x0000000C' in message

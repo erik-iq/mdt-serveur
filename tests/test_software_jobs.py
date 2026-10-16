@@ -136,3 +136,14 @@ def test_queued_request_can_be_cancelled_but_running_request_cannot(system):
     assert client.get('/api/software-sync',headers=auth()).json()['job']['status']=='interrupted'
     job=enqueue(client).json();claim(client,identity,headers)
     assert client.post('/api/software-sync/jobs/'+job['id']+'/cancel',headers=auth()).status_code==409
+
+
+def test_failure_does_not_claim_100_percent_before_any_step(system):
+    client,data=system
+    identity,headers=worker(client,data)
+    job=enqueue(client).json();claim(client,identity,headers)
+    response=client.post('/api/software-sync/jobs/'+job['id']+'/finish',headers=headers,
+                        json={'worker_id':identity,'status':'failed','message':'Fixture preflight failure'})
+    assert response.status_code==200
+    state=client.get('/api/software-sync',headers=auth()).json()['job']
+    assert state['progress']==0 and state['message']=='Fixture preflight failure'

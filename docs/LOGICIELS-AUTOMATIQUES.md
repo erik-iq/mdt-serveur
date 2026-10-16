@@ -60,6 +60,16 @@ Une tâche en cours est limitée à quatre heures. Après un arrêt brutal de Wi
 
 La révision 2.2 se met à jour avec `Update-Console.ps1` ; **aucune reconstruction WinPE ni modification des réponses WDS n’est nécessaire pour le bouton**. Le script refuse de remplacer la console pendant une synchronisation et relance un agent déjà actif après la mise à jour. Pour changer de compte Windows, attendre la fin des travaux, arrêter la tâche puis exécuter `Enable-SoftwareSync.ps1` sous le nouveau compte.
 
+## Diagnostic des échecs (révision 2.3)
+
+Le message de la révision 2.2 « Échec avant la publication des résultats » indiquait que le processus PowerShell n’avait pas écrit son bilan. Il ne permettait pas de savoir pourquoi : certaines erreurs du processus étaient supprimées, même si l’agent restait disponible. Un état « Agent prêt » signifiait que la commande WinGet était trouvée, sans garantir qu’un téléchargement réussirait.
+
+La révision 2.3 conserve les erreurs du processus, les affiche dans le bilan de la page et les écrit dans `data\software-sync\worker.log`. Les secrets de l’agent sont masqués. En cas d’échec WinGet, le message contient son code décimal/hexadécimal et les dernières lignes de sortie utiles. Les lignes écrites sur stderr sont traitées avec le code de sortie, pour éviter qu’un message informatif soit pris pour un échec sous Windows PowerShell 5.1.
+
+Les demandes du bouton utilisent l’API sur `127.0.0.1`, déjà employée par l’agent. Elles ne dépendent plus de la confiance du compte de l’agent dans le certificat HTTPS public de la console ni du chemin via IIS. HTTPS reste utilisé pour le site et pour les téléchargements des éditeurs ; aucun contrôle de certificat n’est désactivé.
+
+Un échec avant la première étape conserve une progression de 0 %, au lieu d’afficher automatiquement 100 %. Mettre à jour la console avec `Update-Console.ps1`, puis relancer le bouton : le bilan précédent n’est pas réécrit rétroactivement. La mise à jour redémarre l’agent qui était actif et ne modifie pas WDS/WinPE. La capture de l’ancien message seule ne permet pas d’identifier la cause initiale ; si le nouvel essai échoue, transmettre le message précis du bilan.
+
 ## Actualiser les quatre logiciels
 
 Terminer ou annuler les autorisations WinPE encore actives, puis lancer :

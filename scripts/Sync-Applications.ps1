@@ -15,7 +15,10 @@ foreach ($key in $Packages) { if (@($sources | Where-Object { $_.key -eq $key })
 $headers=@{}
 if (-not $config.internal_mode) { $headers.Authorization='Bearer ' + (Get-Content (Join-Path $config.data_dir 'admin-token') -Raw).Trim() }
 $workerHeaders=@{}
+$apiBase=$config.base_url
 if ($WebJobId) {
+    if (-not $config.port -or [int]$config.port -lt 1 -or [int]$config.port -gt 65535) { throw 'Port local de la console absent ou invalide dans data-runtime.json.' }
+    $apiBase='http://127.0.0.1:' + $config.port
     $parsed=[guid]::Empty
     if (-not [guid]::TryParse($WebJobId,[ref]$parsed) -or -not [guid]::TryParse($WorkerId,[ref]$parsed)) { throw 'Identifiant agent ou synchronisation invalide.' }
     $key=(Get-Content (Join-Path $config.data_dir 'software-sync\worker-key') -Raw).Trim()
@@ -30,7 +33,7 @@ function Send-SoftwareProgress([int]$Progress,[string]$Message) {
 }
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 function Invoke-SoftwareApi([string]$Path,[string]$Method='GET',$Body=$null) {
-    $parameters=@{Uri=($config.base_url + '/api' + $Path);Method=$Method;Headers=$headers;TimeoutSec=60}
+    $parameters=@{Uri=($apiBase + '/api' + $Path);Method=$Method;Headers=$headers;TimeoutSec=60}
     if ($null -ne $Body) { $parameters.ContentType='application/json; charset=utf-8';$parameters.Body=[Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 8)) }
     return Invoke-RestMethod @parameters
 }
@@ -58,8 +61,7 @@ try {
             New-Item -ItemType Directory -Path $staging | Out-Null
             $arguments=@('download','--id',$source.winget_id,'--exact','--source','winget','--architecture',$source.architecture,'--installer-type',$source.installer_type,'--scope','machine','--download-directory',$staging,'--accept-source-agreements','--accept-package-agreements','--disable-interactivity')
             Write-Host ('Recherche et telechargement de ' + $source.name + '...')
-            & $winget.Source @arguments
-            if ($LASTEXITCODE -ne 0) { throw ('WinGet download en echec (code ' + $LASTEXITCODE + '). Ancienne version conservee.') }
+            Invoke-AtelierWinGetDownload -Executable $winget.Source -Arguments $arguments
             Send-SoftwareProgress ([int](90*($completed+0.6)/$Packages.Count)) ('Vérification de la signature et du SHA-256 : ' + $source.name)
             $download=Get-AtelierDownloadedInstaller $staging $source
             $safeVersion=$download.version -replace '[^A-Za-z0-9._-]', '_'
@@ -81,7 +83,7 @@ try {
             Write-AtelierVerifiedUtf8File -Path $bindingPath -Content ($bindings | ConvertTo-Json) -NoBackup | Out-Null
             $results += @{package=$key;winget_id=$source.winget_id;version=$download.version;status=$status;sha256=$download.sha256;source_url=$download.url;application_id=$application.id}
             Write-Host ($source.name + ' ' + $download.version + ' : ' + $status) -ForegroundColor Green
-        } catch { $results += @{package=$key;status='failed';message=$_.Exception.Message};Write-Warning ($source.name + ' : ' + $_.Exception.Message) }
+        } catch { $message=Get-AtelierSoftwareErrorText $_ @($headers.Authorization,$headers['X-Atelier-Software-Key']);$results += @{package=$key;status='failed';message=$message};Write-Warning ($source.name + ' : ' + $message) }
         finally { $completed++; if (Test-Path $staging) { Remove-Item -LiteralPath $staging -Recurse -Force } }
     }
     $successful=@($results | Where-Object { $_.status -ne 'failed' } | ForEach-Object { $_.application_id })

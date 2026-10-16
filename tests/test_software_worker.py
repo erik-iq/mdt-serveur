@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('outcome',['completed','partial','failed'])
+@pytest.mark.parametrize('outcome',['completed','partial','failed','nonterminating','sensitive'])
 def test_worker_serializes_selection_and_reports_child_result(tmp_path,outcome):
     install=tmp_path/'installed';(install/'scripts').mkdir(parents=True)
     data=tmp_path/'data';(data/'software-sync'/'job-results').mkdir(parents=True)
@@ -25,6 +25,8 @@ def test_worker_serializes_selection_and_reports_child_result(tmp_path,outcome):
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
 @{packages=@($Packages);bundles=@($BundleIds);id=$WebJobId;worker=$WorkerId}|ConvertTo-Json|Set-Content 'SELECTION'
 if ('OUTCOME' -eq 'failed') { throw 'Fixture preflight failure' }
+if ('OUTCOME' -eq 'nonterminating') { Write-Error 'Fixture nonterminating cause' -ErrorAction Continue;return }
+if ('OUTCOME' -eq 'sensitive') { Write-Error 'Fixture Bearer private-worker-key and private-worker-key' -ErrorAction Continue;return }
 $apps=@(@{package='vlc';status='updated'})
 if ('OUTCOME' -eq 'partial') { $apps+=@{package='chrome';status='failed';message='Fixture rejected'} }
 @{applications=$apps;bundles=@()} | ConvertTo-Json -Depth 6 | Set-Content (Join-Path (Join-Path $config.data_dir 'software-sync/job-results') ($WebJobId + '.json'))
@@ -60,5 +62,13 @@ try { & 'WORKER' -InstallPath 'INSTALL' } catch { if (-not $global:atelierTestFi
     selection=json.loads((tmp_path/'selection.json').read_text(encoding='utf-8-sig'))
     assert selection['packages']==['vlc','chrome'] and selection['bundles']==[bundle] and selection['id']==identifier
     result=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))
-    assert result['status']==outcome
+    assert result['status']==('failed' if outcome in ('nonterminating','sensitive') else outcome)
+    if outcome=='failed': assert 'Fixture preflight failure' in result['message']
+    if outcome=='nonterminating':
+        assert 'Fixture nonterminating cause' in result['message']
+        assert any('Fixture nonterminating cause' in line for line in result['results']['diagnostics'])
+        assert 'Fixture nonterminating cause' in (data/'software-sync'/'worker.log').read_text(encoding='utf-8-sig')
+    if outcome=='sensitive':
+        assert 'private-worker-key' not in json.dumps(result)
+        assert 'private-worker-key' not in (data/'software-sync'/'worker.log').read_text(encoding='utf-8-sig')
     if outcome=='partial': assert result['results']['applications'][1]['status']=='failed'

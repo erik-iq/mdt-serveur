@@ -51,3 +51,41 @@ function Find-AtelierSoftwareBinding {
     if ($referenced.Count -eq 1) { return $referenced[0] }
     throw ('Plusieurs entrees pour ' + $Source.key + ' : preciser -ApplicationBindings @{'+$Source.key+"='identifiant'} une fois.")
 }
+
+# Keep the cause of background-job and native-command failures, without credentials.
+function Get-AtelierSoftwareErrorText {
+    param($Record,[string[]]$Secrets=@())
+    $text=[string]$Record
+    if ($Record.Exception -and $Record.Exception.Message) { $text=[string]$Record.Exception.Message }
+    if ($Record.ErrorDetails -and $Record.ErrorDetails.Message) {
+        try {
+            $detail=($Record.ErrorDetails.Message | ConvertFrom-Json -ErrorAction Stop).detail
+            if ($detail -is [string]) { $text=$detail }
+        } catch { }
+    }
+    foreach ($secret in $Secrets) { if ($secret) { $text=$text.Replace($secret,'[masqué]') } }
+    $text=[regex]::Replace($text,'(?i)Bearer\s+[A-Za-z0-9._~+/-]+=*','Bearer [masqué]')
+    $text=[regex]::Replace($text,'\x1B\[[0-?]*[ -/]*[@-~]','')
+    return $text.Trim().Substring(0,[Math]::Min(1800,$text.Trim().Length))
+}
+
+function Invoke-AtelierWinGetDownload {
+    param([string]$Executable,[string[]]$Arguments)
+    # Windows PowerShell 5.1 treats stderr as ErrorRecord even for native tools.
+    # Check WinGet's exit code; do not abort on an informational stderr line.
+    $ErrorActionPreference='Continue'
+    $tail=New-Object 'Collections.Generic.Queue[string]'
+    $global:LASTEXITCODE=$null
+    & $Executable @Arguments 2>&1 | ForEach-Object {
+        $line=Get-AtelierSoftwareErrorText $_
+        if ($line) {
+            if ($tail.Count -ge 16) { $null=$tail.Dequeue() }
+            $tail.Enqueue($line)
+        }
+    }
+    $code=$global:LASTEXITCODE
+    if ($null -eq $code -or $code -ne 0) {
+        $description=if ($null -eq $code) { 'programme non démarré' } else { 'code ' + $code + ' / 0x' + ([int]$code).ToString('X8') }
+        throw ('WinGet download en échec (' + $description + '). ' + ($tail.ToArray() -join ' | ') + ' Ancienne version conservée.')
+    }
+}

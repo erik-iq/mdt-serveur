@@ -126,7 +126,7 @@ function softwareStatus() {
     const result=job.results || {};
     const names=Object.fromEntries(sync.sources.map(s=>[s.key,s.name]));
     const statusNames={updated:'Mis à jour',created:'Ajouté',unchanged:'Déjà à jour',failed:'Échec'};
-    $('software-sync-results').innerHTML=(result.applications || []).map(a=>`<li><b>${esc(names[a.package] || a.package)}</b> ${esc(a.version)} — ${esc(statusNames[a.status] || a.status)}${a.message?`<p>${esc(a.message)}</p>`:''}</li>`).join('')+(result.bundles || []).map(b=>`<li>Bundle ${esc(b.name || state.bundles.find(x=>x.id===b.id)?.name || b.id)} — ${esc(statusNames[b.status] || b.status)}${b.message?`<p>${esc(b.message)}</p>`:''}</li>`).join('');
+    $('software-sync-results').innerHTML=(result.applications || []).map(a=>`<li><b>${esc(names[a.package] || a.package)}</b> ${esc(a.version)} — ${esc(statusNames[a.status] || a.status)}${a.message?`<p>${esc(a.message)}</p>`:''}</li>`).join('')+(result.bundles || []).map(b=>`<li>Bundle ${esc(b.name || state.bundles.find(x=>x.id===b.id)?.name || b.id)} — ${esc(statusNames[b.status] || b.status)}${b.message?`<p>${esc(b.message)}</p>`:''}</li>`).join('')+(result.diagnostics || []).map(message=>`<li><b>Diagnostic de l’agent</b><p>${esc(message)}</p></li>`).join('');
   }
   const blocked=active || state.totals.active>0 || !worker.available || worker.state!=='ready';
   $('software-sync-submit').disabled=!!blocked;

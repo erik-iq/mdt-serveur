@@ -152,6 +152,26 @@ def run(internal=False):
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
                 page.screenshot(path='/tmp/atelier-software-mobile.png',full_page=True)
                 page.set_viewport_size({'width':1440,'height':1100})
+                # A preflight failure must show its cause and retain 0% progress.
+                software_api('/software-sync/worker/heartbeat',{'worker_id':identity},private)
+                page.evaluate('refresh()')
+                page.locator('#software-sync-open').click()
+                page.locator('#software-sync-dialog').get_by_label('Adobe Acrobat Reader',exact=True).uncheck()
+                page.locator('#software-sync-dialog').get_by_label('AnyDesk',exact=True).uncheck()
+                page.locator('#software-sync-dialog').get_by_label('Google Chrome',exact=True).uncheck()
+                with page.expect_response(lambda r:r.url.endswith('/api/software-sync/jobs') and r.request.method=='POST') as failed_request:
+                    page.locator('#software-sync-submit').click()
+                failed_job=failed_request.value.json()
+                page.wait_for_selector('#software-sync-dialog',state='hidden')
+                software_api('/software-sync/worker/claim',{'worker_id':identity},private)
+                software_api('/software-sync/jobs/'+failed_job['id']+'/finish',{'worker_id':identity,'status':'failed',
+                    'message':'Fixture précontrôle refusé','results':{'diagnostics':['Fixture : cause détaillée <contrôle>']}},private)
+                page.evaluate('refresh()')
+                expect(page.locator('#software-sync-message')).to_have_text('Fixture précontrôle refusé')
+                expect(page.locator('#software-sync-progress')).to_have_attribute('value','0')
+                expect(page.locator('#software-sync-results')).to_contain_text('Fixture : cause détaillée <contrôle>')
+                assert page.locator('#software-sync-results contrôle').count()==0
+                page.screenshot(path='/tmp/atelier-software-diagnostic.png',full_page=True)
                 page.locator('[data-page="profiles"]').click()
                 page.get_by_role('button',name='＋ Nouveau profil',exact=True).click()
                 page.get_by_label('Nom du profil').fill('Windows 11 · Laboratoire')

@@ -158,8 +158,8 @@ class SoftwareJobs:
                 raise HTTPException(413, 'Résultat trop volumineux')
             with db(write=True) as con:
                 self.owned(con, identifier, str(body.worker_id))
-                con.execute('UPDATE software_jobs SET status=?,progress=100,message=?,results_json=?,updated_at=? WHERE id=?',
-                            (body.status, body.message, results, timestamp(), identifier))
+                con.execute("UPDATE software_jobs SET status=?,progress=CASE WHEN ?='completed' THEN 100 ELSE progress END,message=?,results_json=?,updated_at=? WHERE id=?",
+                            (body.status, body.status, body.message, results, timestamp(), identifier))
                 return {'accepted': True}
 
     @staticmethod
