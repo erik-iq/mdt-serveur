@@ -321,7 +321,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "2.1"}
 
     @api.get('/api/session')
     def session_options():
@@ -415,19 +415,36 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Ce nom de profil existe déjà")
 
+    def validate_application_asset(con, body):
+        asset = asset_snapshot(con, body.asset_id, 'application')
+        if asset['filename'].lower().endswith('.zip'):
+            if not body.entry_point:
+                raise HTTPException(400, 'Le point d’entrée du ZIP est requis')
+        elif body.entry_point or body.install_mode == 'portable':
+            raise HTTPException(400, 'Le point d’entrée et le mode portable sont réservés aux ZIP')
+        if body.install_mode == 'portable' and body.arguments:
+            raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
+
+    @api.put('/api/applications/{identifier}', dependencies=[Depends(admin)])
+    def update_application(identifier: str, body: ApplicationInput):
+        try:
+            with db(write=True) as con:
+                row(con, 'applications', identifier)
+                if con.execute("SELECT 1 FROM deployments WHERE status IN ('queued','running') LIMIT 1").fetchone():
+                    raise HTTPException(409, 'Terminer ou annuler les autorisations WinPE actives avant de remplacer un logiciel')
+                validate_application_asset(con, body)
+                con.execute('UPDATE applications SET name=?,version=?,asset_id=?,arguments=?,entry_point=?,install_mode=?,manufacturer=? WHERE id=?',
+                            (body.name, body.version, body.asset_id, body.arguments, body.entry_point, body.install_mode, body.manufacturer, identifier))
+                return row(con, 'applications', identifier)
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, 'Ce logiciel et cette version existent déjà')
+
     @api.post('/api/applications', status_code=201, dependencies=[Depends(admin)])
     def add_application(body: ApplicationInput):
         identifier = str(uuid.uuid4())
         try:
             with db(write=True) as con:
-                asset = asset_snapshot(con, body.asset_id, 'application')
-                if asset['filename'].lower().endswith('.zip'):
-                    if not body.entry_point:
-                        raise HTTPException(400, 'Le point d’entrée du ZIP est requis')
-                elif body.entry_point or body.install_mode == 'portable':
-                    raise HTTPException(400, 'Le point d’entrée et le mode portable sont réservés aux ZIP')
-                if body.install_mode == 'portable' and body.arguments:
-                    raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
+                validate_application_asset(con, body)
                 con.execute('INSERT INTO applications VALUES (?,?,?,?,?,?,?,?,?)',
                             (identifier, body.name, body.version, body.asset_id, body.arguments, body.entry_point,
                              body.install_mode, body.manufacturer, now()))

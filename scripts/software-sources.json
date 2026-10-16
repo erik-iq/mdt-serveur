@@ -1,0 +1,6 @@
+[
+  {"key":"vlc","name":"VLC","aliases":["VLC","VLC media player","VideoLAN VLC"],"winget_id":"VideoLAN.VLC","architecture":"x64","installer_type":"nullsoft","extension":".exe","arguments":"/S","publisher":"(?:^|[, ])(?:O|CN)=VideoLAN(?:[, ]|$)","hosts":["download.videolan.org","get.videolan.org"]},
+  {"key":"reader","name":"Adobe Acrobat Reader","aliases":["Adobe Acrobat Reader","Adobe Reader","Acrobat Reader","Adobe Acrobat Reader DC"],"winget_id":"Adobe.Acrobat.Reader.64-bit","architecture":"x64","installer_type":"exe","extension":".exe","arguments":"/sAll /rs /rps /l /re","publisher":"(?:O|CN)=Adobe (?:Inc\\.?|Systems Incorporated)","hosts":["ardownload.adobe.com","ardownload2.adobe.com","ardownload3.adobe.com"]},
+  {"key":"chrome","name":"Google Chrome","aliases":["Google Chrome","Chrome"],"winget_id":"Google.Chrome","architecture":"x64","installer_type":"wix","extension":".msi","arguments":"","publisher":"(?:O|CN)=Google (?:LLC|Inc\\.?)","hosts":["dl.google.com"]},
+  {"key":"anydesk","name":"AnyDesk","aliases":["AnyDesk"],"winget_id":"AnyDesk.AnyDesk","architecture":"x86","installer_type":"exe","extension":".exe","arguments":"--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --create-shortcuts --create-desktop-icon","publisher":"(?:O|CN)=(?:AnyDesk Software GmbH|philandro Software GmbH)","hosts":["download.anydesk.com"]}
+]

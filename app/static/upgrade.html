@@ -1,5 +1,7 @@
 <!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE — Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> · <a href="/static/guide.html">Guide utilisateur</a> · <a href="/static/upgrade.html">Mise à jour</a></nav><main><h1>Installer la révision ATELIER-2</h1>
 <p>Cette révision complète INTERNE-1 : progression Windows Update par phase, consoles de fond masquées, ouverture de HP Image Assistant, profils Pro/Famille issus du WIM, démarrage rapide Windows désactivé, tests matériels et PDF local/console. L’API de base reste en version 0.2.0 pour compatibilité ; le marqueur de démarrage est <strong>ATELIER-2</strong>.</p>
+<h2>Révision 2.1</h2>
+<p>Le correctif détecte le dossier installé à partir de la tâche <code>AtelierPXE-Console</code> et s’arrête clairement si la commande est lancée sur une autre machine. Il ne recrée jamais <code>data-runtime.json</code>. La nouvelle image est marquée <strong>ATELIER-2.1</strong> ; <code>/health</code> annonce <code>release=ATELIER-2</code>, <code>revision=2.1</code>. La <a href="/static/software-guide.html">synchronisation des logiciels par WinGet et les inventaires XML/CSV</a> sont disponibles après la mise à jour.</p>
 <h2>Mettre à jour le serveur existant</h2>
 <p>Attendre la fin de la préparation Windows en cours sur PC-TEST-PXE avant de remplacer la console : l’ancienne version ne sait pas transmettre sa progression ou son rapport. Il n’est pas nécessaire de réinstaller Windows Server, WDS, IIS ou ADK.</p>
 <p>Télécharger la révision validée du dépôt, l’extraire hors de <code>C:\AtelierPXE\console</code>, débloquer ses scripts et lancer son <strong>nouveau</strong> <code>scripts\Update-Console.ps1 -SourcePath &lt;dossier extrait&gt;</code> en PowerShell administrateur sur DEPLOY-01. Le script sauvegarde la console et SQLite et conserve les données et la configuration. Vérifier <code>/health</code>, puis <code>/api/session</code> (<code>internal_mode=True</code>, <code>automatic_windows=True</code>).</p>
@@ -22,7 +24,7 @@
         OutputPath = &quot;D:\AtelierPXE\WinPE-Atelier2-$atelierStamp&quot;
         TrustedRootCertificate = &#x27;C:\AtelierPXE\certs\AtelierPXE-lab.cer&#x27;
         WinPEKeyboardLayout = &#x27;040c:0000040c&#x27;
-        WdsImageName = &quot;Atelier PXE - ATELIER-2 - $atelierStamp&quot;
+        WdsImageName = &quot;Atelier PXE - ATELIER-2.1 - $atelierStamp&quot;
         ImportIntoWds = $true
     }
     &amp; &#x27;C:\AtelierPXE\console\scripts\Build-WinPE.ps1&#x27; @atelierParametres

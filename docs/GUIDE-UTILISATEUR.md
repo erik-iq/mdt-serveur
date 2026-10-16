@@ -2,6 +2,10 @@
 
 Atelier PXE installe Windows sur un ordinateur démarré par le réseau, prépare ses logiciels et produit un rapport de contrôle. Ce guide décrit le serveur déjà installé dans l’atelier et le parcours **ATELIER-2**. L’installation efface le disque choisi : sauvegarder les données avant de commencer.
 
+## Actualiser les logiciels et obtenir le détail technique
+
+Avec ATELIER-2.1, le technicien peut actualiser les installateurs depuis WinGet avec `Sync-Applications.ps1`, sans télécharger manuellement chaque nouvelle version. Les bundles conservent leurs références. Sur les nouveaux postes, `C:\IQ_\Inventaire-Technique.xml` et `.csv` détaillent le matériel, les pilotes, les logiciels et les licences disponibles. `Export-Inventaire.cmd` relance la collecte ; `Generer-Rapport.cmd` actualise également ces exports. Suivre le [guide WinGet et inventaire](LOGICIELS-AUTOMATIQUES.md).
+
 ## Comprendre les trois machines
 
 | Élément | Rôle | Adresse ou emplacement |

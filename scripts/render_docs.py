@@ -12,7 +12,7 @@ def inline(text):
     text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', text)
     return re.sub(r'\[([^]]+)\]\(([^)]+)\)',
                   lambda m: f'<a href="{escape(m[2], quote=True)}">{m[1]}</a>'
-                  if re.fullmatch(r'[A-Za-z0-9._/-]+(?:#[A-Za-z0-9-]+)?', m[2]) else m[1], text)
+                  if re.fullmatch(r'(?:[A-Za-z0-9._/-]+(?:#[A-Za-z0-9-]+)?|https://[A-Za-z0-9./_?#=%&;+-]+)', m[2]) else m[1], text)
 
 
 def render(source):
@@ -53,8 +53,9 @@ def render(source):
 
 
 if __name__ == '__main__':
-    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html')]:
+    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html')]:
         body=render((ROOT/'docs'/filename).read_text())
+        body=body.replace('href="LOGICIELS-AUTOMATIQUES.md"','href="/static/software-guide.html"')
         body=body.replace('href="MISE-A-JOUR-ATELIER-2.md"','href="/static/upgrade.html"').replace('href="GUIDE-UTILISATEUR.md"','href="/static/guide.html"')
         body=re.sub(r'href="([A-Z][A-Z0-9-]+\.md(?:#[a-z0-9-]+)?)"', r'href="https://github.com/erik-iq/mdt-serveur/blob/main/docs/\1"', body)
         html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE — Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> · <a href="/static/guide.html">Guide utilisateur</a> · <a href="/static/upgrade.html">Mise à jour</a></nav><main>'+body+'</main></body></html>'

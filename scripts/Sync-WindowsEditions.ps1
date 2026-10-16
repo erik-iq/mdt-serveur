@@ -1,8 +1,10 @@
 ﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
-param([string]$InstallPath='C:\AtelierPXE\console')
+param([string]$InstallPath)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Console-Installation.ps1')
+$InstallPath=Resolve-AtelierConsoleInstallation -InstallPath $InstallPath
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
 $headers=@{}
 if (-not $config.internal_mode) {

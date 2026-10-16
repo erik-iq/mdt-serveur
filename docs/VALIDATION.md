@@ -64,3 +64,7 @@ La console n’est pas un contrôleur DHCP/TFTP et ne peut pas démarrer le LAN 
 ## Recette ATELIER-2
 
 Exécuter la [recette de mise à jour ATELIER-2](MISE-A-JOUR-ATELIER-2.md) : phases réelles Windows Update, reprise, absence de console vide, ouverture HPIA, choix Pro/Famille et refus d’un index incohérent, HiberbootEnabled=0, tests matériels opérateur, PDF local et téléchargement dans Atelier. Vérifier le renvoi d’un rapport lorsque la console revient en ligne et la garantie assistée sans dates inventées. Le test navigateur IQ simule une caméra : il ne valide pas le matériel réel.
+
+## Recette ATELIER 2.1
+
+Vérifier le dossier détecté depuis la tâche, y compris une installation hors du chemin par défaut et un lancement sur une autre machine (arrêt avant modification). Sur DEPLOY-01, exécuter la synchronisation WinGet des quatre sources, vérifier les versions, la signature éditeur, les empreintes et les références des bundles. Relancer pour vérifier `unchanged`, puis tester les vrais installateurs sur le client. Contrôler les XML/CSV en fin de maintenance et après export manuel : capacité et série des barrettes/disques, licence sans clé, sections indisponibles explicites, absence de secrets TPM/BitLocker. Les tests Linux simulent WinGet et les fournisseurs CIM ; les paquets et le matériel réels nécessitent cette recette Windows.

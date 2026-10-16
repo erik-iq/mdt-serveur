@@ -1,10 +1,18 @@
 ﻿#requires -Version 5.1
 #requires -RunAsAdministrator
-param([string]$DataPath='C:\ProgramData\AtelierPXE',[string]$OutputDirectory='C:\IQ_')
+param([string]$DataPath='C:\ProgramData\AtelierPXE',[string]$OutputDirectory='C:\IQ_',[switch]$RefreshInventory)
 $ErrorActionPreference='Stop'
 . (Join-Path $DataPath 'Reporting.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
+$xmlInventory=Join-Path $OutputDirectory 'Inventaire-Technique.xml'
+$csvInventory=Join-Path $OutputDirectory 'Inventaire-Technique.csv'
+if ($RefreshInventory -or -not (Test-Path $xmlInventory) -or -not (Test-Path $csvInventory)) {
+    try {
+        $export= & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $OutputDirectory
+        if ($export.SectionsIndisponibles) { $warnings.Add('Certaines categories de l inventaire technique sont indisponibles ; consulter les etats dans XML/CSV.') }
+    } catch { $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.') }
+}
 function Read-ReportJson([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
         try { return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }

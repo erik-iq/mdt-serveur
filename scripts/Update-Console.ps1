@@ -3,10 +3,12 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)][string]$SourcePath,
-    [string]$InstallPath = 'C:\AtelierPXE\console',
+    [string]$InstallPath,
     [string]$BackupPath = ('D:\AtelierPXE\backups\console-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Console-Installation.ps1')
+$InstallPath=Resolve-AtelierConsoleInstallation -InstallPath $InstallPath
 $source = (Resolve-Path -LiteralPath $SourcePath).ProviderPath.TrimEnd('\')
 $installed = (Resolve-Path -LiteralPath $InstallPath).ProviderPath.TrimEnd('\')
 $backup = [IO.Path]::GetFullPath($BackupPath).TrimEnd('\')
@@ -21,7 +23,7 @@ foreach ($base in @($source,$installed)) {
 if (Test-Path -LiteralPath $backup) { throw 'Le dossier de sauvegarde existe deja. Choisissez un nouveau chemin.' }
 $files = @('README.md','.gitignore','.env.example','requirements.txt','requirements-dev.txt','requirements-browser.txt','constraints.txt')
 $folders = @('app','scripts','docs','tests')
-foreach ($name in @('app\main.py','app\reports.py','scripts\Reporting.ps1','scripts\New-DeploymentReport.ps1','scripts\Test-Materiel.ps1','scripts\Tests-Materiel.html','scripts\Verifier-Garantie.ps1','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\Partitions.ps1','scripts\atelier.cmd') + $files + $folders) {
+foreach ($name in @('app\main.py','scripts\Console-Installation.ps1','scripts\Export-Inventaire.ps1','scripts\Sync-Applications.ps1','scripts\software-sources.json','app\reports.py','scripts\Reporting.ps1','scripts\New-DeploymentReport.ps1','scripts\Test-Materiel.ps1','scripts\Tests-Materiel.html','scripts\Verifier-Garantie.ps1','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\Partitions.ps1','scripts\atelier.cmd') + $files + $folders) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Archive incomplete : $name absent." }
 }
 $configPath = Join-Path $installed 'data-runtime.json'
@@ -90,7 +92,7 @@ try {
     $deadline = (Get-Date).AddSeconds(20)
     do {
         try { $health = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 2 } catch { $health = $null }
-        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2') { $updated = $true; break }
+        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '2.1') { $updated = $true; break }
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
     if (-not $updated) { throw 'La console 0.2.0 ne repond pas. Consultez data\logs\console.log et la sauvegarde.' }

@@ -59,3 +59,9 @@ L’appel `POST /api/agent/{id}/claim` fournit également un `report_token`, dis
 `GET /api/state` expose `windows_status`, `windows_progress`, `windows_message`, `windows_updated_at` et `has_report` pour chaque déploiement, ainsi qu’une liste `reports` rattachée aux machines. Ces états Windows sont distincts des états WinPE. Une remontée terminale ne peut pas être remplacée par une ancienne progression « running ». Le renvoi d’un même rapport final est accepté, notamment après les tests matériels. Les identifiants de rapport ne sont jamais exposés dans cet état public administrateur.
 
 `GET /health` conserve `version=0.2.0` et annonce `release=ATELIER-2`. Les guides intégrés sont servis à `/static/guide.html` et `/static/upgrade.html`.
+
+## Mise à jour d’un logiciel ATELIER 2.1
+
+`PUT /api/applications/{id}` accepte le même modèle que `POST /api/applications`. L’identifiant reste stable pour les références des bundles et profils. Le serveur refuse cette modification tant qu’une autorisation est `queued` ou `running`. Le nouvel asset doit déjà être enregistré et valide ; les anciens assets ne sont ni écrasés ni supprimés. La modification ne change pas les logiciels déjà copiés sur un poste `staged`. La synchronisation WinGet utilise cette route après validation du fichier et de son éditeur.
+
+`GET /health` ajoute `revision=2.1`. Les XML/CSV détaillés sont générés localement dans IQ_ ; ils ne sont pas envoyés par l’API du PDF.

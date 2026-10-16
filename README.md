@@ -17,6 +17,10 @@ Le [guide utilisateur](docs/GUIDE-UTILISATEUR.md) présente l’atelier à une p
 
 Cette révision ajoute le détail Windows Update, masque les consoles de fond, ouvre HP Image Assistant sur les HP équipés, prépare les profils Pro/Famille depuis le WIM, désactive le démarrage rapide Windows et génère un PDF local avec remontée dans la console. Le dossier IQ_ contient les tests audio/webcam/clavier et une vérification de garantie assistée sur les portails officiels HP, Lenovo et Dell. Dans la console, **Guide utilisateur** ouvre la documentation intégrée.
 
+## Logiciels et inventaire ATELIER 2.1
+
+La [synchronisation WinGet](docs/LOGICIELS-AUTOMATIQUES.md) récupère les installateurs de VLC, Reader, Chrome et AnyDesk sur le serveur et actualise les entrées du catalogue en conservant les bundles. Le dossier IQ_ reçoit un inventaire XML et CSV détaillé. La mise à jour retrouve désormais le dossier installé depuis la tâche console au lieu d’imposer un chemin fixe.
+
 ## Installer sur votre serveur
 
 Si le premier démarrage Windows est bloqué par le fichier de réponses, [récupérer les journaux depuis l’hôte Hyper-V](docs/DIAGNOSTIC-PREMIER-DEMARRAGE.md). Le collecteur monte le disque de la VM arrêtée en lecture seule et copie le diagnostic sur l’hôte.

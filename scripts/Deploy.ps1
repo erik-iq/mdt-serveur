@@ -143,7 +143,7 @@ exit
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'reporting.json') -Content $reporting | Out-Null
     $personalization = @{settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12

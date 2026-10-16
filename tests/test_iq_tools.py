@@ -21,7 +21,7 @@ def test_iq_reports_wallpaper_and_launchers(tmp_path,battery,license_status):
     image=b'\x89PNG\r\n\x1a\nIQ test image'
     (data/'Resources'/'Fond-Atelier.png').write_bytes(image)
     (data/'personalization.json').write_text(json.dumps({'wallpaper':{'filename':'Fond-Atelier.png','sha256':hashlib.sha256(image).hexdigest()}}))
-    for name in ['Test-Batterie.ps1','Verifier-Licence.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1']:
+    for name in ['Test-Batterie.ps1','Verifier-Licence.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1']:
         shutil.copy(ROOT/'scripts'/name,data/name)
     output=tmp_path/'IQ tools'
     wrapper=tmp_path/'run.ps1'

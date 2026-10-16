@@ -2,6 +2,10 @@
 
 Cette révision complète INTERNE-1 : progression Windows Update par phase, consoles de fond masquées, ouverture de HP Image Assistant, profils Pro/Famille issus du WIM, démarrage rapide Windows désactivé, tests matériels et PDF local/console. L’API de base reste en version 0.2.0 pour compatibilité ; le marqueur de démarrage est **ATELIER-2**.
 
+## Révision 2.1
+
+Le correctif détecte le dossier installé à partir de la tâche `AtelierPXE-Console` et s’arrête clairement si la commande est lancée sur une autre machine. Il ne recrée jamais `data-runtime.json`. La nouvelle image est marquée **ATELIER-2.1** ; `/health` annonce `release=ATELIER-2`, `revision=2.1`. La [synchronisation des logiciels par WinGet et les inventaires XML/CSV](LOGICIELS-AUTOMATIQUES.md) sont disponibles après la mise à jour.
+
 ## Mettre à jour le serveur existant
 
 Attendre la fin de la préparation Windows en cours sur PC-TEST-PXE avant de remplacer la console : l’ancienne version ne sait pas transmettre sa progression ou son rapport. Il n’est pas nécessaire de réinstaller Windows Server, WDS, IIS ou ADK.
@@ -43,7 +47,7 @@ Toujours sur DEPLOY-01, PowerShell administrateur :
         OutputPath = "D:\AtelierPXE\WinPE-Atelier2-$atelierStamp"
         TrustedRootCertificate = 'C:\AtelierPXE\certs\AtelierPXE-lab.cer'
         WinPEKeyboardLayout = '040c:0000040c'
-        WdsImageName = "Atelier PXE - ATELIER-2 - $atelierStamp"
+        WdsImageName = "Atelier PXE - ATELIER-2.1 - $atelierStamp"
         ImportIntoWds = $true
     }
     & 'C:\AtelierPXE\console\scripts\Build-WinPE.ps1' @atelierParametres
