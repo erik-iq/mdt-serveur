@@ -1,7 +1,7 @@
 'use strict';
 let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
 const $ = id => document.getElementById(id);
-const labels = {queued:'En attente', running:'En cours', staged:'Image appliquée', failed:'Échec', cancelled:'Annulé',completed:'Terminé',needs_attention:'À vérifier',retry_pending:'Nouvelle tentative prévue',reboot_pending:'Redémarrage prévu'};
+const labels = {partial:'Partiellement terminé',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquée', failed:'Échec', cancelled:'Annulé',completed:'Terminé',needs_attention:'À vérifier',retry_pending:'Nouvelle tentative prévue',reboot_pending:'Redémarrage prévu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = s => new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const size = n => n > 1024**3 ? `${(n/1024**3).toFixed(2)} Go` : `${(n/1024**2).toFixed(1)} Mo`;
@@ -27,10 +27,11 @@ function render() {
   $('machines').innerHTML = state.machines.map(m=>`<tr><td><b>${esc(m.hostname)}</b></td><td class="hash">${esc(m.mac)}</td><td>${esc(m.description)||'—'}</td><td>${date(m.created_at)}</td><td>${(state.reports||[]).filter(r=>r.machine_id===m.id).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} · PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join('');
   $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} · ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} · ${esc(p.locale)}<br>${esc(p.settings.timezone)} · ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.bundle_ids.length} bundle(s) · ${p.settings.application_ids.length} logiciel(s)<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Créez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis sélectionnez l’index de l’édition avec DISM /Get-WimInfo.</p></div>';
   $('applications').innerHTML = state.applications.length ? state.applications.map(a=>`<article class="panel profile-card"><span class="badge">${esc(a.manufacturer==='all'?'TOUS LES POSTES':a.manufacturer.toUpperCase())}</span><h3>${esc(a.name)}</h3><p>${esc(a.version || 'Version à renseigner')} · ${a.install_mode==='portable'?'Outil portable':'Installation silencieuse'}</p><code>${esc(state.assets.find(x=>x.id===a.asset_id)?.filename)}</code></article>`).join('') : '<div class="panel padding"><h3>Préparez votre bundle.</h3><p>Enregistrez les installateurs VLC, lecteur PDF et Chrome, puis les outils HP et Lenovo.</p></div>';
-  $('bundles').innerHTML = state.bundles.map(b=>`<article class="panel profile-card"><span class="badge">BUNDLE</span><h3>${esc(b.name)}</h3><p>${esc(b.description)}</p><ul>${b.application_ids.map(id=>`<li>${esc(state.applications.find(a=>a.id===id)?.name || id)}</li>`).join('')}</ul></article>`).join('');
+  $('bundles').innerHTML = state.bundles.map(b=>`<article class="panel profile-card"><span class="badge">BUNDLE</span><h3>${esc(b.name)}</h3><p>${esc(b.description)}</p><ul>${b.application_ids.map(id=>`<li>${esc(state.applications.find(a=>a.id===id)?.name || id)} ${esc(state.applications.find(a=>a.id===id)?.version || '')}</li>`).join('')}</ul></article>`).join('');
   $('assets').innerHTML = state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}…</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistré.</td></tr>';
   $('boot-status').textContent = state.boot_ready ? 'Fichiers iPXE enregistrés. Le démarrage réseau reste à tester sur le LAN.' : 'Transport iPXE non préparé. Utilisez l’image WinPE importée dans WDS.';
   $('boot-url').textContent = state.base_url+'/boot/menu.ipxe';
+  softwareStatus();
 }
 async function refresh() {
   if ((!token && !internalMode) || refreshing) return;
@@ -108,6 +109,50 @@ $('copy-boot-code').addEventListener('click',async()=>{try{await navigator.clipb
 $('refresh').addEventListener('click',()=> sessionReady ? refresh() : initializeSession());
 $('logout').addEventListener('click',()=>{token='';state=null;document.querySelectorAll('dialog[open]').forEach(d=>d.close());location.reload();});
 setInterval(()=>{if(!document.hidden) refresh();},5000);
+function softwareStatus() {
+  const sync=state?.software_sync;
+  if(!sync) return;
+  const job=sync.job, active=job && ['queued','running'].includes(job.status);
+  $('software-sync-open').disabled=!!active;
+  const worker=sync.worker;
+  $('software-worker').textContent=worker.available ? worker.message : 'Agent hors ligne. Ouvrez la session Windows configurée sur le serveur ; elle peut ensuite être verrouillée.';
+  $('software-job').hidden=!job;
+  if(job) {
+    $('software-sync-status').innerHTML=badge(job.status);
+    $('software-sync-cancel').hidden=job.status!=='queued';
+    $('software-sync-message').textContent=job.message;
+    $('software-sync-progress').value=job.progress;
+    $('software-sync-step').textContent=`${job.progress} % des étapes · ${date(job.updated_at)}`;
+    const result=job.results || {};
+    const names=Object.fromEntries(sync.sources.map(s=>[s.key,s.name]));
+    const statusNames={updated:'Mis à jour',created:'Ajouté',unchanged:'Déjà à jour',failed:'Échec'};
+    $('software-sync-results').innerHTML=(result.applications || []).map(a=>`<li><b>${esc(names[a.package] || a.package)}</b> ${esc(a.version)} — ${esc(statusNames[a.status] || a.status)}${a.message?`<p>${esc(a.message)}</p>`:''}</li>`).join('')+(result.bundles || []).map(b=>`<li>Bundle ${esc(b.name || state.bundles.find(x=>x.id===b.id)?.name || b.id)} — ${esc(statusNames[b.status] || b.status)}${b.message?`<p>${esc(b.message)}</p>`:''}</li>`).join('');
+  }
+  const blocked=active || state.totals.active>0 || !worker.available || worker.state!=='ready';
+  $('software-sync-submit').disabled=!!blocked;
+  $('software-sync-availability').textContent=active?'Une mise à jour est déjà en cours.':state.totals.active>0?'Terminez ou annulez les autorisations WinPE actives avant de modifier les logiciels.':!worker.available || worker.state!=='ready'?'Agent indisponible. Consultez la préparation WinGet dans le guide des logiciels.':'Prêt à télécharger les dernières versions.';
+}
+$('software-sync-open').addEventListener('click',()=>{
+  if(!state) return;
+  $('software-sync-fields').innerHTML=choiceList('Logiciels à actualiser','packages',state.software_sync.sources.map(s=>({id:s.key,name:s.name})))+choiceList('Ajouter aussi les logiciels manquants à ces bundles','bundle_ids',state.bundles);
+  $('software-sync-fields').querySelectorAll('[name="packages"]').forEach(input=>input.checked=true);
+  $('software-sync-error').textContent='';softwareStatus();$('software-sync-dialog').showModal();
+});
+$('software-sync-cancel').addEventListener('click',async()=>{
+  try { await api('/software-sync/jobs/'+state.software_sync.job.id+'/cancel','POST');await refresh(); }
+  catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}
+});
+$('software-sync-form').addEventListener('submit',async event=>{
+  event.preventDefault();const form=new FormData(event.target);
+  const packages=form.getAll('packages');
+  if(!packages.length){$('software-sync-error').textContent='Sélectionnez au moins un logiciel.';return;}
+  $('software-sync-submit').disabled=true;$('software-sync-error').textContent='';
+  try {
+    await api('/software-sync/jobs','POST',{packages,bundle_ids:form.getAll('bundle_ids')});
+    $('software-sync-dialog').close();await refresh();
+  } catch(error){$('software-sync-error').textContent=error.message;softwareStatus();}
+});
+
 initializeSession();
 
 async function initializeSession() {

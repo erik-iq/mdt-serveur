@@ -65,14 +65,15 @@ catch { @{status='rejected'} | ConvertTo-Json -Compress }
 
 
 @pytest.mark.skipif(not PWSH or os.name=='nt',reason='Linux executable shim for WinGet')
-def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path):
+@pytest.mark.parametrize('partial',[False,True])
+def test_sync_download_publish_then_unchanged_run_keeps_application_id(tmp_path,partial):
     import hashlib
     data=tmp_path/'data';data.mkdir();(data/'artifacts').mkdir()
     (data/'artifacts'/'old-vlc.exe').write_bytes(b'previous version')
     install=tmp_path/'installed';install.mkdir()
     (install/'data-runtime.json').write_text(json.dumps({'data_dir':str(data),'base_url':'https://console.invalid','internal_mode':True}))
     state={'applications':[{'id':'stable-app','name':'VLC','version':'old','asset_id':'old-asset','install_mode':'install','manufacturer':'all','arguments':'/S'}],
-           'assets':[],'bundles':[{'application_ids':['stable-app']}],'profiles':[],'deployments':[]}
+           'assets':[],'bundles':[{'id':'standard','name':'Standard','application_ids':['hp-tool','stable-app']}],'profiles':[],'deployments':[]}
     statefile=tmp_path/'state.json';statefile.write_text(json.dumps(state))
     executable=tmp_path/'winget.exe'
     executable.write_text('''#!/usr/bin/env python3
@@ -99,13 +100,16 @@ function Invoke-RestMethod {
         Add-Content 'LOG' 'PUT'
         $bodyObject | Add-Member NoteProperty id 'stable-app'
         $state.applications=@($bodyObject);$result=$bodyObject
+    } elseif ($Uri.EndsWith('/bundles/standard/applications')) {
+        $state.bundles[0].application_ids=@($state.bundles[0].application_ids + $bodyObject.application_ids | Select-Object -Unique)
+        $result=$state.bundles[0]
     } else { throw ('Unexpected API mutation : '+$Uri) }
     $state | ConvertTo-Json -Depth 8 | Set-Content 'STATE'
     return $result
 }
-& 'SCRIPT' -InstallPath 'INSTALL' -Packages vlc
-& 'SCRIPT' -InstallPath 'INSTALL' -Packages vlc
-'''.replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
+try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard } catch { if (-not 'PARTIAL') { throw } }
+try { & 'SCRIPT' -InstallPath 'INSTALL' -Packages PACKAGES -BundleIds standard } catch { if (-not 'PARTIAL') { throw } }
+'''.replace("'PARTIAL'",'$true' if partial else '$false').replace('PACKAGES','vlc,chrome' if partial else 'vlc').replace('STATE',str(statefile)).replace('LOG',str(tmp_path/'mutations')).replace('SCRIPT',str(ROOT/'scripts'/'Sync-Applications.ps1')).replace('INSTALL',str(install)),encoding='utf-8-sig')
     env={**os.environ,'PATH':str(tmp_path)+os.pathsep+os.environ['PATH']}
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30,env=env)
     assert run.returncode==0,run.stderr
@@ -114,3 +118,7 @@ function Invoke-RestMethod {
     assert result['applications'][0]['status']=='unchanged'
     assert result['applications'][0]['application_id']=='stable-app'
     assert (data/'artifacts'/'old-vlc.exe').read_bytes()==b'previous version'
+    assert json.loads(statefile.read_text(encoding='utf-8-sig'))['bundles'][0]['application_ids']==['hp-tool','stable-app']
+    assert result['bundles'][0]['status']=='updated'
+    if partial:
+        assert result['applications'][1]['status']=='failed'

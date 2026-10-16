@@ -27,6 +27,39 @@ Sur **DEPLOY-01**, sous le compte administrateur utilisé pour les téléchargem
 
 Adapter le chemin si la console est installée ailleurs. Le script réutilise WinGet s’il est disponible, tente son enregistrement App Installer, puis utilise le module officiel `Microsoft.WinGet.Client` et `Repair-WinGetPackageManager` si nécessaire. Windows Server 2025 avec interface graphique est pris en charge par Microsoft. Une connexion Internet vers Microsoft, PowerShell Gallery et les éditeurs est nécessaire. Rouvrir PowerShell si l’enregistrement ou le PATH vient de changer.
 
+## Bouton dans Atelier PXE (révision 2.2)
+
+Après la mise à jour de la console, exécuter une fois dans **Windows PowerShell administrateur sur DEPLOY-01**, avec le compte Windows qui utilisera WinGet :
+
+```powershell
+& 'C:\AtelierPXE\console\scripts\Install-WinGet.ps1'
+# Rouvrir PowerShell si nécessaire, puis :
+& 'C:\AtelierPXE\console\scripts\Enable-SoftwareSync.ps1'
+```
+
+Adapter le chemin au dossier installé. La tâche `AtelierPXE-SoftwareSync` démarre immédiatement et à l’ouverture de cette session. Elle s’exécute sans fenêtre et sans mot de passe enregistré, sous ce compte administrateur. **Garder la session Windows ouverte** : le verrouillage et la déconnexion RDP sont possibles, la fermeture de session arrête l’agent. La console web continue à fonctionner avec ses droits limités ; elle n’exécute pas WinGet elle-même.
+
+1. Dans **Logiciels & bundles**, cliquer sur **Mettre à jour les logiciels**.
+2. Sélectionner VLC, Adobe Reader, Chrome et/ou AnyDesk.
+3. Cocher les bundles auxquels ajouter ces logiciels s’ils n’y sont pas encore. Laisser vide pour actualiser uniquement le catalogue et les références existantes.
+4. Cliquer sur **Télécharger et appliquer**, puis suivre les étapes et le bilan dans la page. L’onglet peut être fermé pendant le travail ; le dernier résultat est conservé en base.
+
+Le pourcentage suit les étapes, sans prétendre mesurer les octets téléchargés. Les versions visibles dans les cartes des bundles confirment le catalogue actualisé. Les autres logiciels du bundle sont conservés, les doublons évités. Seuls les logiciels téléchargés et vérifiés avec succès sont ajoutés aux bundles sélectionnés. Les associations déjà mémorisées gardent leur identifiant, même si un logiciel porte un autre nom dans votre atelier.
+
+Les autorisations WinPE doivent être terminées ou annulées avant le lancement. Pendant la synchronisation, la création d’une nouvelle autorisation est bloquée pour éviter un catalogue incohérent. Les fichiers anciens sont conservés ; les machines déjà installées ne sont pas mises à jour par ce bouton. Il n’installe pas les logiciels sur le serveur.
+
+Une demande encore en attente peut être annulée depuis la page si l’agent est devenu indisponible. Une opération déjà démarrée se termine avant une nouvelle demande.
+
+Un agent hors ligne signifie que la session configurée est fermée, que la tâche est arrêtée ou que WinGet n’est pas disponible dans ce profil. Consulter la tâche `AtelierPXE-SoftwareSync` et `data\software-sync\worker.log`. Pour redémarrer l’agent après correction :
+
+```powershell
+Start-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync'
+```
+
+Une tâche en cours est limitée à quatre heures. Après un arrêt brutal de Windows ou de l’agent, la demande en cours passe à « Interrompu » au redémarrage de l’agent ; relancer le bouton pour reprendre. Un téléchargement ne peut pas modifier le catalogue après que sa demande a été interrompue. Le fichier privé `software-sync\worker-key` sert uniquement à l’agent : ne pas le partager.
+
+La révision 2.2 se met à jour avec `Update-Console.ps1` ; **aucune reconstruction WinPE ni modification des réponses WDS n’est nécessaire pour le bouton**. Le script refuse de remplacer la console pendant une synchronisation et relance un agent déjà actif après la mise à jour. Pour changer de compte Windows, attendre la fin des travaux, arrêter la tâche puis exécuter `Enable-SoftwareSync.ps1` sous le nouveau compte.
+
 ## Actualiser les quatre logiciels
 
 Terminer ou annuler les autorisations WinPE encore actives, puis lancer :
@@ -35,17 +68,18 @@ Terminer ou annuler les autorisations WinPE encore actives, puis lancer :
 & 'C:\AtelierPXE\console\scripts\Sync-Applications.ps1'
 ```
 
-Pour un choix plus réduit :
+Pour un choix plus réduit, ou pour ajouter les logiciels sélectionnés à un bundle :
 
 ```powershell
 & 'C:\AtelierPXE\console\scripts\Sync-Applications.ps1' -Packages vlc,chrome
+# Option : -BundleIds 'identifiant-du-bundle'
 ```
 
 Le script détecte le dossier installé depuis la tâche `AtelierPXE-Console`. On peut aussi préciser `-InstallPath 'D:\MonAtelier\console'`.
 
 Chaque téléchargement est vérifié : SHA-256 du manifeste WinGet, signature Authenticode valide, signataire et domaine éditeur attendus. Les fichiers sont enregistrés sous un nouveau nom contenant la version et une empreinte. Aucun ancien installateur n’est écrasé ou supprimé. Un téléchargement refusé par WinGet ou un contrôle en échec ne sont pas contournés.
 
-Lorsqu’un logiciel existe déjà, son identifiant Atelier est conservé : les bundles et profils qui le référencent utilisent sa nouvelle version pour les prochaines autorisations. Un logiciel nouveau apparaît dans le catalogue ; l’ajouter une fois au bundle souhaité. Les PC déjà déployés ne sont pas mis à jour par cette synchronisation serveur.
+Lorsqu’un logiciel existe déjà, son identifiant Atelier est conservé : les bundles et profils qui le référencent utilisent sa nouvelle version pour les prochaines autorisations. Un logiciel nouveau apparaît dans le catalogue ; choisir ses bundles dans le bouton, ou l’ajouter une fois manuellement. Les PC déjà déployés ne sont pas mis à jour par cette synchronisation serveur.
 
 Les premières associations sont recherchées par les noms usuels et les références des bundles. En cas de plusieurs entrées ambiguës, fournir une fois les identifiants voulus :
 
@@ -56,7 +90,7 @@ Les premières associations sont recherchées par les noms usuels et les référ
 
 Les associations sont mémorisées dans `data\software-sync\bindings.json`. Le bilan est dans `data\software-sync\last-sync.json`. Un résultat `updated` indique un remplacement dans le catalogue, `created` une nouvelle entrée, `unchanged` une version déjà enregistrée et `failed` une opération refusée. Les autres logiciels peuvent réussir malgré l’échec d’un paquet ; le script signale alors une synchronisation partielle.
 
-Créer ensuite de nouvelles autorisations. **Une mise à jour des seuls installateurs ne nécessite pas de reconstruire WinPE.** Aucune tâche périodique n’est créée : relancer cette commande avant une série de déploiements lorsque l’on souhaite actualiser les versions.
+Créer ensuite de nouvelles autorisations. **Une mise à jour des seuls installateurs ne nécessite pas de reconstruire WinPE.** Aucune mise à jour automatique périodique n’est lancée : utiliser le bouton ou cette commande avant une série de déploiements. L’agent attend les demandes explicites du bouton.
 
 ## Inventaire XML et CSV dans IQ
 

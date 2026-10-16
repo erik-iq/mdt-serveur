@@ -101,3 +101,7 @@ Si la console est momentanément indisponible, le PDF reste local et l’envoi e
 Vérifier l’édition et l’activation Windows, le nom et le numéro de série, le Gestionnaire de périphériques, le son, la webcam, le clavier et la batterie si présente. Effectuer les mises à jour de pilotes voulues dans l’outil constructeur. Actualiser le rapport après les tests avec `Generer-Rapport.cmd`, puis vérifier son téléchargement depuis Atelier. Garder le PDF avec la fiche du poste.
 
 Pour la mise à jour du serveur et la reconstruction WinPE, suivre [la procédure ATELIER-2](MISE-A-JOUR-ATELIER-2.md). Pour une installation neuve de l’infrastructure, utiliser [INSTALLATION.md](INSTALLATION.md).
+
+## Mettre à jour les logiciels depuis le site
+
+Dans **Logiciels & bundles**, le bouton **Mettre à jour les logiciels** télécharge les nouvelles versions via WinGet, puis actualise le catalogue et les bundles choisis. Le dernier bilan indique les versions, succès et erreurs. Préparer une fois l’agent dans la session Windows du serveur : [guide WinGet](LOGICIELS-AUTOMATIQUES.md). Cette opération ne modifie pas WDS et ne nécessite pas de reconstruire WinPE.

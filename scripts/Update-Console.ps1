@@ -23,7 +23,7 @@ foreach ($base in @($source,$installed)) {
 if (Test-Path -LiteralPath $backup) { throw 'Le dossier de sauvegarde existe deja. Choisissez un nouveau chemin.' }
 $files = @('README.md','.gitignore','.env.example','requirements.txt','requirements-dev.txt','requirements-browser.txt','constraints.txt')
 $folders = @('app','scripts','docs','tests')
-foreach ($name in @('app\main.py','scripts\Console-Installation.ps1','scripts\Export-Inventaire.ps1','scripts\Sync-Applications.ps1','scripts\software-sources.json','app\reports.py','scripts\Reporting.ps1','scripts\New-DeploymentReport.ps1','scripts\Test-Materiel.ps1','scripts\Tests-Materiel.html','scripts\Verifier-Garantie.ps1','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\Partitions.ps1','scripts\atelier.cmd') + $files + $folders) {
+foreach ($name in @('app\main.py','app\software_jobs.py','scripts\Enable-SoftwareSync.ps1','scripts\Software-Worker.ps1','scripts\Console-Installation.ps1','scripts\Export-Inventaire.ps1','scripts\Sync-Applications.ps1','scripts\software-sources.json','app\reports.py','scripts\Reporting.ps1','scripts\New-DeploymentReport.ps1','scripts\Test-Materiel.ps1','scripts\Tests-Materiel.html','scripts\Verifier-Garantie.ps1','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\Partitions.ps1','scripts\atelier.cmd') + $files + $folders) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Archive incomplete : $name absent." }
 }
 $configPath = Join-Path $installed 'data-runtime.json'
@@ -43,17 +43,22 @@ with sqlite3.connect(Path(sys.argv[1]).resolve().as_uri() + "?mode=ro", uri=True
     query = "SELECT COUNT(*) FROM deployments WHERE status='running'"
     if "windows_status" in columns:
         query += " OR windows_status IN ('running','reboot_pending','retry_pending')"
-    print(connection.execute(query).fetchone()[0])
+    active = connection.execute(query).fetchone()[0]
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='software_jobs'").fetchone():
+        active += connection.execute("SELECT COUNT(*) FROM software_jobs WHERE status IN ('queued','running')").fetchone()[0]
+    print(active)
 '@
 $active = $activeCheck | & $runtime - $database
 if ($LASTEXITCODE -ne 0) { throw 'Impossible de controler les deploiements actifs.' }
-if ([int]$active -gt 0) { throw 'Un deploiement est en cours. Attendez sa fin avant de mettre a jour la console.' }
+if ([int]$active -gt 0) { throw 'Un deploiement ou une synchronisation logicielle est en cours. Attendez sa fin avant de mettre a jour la console.' }
 if (-not $PSCmdlet.ShouldProcess($installed, 'Sauvegarder la console et SQLite, puis installer la nouvelle version')) { return }
 New-Item -ItemType Directory -Path $backup | Out-Null
 & icacls.exe $backup /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Impossible de proteger la sauvegarde. Mise a jour arretee.' }
 $stopped = $false
 $updated = $false
+$softwareTask = Get-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' -ErrorAction SilentlyContinue
+$softwareWasRunning = $softwareTask -and $softwareTask.State -eq 'Running'
 try {
     Stop-ScheduledTask -TaskName 'AtelierPXE-Console'
     $stopped = $true
@@ -62,6 +67,14 @@ try {
         if ((Get-Date) -gt $deadline) { throw 'La tache ne s arrete pas. Aucun fichier remplace.' }
         Start-Sleep -Milliseconds 250
     }
+    # Recheck with HTTP stopped so no new request can race the source replacement.
+    $active = $activeCheck | & $runtime - $database
+    if ($LASTEXITCODE -ne 0 -or [int]$active -gt 0) {
+        Start-ScheduledTask -TaskName 'AtelierPXE-Console'
+        $stopped = $false
+        throw 'Une opération a démarré pendant la préparation. Aucun fichier remplacé ; réessayer après sa fin.'
+    }
+    if ($softwareWasRunning) { Stop-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' }
     $sourceBackup = New-Item -ItemType Directory -Path (Join-Path $backup 'console')
     foreach ($name in $files + $folders + @('data-runtime.json','.env')) {
         $path = Join-Path $installed $name
@@ -92,13 +105,14 @@ try {
     $deadline = (Get-Date).AddSeconds(20)
     do {
         try { $health = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 2 } catch { $health = $null }
-        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '2.1') { $updated = $true; break }
+        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '2.2') { $updated = $true; break }
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
     if (-not $updated) { throw 'La console 0.2.0 ne repond pas. Consultez data\logs\console.log et la sauvegarde.' }
     Write-Host ('Console 0.2.0 disponible : ' + $config.base_url) -ForegroundColor Green
     Write-Host "Sauvegarde privee : $backup"
-    Write-Host 'Prochaine etape : reconstruire WinPE dans un nouveau dossier pour inclure l assistant graphique.'
+    if ($softwareWasRunning) { Start-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' }
+    Write-Host 'Pour le bouton WinGet : configurer scripts\Enable-SoftwareSync.ps1 une fois. Aucune reconstruction WinPE nécessaire pour cette fonctionnalité.'
 } catch {
     if ($stopped -and -not $updated) {
         Stop-ScheduledTask -TaskName 'AtelierPXE-Console' -ErrorAction SilentlyContinue

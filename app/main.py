@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.customization import ApplicationInput, BootConnection, BootDiscovery, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
 from app.windows_secrets import read_share_credentials
 from app.reports import ComputerReport, WindowsProgress, make_pdf, report_lines
+from app.software_jobs import SoftwareJobs, BundleApplications
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -215,6 +216,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Jeton administrateur requis")
 
+    software = SoftwareJobs(api, db, data, admin, ROOT / 'scripts' / 'software-sources.json')
+
     def row(con, table, identifier):
         record = con.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
         if not record:
@@ -321,7 +324,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "2.1"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "2.2"}
 
     @api.get('/api/session')
     def session_options():
@@ -346,6 +349,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result['reports'] = [dict(r) for r in con.execute('''SELECT r.deployment_id,r.created_at,d.machine_id,
                 d.windows_status,json_extract(r.report_json,'$.hostname') AS hostname
                 FROM computer_reports r JOIN deployments d ON d.id=r.deployment_id ORDER BY r.created_at DESC LIMIT 100''')]
+            result['software_sync'] = software.state(con)
             result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
@@ -366,7 +370,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             raise HTTPException(409, "Le nom ou l’adresse MAC existe déjà")
 
     @api.post("/api/assets", status_code=201, dependencies=[Depends(admin)])
-    def add_asset(body: AssetInput):
+    def add_asset(body: AssetInput, request: Request):
         path = artifacts / body.filename
         if path.is_symlink() or not path.is_file() or path.resolve().parent != artifacts.resolve():
             raise HTTPException(400, "Déposez le fichier dans data/artifacts, sans lien symbolique")
@@ -392,6 +396,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         identifier = str(uuid.uuid4())
         try:
             with db(write=True) as con:
+                if body.kind == 'application':
+                    software.mutation(con, request)
                 con.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", (identifier, body.filename, body.kind, checksum, stat.st_size, stat.st_mtime_ns, now()))
                 return row(con, "assets", identifier)
         except sqlite3.IntegrityError:
@@ -426,9 +432,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
 
     @api.put('/api/applications/{identifier}', dependencies=[Depends(admin)])
-    def update_application(identifier: str, body: ApplicationInput):
+    def update_application(identifier: str, body: ApplicationInput, request: Request):
         try:
             with db(write=True) as con:
+                software.mutation(con, request)
                 row(con, 'applications', identifier)
                 if con.execute("SELECT 1 FROM deployments WHERE status IN ('queued','running') LIMIT 1").fetchone():
                     raise HTTPException(409, 'Terminer ou annuler les autorisations WinPE actives avant de remplacer un logiciel')
@@ -440,10 +447,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             raise HTTPException(409, 'Ce logiciel et cette version existent déjà')
 
     @api.post('/api/applications', status_code=201, dependencies=[Depends(admin)])
-    def add_application(body: ApplicationInput):
+    def add_application(body: ApplicationInput, request: Request):
         identifier = str(uuid.uuid4())
         try:
             with db(write=True) as con:
+                software.mutation(con, request)
                 validate_application_asset(con, body)
                 con.execute('INSERT INTO applications VALUES (?,?,?,?,?,?,?,?,?)',
                             (identifier, body.name, body.version, body.asset_id, body.arguments, body.entry_point,
@@ -466,12 +474,28 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         except sqlite3.IntegrityError:
             raise HTTPException(409, 'Ce nom de bundle existe déjà')
 
+    @api.post('/api/bundles/{identifier}/applications', dependencies=[Depends(admin)])
+    def append_bundle(identifier: str, body: BundleApplications, request: Request):
+        with db(write=True) as con:
+            software.mutation(con, request)
+            software.no_deployments(con)
+            bundle = bundle_public(row(con, 'bundles', identifier))
+            identifiers = list(dict.fromkeys(bundle['application_ids'] + [str(i) for i in body.application_ids]))
+            if len(identifiers) > 50:
+                raise HTTPException(400, 'Un bundle accepte au maximum 50 logiciels')
+            for app_id in identifiers:
+                application = row(con, 'applications', app_id)
+                asset_snapshot(con, application['asset_id'], 'application')
+            con.execute('UPDATE bundles SET application_ids_json=? WHERE id=?', (json.dumps(identifiers), identifier))
+            return bundle_public(row(con, 'bundles', identifier))
+
     @api.post("/api/deployments", status_code=201, dependencies=[Depends(admin)])
     def deploy(body: DeploymentInput):
         identifier, agent_token = str(uuid.uuid4()), secrets.token_urlsafe(32)
         boot_code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(20)) if body.wizard_enabled and not internal else None
         try:
             with db(write=True) as con:
+                software.no_active(con)
                 machine = row(con, "machines", body.machine_id)
                 profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
