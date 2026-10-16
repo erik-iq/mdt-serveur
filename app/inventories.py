@@ -37,9 +37,9 @@ class Inventories:
 
     def checked(self, path):
         if not path.resolve().is_relative_to(self.root.resolve()):
-            raise HTTPException(409, 'Dossier inventaire non autorisé')
+            raise HTTPException(409, 'Dossier inventaire non autorise')
         if any((p.is_symlink() or getattr(p, 'is_junction', lambda: False)()) for p in [path, *path.parents] if p != self.root.parent):
-            raise HTTPException(409, 'Lien symbolique refusé')
+            raise HTTPException(409, 'Lien symbolique refuse')
         return path
 
     def describe(self, con, identifier):
@@ -66,17 +66,17 @@ class Inventories:
                 text = payload.decode('utf-8-sig')
                 if kind == 'xml':
                     if re.search(r'<!\s*(?:DOCTYPE|ENTITY)', text, re.I):
-                        raise ValueError('DTD refusée')
+                        raise ValueError('DTD refusee')
                     root = ET.fromstring(text)
                     if root.tag != 'InventaireOrdinateur' or root.get('ordinateur', '').casefold() != hostname.casefold():
-                        raise ValueError('Nom XML différent du poste')
+                        raise ValueError('Nom XML different du poste')
                 else:
                     reader = csv.DictReader(io.StringIO(text), delimiter=';')
                     if not {'Ordinateur', 'Categorie', 'Propriete', 'Valeur'} <= set(reader.fieldnames or []):
                         raise ValueError('Colonnes CSV absentes')
                     for item in reader:
                         if item.get('Ordinateur', '').casefold() != hostname.casefold():
-                            raise ValueError('Nom CSV différent du poste')
+                            raise ValueError('Nom CSV different du poste')
             except (ValueError, UnicodeError, ET.ParseError, csv.Error) as exc:
                 raise HTTPException(422, 'Inventaire invalide : ' + str(exc)[:150]) from exc
             folder = self.checked(self.folder(hostname, identifier))
@@ -99,7 +99,7 @@ class Inventories:
             with self.db() as con:
                 job = con.execute('SELECT * FROM deployments WHERE id=?', (identifier,)).fetchone()
                 if not job:
-                    raise HTTPException(404, 'Déploiement inconnu')
+                    raise HTTPException(404, 'Deploiement inconnu')
                 selected = json.loads(job['selection_json'])
                 hostname = selected.get('hostname') or con.execute('SELECT hostname FROM machines WHERE id=?', (job['machine_id'],)).fetchone()[0]
                 return {**self.describe(con, identifier), 'hostname': hostname, 'server_directory': str(self.folder(hostname, identifier))}
@@ -109,8 +109,8 @@ class Inventories:
             with self.db() as con:
                 record = con.execute('SELECT * FROM inventory_files WHERE deployment_id=? AND kind=?', (identifier, kind)).fetchone()
                 if not record:
-                    raise HTTPException(404, 'Inventaire pas encore reçu')
+                    raise HTTPException(404, 'Inventaire pas encore recu')
                 path = self.checked(self.root / record['relative_path'])
                 if not path.is_file() or path.stat().st_size != record['size']:
-                    raise HTTPException(409, 'Fichier inventaire absent ou modifié')
+                    raise HTTPException(409, 'Fichier inventaire absent ou modifie')
             return FileResponse(path, media_type='application/octet-stream', filename=path.name)

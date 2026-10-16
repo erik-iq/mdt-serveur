@@ -42,19 +42,20 @@ def run():
                 browser=p.chromium.launch(executable_path=chromium,headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1000});errors=[]
                 page.on('pageerror',lambda error:errors.append(str(error)))
-                page.goto(origin);expect(page.locator('#connection')).to_have_text('● Console connectée')
-                expect(page.get_by_role('button',name='＋ Nouveau déploiement',exact=True)).to_be_hidden()
-                page.locator('[data-page="software"]').click()
-                expect(page.locator('#client-software-info')).to_be_visible()
-                expect(page.locator('#legacy-software')).to_be_hidden()
-                page.locator('[data-page="profiles"]').click();page.get_by_role('button',name='＋ Nouveau profil',exact=True).click()
+                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectee')
+                expect(page.get_by_role('button',name='+ Nouveau deploiement',exact=True)).to_be_hidden()
+                expect(page.locator('[data-page]')).to_have_count(3)
+                expect(page.locator('#page-software, #page-boot')).to_have_count(0)
+                assert page.locator('.brand-logo').evaluate('(img)=>img.complete && img.naturalWidth>0')
+                assert page.locator('body').evaluate('(el)=>getComputedStyle(el).getPropertyValue("--accent").trim()')=='#4869B5'
+                page.locator('[data-page="profiles"]').click();page.get_by_role('button',name='+ Nouveau profil',exact=True).click()
                 page.get_by_label('Nom du profil').fill('Windows atelier 3')
                 page.get_by_label('Image Windows',exact=True).select_option(asset['id'])
                 page.get_by_label('Adobe Reader',exact=True).uncheck();page.get_by_label('AnyDesk',exact=True).uncheck()
                 page.locator('#submit-resource').click();page.wait_for_selector('#form-dialog',state='hidden')
                 state=api('/state');profile=next(x for x in state['profiles'] if x['name']=='Windows atelier 3')
                 assert profile['settings']['winget_packages']==['vlc','chrome']
-                session=api('/boot/discover',{'macs':['00:11:22:33:44:55'],'release':'ATELIER-3'});identifier=session['id'];token=session['agent_token']
+                session=api('/boot/discover',{'macs':['00:11:22:33:44:55'],'release':'ATELIER-4'});identifier=session['id'];token=session['agent_token']
                 api('/agent/'+identifier+'/configure',{'profile_id':profile['id'],'hostname':'PC-BROWSER3','disk_number':1,'settings':profile['settings']},token)
                 page.locator('[data-page="overview"]').click();page.evaluate('refresh()')
                 row=page.locator('[data-job="'+identifier+'"]');expect(row).to_contain_text('PC-BROWSER3')
@@ -68,7 +69,7 @@ def run():
                 page.evaluate('refresh()');row.locator('[data-inventory]').click()
                 expect(page.locator('#inventory-directory')).to_have_value(str(data/'inventaires'/'PC-BROWSER3'/identifier))
                 with page.expect_download() as download:
-                    page.get_by_role('button',name='Télécharger Inventaire-Technique.csv',exact=True).click()
+                    page.get_by_role('button',name='Telecharger Inventaire-Technique.csv',exact=True).click()
                 assert Path(download.value.path()).read_bytes()==csv
                 page.screenshot(path='/tmp/atelier3-inventory.png',full_page=True)
                 page.locator('[data-close="inventory-dialog"]').click()
@@ -77,7 +78,7 @@ def run():
                 page.screenshot(path='/tmp/atelier3-mobile.png',full_page=True)
                 assert not errors,errors
                 browser.close()
-            print('ATELIER-3 browser passed: no site authorization, software choices, automatic machine activity, server inventory directory and CSV download; no JavaScript errors.')
+            print('ATELIER-4 browser passed: no site authorization, software choices, automatic machine activity, server inventory directory and CSV download; no JavaScript errors.')
         finally:
             process.terminate();process.wait(timeout=10)
 

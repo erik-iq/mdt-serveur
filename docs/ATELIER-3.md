@@ -1,3 +1,5 @@
+**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont ete retirees du site.
+
 # ATELIER-3 — image Windows, logiciels ensuite et inventaires sur .250
 
 ## Ce qui change

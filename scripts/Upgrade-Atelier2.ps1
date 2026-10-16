@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param(
@@ -21,7 +21,7 @@ $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath
 $config=Get-Content $configPath -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod -Uri ($config.base_url + '/health') -TimeoutSec 10
-if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '3.0') { throw 'La console ne confirme pas la revision ATELIER-3.0.' }
+if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '4.0') { throw 'La console ne confirme pas la revision ATELIER-4.0.' }
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath
 $parameters=@{
     ServerUrl=$config.base_url

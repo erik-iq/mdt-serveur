@@ -1,4 +1,4 @@
-﻿# Functions only. Loading this file never partitions or formats a disk.
+# Functions only. Loading this file never partitions or formats a disk.
 function Get-AtelierVolumeGuid {
     param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$DriveLetter)
     # The storage provider can omit DriveLetter on an ESP. Resolve the actual

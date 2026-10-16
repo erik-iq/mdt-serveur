@@ -22,7 +22,7 @@ def automatic(tmp_path):
 
 
 def discover(client,mac='00:11:22:33:44:55'):
-    return client.post('/api/boot/discover',json={'macs':[mac],'release':'ATELIER-3'})
+    return client.post('/api/boot/discover',json={'macs':[mac],'release':'ATELIER-4'})
 
 
 def test_unknown_machine_enrolls_without_site_authorization_and_can_choose_home_and_disk(automatic):
@@ -139,5 +139,5 @@ def test_hp_tool_download_is_post_windows_and_scoped_to_its_snapshot(automatic):
 def test_old_winpe_is_rejected_before_automatic_enrollment(automatic):
     client,_,_,_=automatic
     response=client.post('/api/boot/discover',json={'macs':['00:11:22:33:44:55']})
-    assert response.status_code==409 and 'ATELIER-3' in response.json()['detail']
+    assert response.status_code==409 and 'ATELIER-4' in response.json()['detail']
     assert client.get('/api/state').json()['machines']==[]

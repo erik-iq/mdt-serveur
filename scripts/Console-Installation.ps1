@@ -1,4 +1,4 @@
-﻿# Functions only: locating an existing console never creates configuration.
+# Functions only: locating an existing console never creates configuration.
 function Resolve-AtelierConsoleInstallation {
     param([string]$InstallPath)
     if ($InstallPath) {

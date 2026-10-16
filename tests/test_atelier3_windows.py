@@ -76,20 +76,20 @@ if(-not(Send-AtelierInventory 'DATA' 'CACHE')){throw 'Changed upload failed'}
 @pytest.mark.parametrize('keep_registered',[True,False])
 def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tmp_path,old_name,keep_registered):
     keep=tmp_path/'WinPE-Atelier3-new';keep.mkdir()
-    (keep/'atelier-winpe.json').write_text('{"release":"ATELIER-3"}')
+    (keep/'atelier-winpe.json').write_text('{"release":"ATELIER-4"}')
     old=tmp_path/old_name;(old/'media'/'sources').mkdir(parents=True);(old/'media'/'sources'/'boot.wim').write_bytes(b'old')
     unrelated=tmp_path/'MDT-WinPE';unrelated.mkdir()
     wrapper=tmp_path/'cleanup.ps1'
     wrapper.write_text("""$ErrorActionPreference='Stop'
 function Import-Module {param($Name)}
 function Get-WdsBootImage {
- if(REGISTERED){[pscustomobject]@{ImageName='Atelier PXE - ATELIER-3 - new';Architecture='x64';FileName='new.wim'}}
+ if(REGISTERED){[pscustomobject]@{ImageName='Atelier PXE - ATELIER-4 - new';Architecture='x64';FileName='new.wim'}}
  [pscustomobject]@{ImageName='Atelier PXE - ATELIER-2 - old';Architecture='x64';FileName='old.wim'}
  [pscustomobject]@{ImageName='MDT Production';Architecture='x64';FileName='mdt.wim'}
 }
 function Get-WindowsImage {param([switch]$Mounted)}
 function wdsutil.exe {Add-Content 'LOG' ($args -join '|');$global:LASTEXITCODE=0}
-& 'SCRIPT' -KeepImageName 'Atelier PXE - ATELIER-3 - new' -KeepOutputPath 'KEEP' -SearchRoots @('ROOT') -Confirm:$false
+& 'SCRIPT' -KeepImageName 'Atelier PXE - ATELIER-4 - new' -KeepOutputPath 'KEEP' -SearchRoots @('ROOT') -Confirm:$false
 """.replace('REGISTERED','$true' if keep_registered else '$false').replace('LOG',ps(tmp_path/'removed')).replace('SCRIPT',ps(ROOT/'scripts'/'Remove-OldAtelierWinPE.ps1')).replace('KEEP',ps(keep)).replace('ROOT',ps(tmp_path)),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=20)
     if not keep_registered:

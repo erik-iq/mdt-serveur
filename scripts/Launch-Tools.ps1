@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 param([string]$DataPath='C:\ProgramData\AtelierPXE')
 $ErrorActionPreference='Stop'
 $mutex=New-Object Threading.Mutex($false,'Local\AtelierPXE-Tools')

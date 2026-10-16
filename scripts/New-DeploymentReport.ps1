@@ -1,13 +1,15 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 param([string]$DataPath='C:\ProgramData\AtelierPXE',[string]$OutputDirectory='C:\IQ_',[switch]$RefreshInventory)
 $ErrorActionPreference='Stop'
 . (Join-Path $DataPath 'Reporting.ps1')
-New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+. (Join-Path $PSScriptRoot 'IQ-Paths.ps1')
+$toolsRoot=$OutputDirectory
+$OutputDirectory=Get-AtelierIQDirectory $toolsRoot 'Rapports'
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
 $payloadPath=Join-Path $DataPath 'personalization.json'
 $payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Raw | ConvertFrom-Json } else { $null }
-$inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { $OutputDirectory }
+$inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
 $csvInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.csv'
 $finalMarker=Join-Path $DataPath 'inventory-finalized.json'
@@ -24,7 +26,7 @@ if ($RefreshInventory -or $refreshFinal -or -not (Test-Path $xmlInventory) -or -
         if ($finalInventory) { @{date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $finalMarker -Encoding UTF8 }
         if ($export.SectionsIndisponibles) { $warnings.Add('Certaines categories de l inventaire technique sont indisponibles ; consulter les etats dans XML/CSV.') }
     } catch {
-        $warnings.Add('Inventaire XML/CSV à régénérer avec Export-Inventaire.cmd.')
+        $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.')
         if ($payload.settings.central_inventory) {
             $inventoryPending=$true
             if (Test-Path $finalMarker) { Remove-Item -LiteralPath $finalMarker -Force }
@@ -59,7 +61,7 @@ try {
     $inventory['Demarrage rapide Windows']=if ($fast -eq 0) { 'Desactive (verifie)' } else { 'Actif' }
     if ($fast -ne 0) { $warnings.Add('Le demarrage rapide Windows est encore actif.') }
 } catch { $inventory['Demarrage rapide Windows']='Non verifie'; $warnings.Add('Reglage du demarrage rapide non verifie.') }
-$license=Read-ReportJson (Join-Path $OutputDirectory 'Licence-Windows.json')
+$license=Read-ReportJson (Get-AtelierIQFile $toolsRoot 'Licence' 'Licence-Windows.json')
 $inventory['Activation Windows']=if ($license) { [string]$license.etat } else { 'INDETERMINE' }
 if (-not $license -or $license.etat -ne 'ACTIVE') { $warnings.Add('Activation Windows a verifier ; aucune cle produit n est collecte ici.') }
 if ($payload.deployment) { $inventory['Profil deploye']=[string]$payload.deployment.profile_name; $inventory['Image / index']=([string]$payload.deployment.image_filename + ' / ' + $payload.deployment.image_index) }
@@ -82,8 +84,10 @@ foreach ($pass in @($maintenance.windows_history)) {
     }
 }
 if ($maintenance.store.status -eq 'requested') { $warnings.Add('Microsoft Store : actualisation demandee, achevement non verifie.') }
-if (-not $maintenance -or $maintenance.status -ne 'completed') { $warnings.Add('Maintenance Windows incomplete ou en attente. Ce rapport peut etre regenere apres la fin.') }
-$hardware=Read-ReportJson (Join-Path $OutputDirectory 'Tests-Materiel.json')
+if (-not $maintenance -or $maintenance.status -notin @('completed','needs_attention')) { $warnings.Add('Maintenance Windows incomplete ou en attente. Ce rapport peut etre regenere apres la fin.') }
+if ($maintenance.windows.status -eq 'deferred') { $warnings.Add(('Windows Update non verifie : ' + $maintenance.windows.message)) }
+if ($maintenance.reboot_required) { $warnings.Add('Redemarrage Windows necessaire ; aucune interruption automatique de votre session.') }
+$hardware=Read-ReportJson (Get-AtelierIQFile $toolsRoot 'Diagnostics' 'Tests-Materiel.json')
 foreach ($test in @($hardware.tests)) {
     if ($test) {
         $steps.Add(@{name=('Test ' + $test.name);status=[string]$test.status;message=[string]$test.comment;timestamp=[string]$hardware.date})
@@ -92,7 +96,7 @@ foreach ($test in @($hardware.tests)) {
     }
 }
 if (-not $hardware) { $warnings.Add('Tests son, webcam et clavier non effectues ou non enregistres.') }
-$warranty=Read-ReportJson (Join-Path $OutputDirectory 'Garantie.json')
+$warranty=Read-ReportJson (Get-AtelierIQFile $toolsRoot 'Garantie' 'Garantie.json')
 if ($warranty) {
     $inventory['Garantie constructeur']=[string]$warranty.statut
     if ($warranty.statut -in @('active_confirmee_operateur','expiree_confirmee_operateur')) {
@@ -101,7 +105,7 @@ if ($warranty) {
         $steps.Add(@{name='Garantie constructeur';status=[string]$warranty.statut;message=('Verification operateur sur ' + $warranty.source_url);timestamp=[string]$warranty.verifie_le})
     } else { $warnings.Add('Garantie constructeur non verifiee.') }
 }
-if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en échec ; consulter software-logs et les étapes du rapport.') }
+if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en echec ; consulter software-logs et les etapes du rapport.') }
 $status=if ($apps.status -eq 'failed') { 'failed' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 if ($steps.Count -gt 230) { $warnings.Add('Historique PDF limite aux 230 dernieres entrees. Les journaux complets restent dans ProgramData.') }

@@ -1,4 +1,4 @@
-﻿# Shared WinPE startup helpers. Never record error messages, invocation text or
+# Shared WinPE startup helpers. Never record error messages, invocation text or
 # session objects: these can contain a boot code, agent token or SMB password.
 function Write-AtelierBootEvent {
     param(

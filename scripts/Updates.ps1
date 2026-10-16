@@ -1,10 +1,11 @@
-﻿# Windows Update engine; injectable COM factories allow testing without changing Windows.
+# Windows Update engine; injectable COM factories allow testing without changing Windows.
 function Invoke-AtelierWindowsUpdates {
     param(
         [scriptblock]$SessionFactory = { New-Object -ComObject Microsoft.Update.Session },
         [scriptblock]$CollectionFactory = { ,(New-Object -ComObject Microsoft.Update.UpdateColl) },
         [scriptblock]$OnProgress = { param($Detail) },
-        [int]$PollMilliseconds = 2000
+        [int]$PollMilliseconds = 2000,
+        [ValidateRange(0,600)][int]$SearchTimeoutSeconds = 90
     )
     $session = & $SessionFactory
     $session.ClientApplicationID = 'Atelier PXE'
@@ -14,8 +15,13 @@ function Invoke-AtelierWindowsUpdates {
         & $OnProgress ([pscustomobject]@{phase=$Phase;percent=$Percent;title=$Title;count=$Count;elapsed_seconds=[int]([DateTime]::UtcNow-$started).TotalSeconds}) | Out-Null
     }
     function Wait-UpdateJob($Job,$Owner,[string]$Phase,$Updates) {
+        $clock=[Diagnostics.Stopwatch]::StartNew()
         try {
             while (-not $Job.IsCompleted) {
+                if ($Phase -eq 'search' -and $SearchTimeoutSeconds -gt 0 -and $clock.Elapsed.TotalSeconds -ge $SearchTimeoutSeconds) {
+                    $Job.RequestAbort()
+                    throw [TimeoutException]::new(('Recherche Windows Update arretee apres ' + $SearchTimeoutSeconds + ' secondes. Verification reportee dans Windows Update.'))
+                }
                 $percent=-1; $title='Recherche dans le service configure (Windows Update / WSUS)'
                 if ($Phase -ne 'search') {
                     $progress=$Job.GetProgress(); $percent=[int]$progress.PercentComplete
@@ -30,11 +36,16 @@ function Invoke-AtelierWindowsUpdates {
                 'download' { return $Owner.EndDownload($Job) }
                 'install' { return $Owner.EndInstall($Job) }
             }
-        } finally { $Job.CleanUp() }
+        } finally {
+            # CleanUp waits for unfinished COM jobs: never reintroduce an unlimited wait.
+            if ($Job.IsCompleted) { $Job.CleanUp() }
+            $clock.Stop()
+        }
     }
     # Respect the configured update service/WSUS. Exclude optional and driver updates.
     $criteria="IsInstalled=0 and IsHidden=0 and Type='Software' and BrowseOnly=0"
-    Publish-UpdateProgress 'search' -1 'Recherche des mises a jour necessaires ; la premiere recherche peut etre longue.'
+    if (-not $searcher.PSObject.Methods['BeginSearch'] -and $SearchTimeoutSeconds -gt 0) { throw 'Recherche asynchrone indisponible ; verification Windows Update reportee.' }
+    Publish-UpdateProgress 'search' -1 ('Recherche des mises a jour necessaires ; limite ' + $SearchTimeoutSeconds + ' secondes.')
     $search = if ($searcher.PSObject.Methods['BeginSearch']) { Wait-UpdateJob ($searcher.BeginSearch($criteria,$null,$null)) $searcher 'search' @() } else { $searcher.Search($criteria) }
     if ([int]$search.ResultCode -ne 2) { throw ('Recherche Windows Update incomplete (resultat ' + $search.ResultCode + ').') }
     $updates = & $CollectionFactory

@@ -1,4 +1,4 @@
-﻿# Run inside the separate WinPE boot image, after wpeinit.
+# Run inside the separate WinPE boot image, after wpeinit.
 param([switch]$TextMode)
 $ErrorActionPreference = 'Stop'
 $bootLog = Join-Path $PSScriptRoot 'Logs\startup.log'
@@ -31,9 +31,9 @@ try {
         Write-AtelierBootEvent -Path $bootLog -Stage Closed
         return
     }
-    Write-Host 'Atelier PXE — déploiement Windows autorisé depuis la console' -ForegroundColor Cyan
-    $id = Read-Host 'Identifiant du déploiement'
-    $secret = Read-Host 'Jeton du déploiement' -AsSecureString
+    Write-Host 'Atelier PXE - deploiement Windows autorise depuis la console' -ForegroundColor Cyan
+    $id = Read-Host 'Identifiant du deploiement'
+    $secret = Read-Host 'Jeton du deploiement' -AsSecureString
     $credential = New-Object PSCredential('deployment', $secret)
     $image = Read-Host 'Chemin du WIM accessible (ex. \\SERVEUR\DeploymentShare$\Operating Systems\Windows11\install.wim)'
     Write-Host 'Si le partage exige une authentification, connectez-le auparavant avec net use, sans enregistrer de mot de passe dans WinPE.'

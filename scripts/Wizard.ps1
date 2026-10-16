@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([Parameter(Mandatory)][psobject]$Config)
@@ -40,14 +40,15 @@ if ($Config.hostname_prefix) {
 $script:macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-',':').ToUpperInvariant() } | Select-Object -Unique)
 $script:root = $Config.server_url.TrimEnd('/')
 $script:share = if ($Config.image_share) { $Config.image_share } else { '\\' + ([Uri]$script:root).Host + '\AtelierImages' }
-$accent = [Drawing.ColorTranslator]::FromHtml('#487868')
-$ink = [Drawing.ColorTranslator]::FromHtml('#18312A')
-$paper = [Drawing.ColorTranslator]::FromHtml('#F5F8F6')
-$muted = [Drawing.ColorTranslator]::FromHtml('#65776F')
+. (Join-Path $PSScriptRoot 'Theme.ps1')
+$accent=Get-AtelierColor 'accent'
+$ink=Get-AtelierColor 'ink'
+$paper=Get-AtelierColor 'paper'
+$muted=Get-AtelierColor 'muted'
 
 function New-Text([string]$Text, [int]$Size = 10, [bool]$Bold = $false) {
     $label = New-Object Windows.Forms.Label
-    $label.Text = $Text; $label.AutoSize = $true
+    $label.Text = $Text; $label.AutoSize = $true; $label.BackColor=[Drawing.Color]::Transparent
     $style = if ($Bold) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
     $label.Font = New-Object Drawing.Font('Segoe UI', $Size, $style)
     $label.ForeColor = $ink; $label.Margin = New-Object Windows.Forms.Padding(0,7,0,7)
@@ -55,10 +56,10 @@ function New-Text([string]$Text, [int]$Size = 10, [bool]$Bold = $false) {
 }
 function New-Button([string]$Text, [bool]$Primary = $false) {
     $button = New-Object Windows.Forms.Button
-    $button.Text = $Text; $button.Width = 150; $button.Height = 40
+    $button.Tag=if ($Primary) { 'primary' } else { '' }; $button.Text = $Text; $button.Width = 150; $button.Height = 40
     $button.FlatStyle = 'Flat'; $button.FlatAppearance.BorderSize = 0
     $button.Font = New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Bold)
-    $button.BackColor = if ($Primary) { $accent } else { [Drawing.ColorTranslator]::FromHtml('#E6EFEA') }
+    $button.BackColor = if ($Primary) { $accent } else { [Drawing.ColorTranslator]::FromHtml('#E9EDF8') }
     $button.ForeColor = if ($Primary) { [Drawing.Color]::White } else { $ink }
     $button.Margin = New-Object Windows.Forms.Padding(8,0,0,0)
     return $button
@@ -154,12 +155,12 @@ function Show-Page {
     foreach ($control in @($script:body.Controls)) { $control.Dispose() }
     $script:body.Controls.Clear(); $script:controls = @{}
     $script:title.Text = $script:steps[$script:page]
-    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Preparez le nom, le clavier et le fuseau horaire.','Choisissez les logiciels à installer après Windows et votre personnalisation.','Verifiez la cible avant de confirmer l installation.','Application de Windows et preparation du premier demarrage.')[$script:page]
+    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Preparez le nom, le clavier et le fuseau horaire.','Choisissez les logiciels a installer apres Windows et votre personnalisation.','Verifiez la cible avant de confirmer l installation.','Application de Windows et preparation du premier demarrage.')[$script:page]
     $script:back.Enabled = $script:page -gt 1 -and -not $script:running
     $script:next.Enabled = -not $script:running
     $script:next.Text = if ($script:page -eq 0) { 'Connexion' } elseif ($script:page -eq 4) { 'Installer Windows' } else { 'Continuer' }
     for ($i=0; $i -lt $script:nav.Count; $i++) {
-        $script:nav[$i].ForeColor = if ($i -eq $script:page) { [Drawing.Color]::White } else { [Drawing.ColorTranslator]::FromHtml('#AEC5BA') }
+        $script:nav[$i].ForeColor = if ($i -eq $script:page) { $accent } else { [Drawing.ColorTranslator]::FromHtml('#657694') }
         $script:nav[$i].Text = ('{0:00}  {1}' -f ($i+1), $script:steps[$i])
     }
     switch ($script:page) {
@@ -190,7 +191,7 @@ function Show-Page {
             Add-Input 'password' 'Mot de passe du partage' '' $true | Out-Null
             Add-Text 'Le mot de passe reste dans la session WinPE ; il ne sera pas copie dans Windows.' | Out-Null
             } else {
-                Add-Text $(if($Config.auto_enroll){'Le poste est enregistré automatiquement. Aucune autorisation préalable sur le site. Le disque sera confirmé ici avant installation.'}else{'Connexion au poste enregistré dans la console.'}) | Out-Null
+                Add-Text $(if($Config.auto_enroll){'Le poste est enregistre automatiquement. Aucune autorisation prealable sur le site. Le disque sera confirme ici avant installation.'}else{'Connexion au poste enregistre dans la console.'}) | Out-Null
             }
         }
         1 {
@@ -225,7 +226,7 @@ function Show-Page {
         }
         3 {
             if ($script:settings.software_mode -eq 'winget') {
-                Add-Text 'Installation silencieuse après le démarrage Windows' 12 $true | Out-Null
+                Add-Text 'Installation silencieuse apres le demarrage Windows' 12 $true | Out-Null
                 foreach ($package in @($script:session.catalog.options.software_packages)) { Add-Check ('winget-' + $package.id) $package.name ($package.id -in @($script:settings.winget_packages)) }
             } else {
             Add-Text 'Bundles' 12 $true | Out-Null
@@ -248,7 +249,7 @@ function Show-Page {
             if ($Config.auto_enroll) {
                 $disks=@(Get-Disk | Where-Object { -not $_.IsBoot -and -not $_.IsSystem -and -not $_.IsOffline -and -not $_.IsReadOnly -and $_.BusType -ne 'USB' -and $_.Size -ge 64GB })
                 if (-not $disks.Count) { throw 'Aucun disque interne compatible disponible.' }
-                Add-Choice 'target_disk' 'Disque à effacer et installer' @($disks | ForEach-Object { [pscustomobject]@{id=[string]$_.Number;name=('Disque ' + $_.Number + ' | ' + $_.FriendlyName + ' | ' + [math]::Round($_.Size/1GB) + ' Go | SN ' + $_.SerialNumber)} }) ([string]$script:session.plan.disk_number) | Out-Null
+                Add-Choice 'target_disk' 'Disque a effacer et installer' @($disks | ForEach-Object { [pscustomobject]@{id=[string]$_.Number;name=('Disque ' + $_.Number + ' | ' + $_.FriendlyName + ' | ' + [math]::Round($_.Size/1GB) + ' Go | SN ' + $_.SerialNumber)} }) ([string]$script:session.plan.disk_number) | Out-Null
             }
 
             Add-Text ($script:selectedProfile.name + ' -> ' + $script:targetName) 16 $true | Out-Null
@@ -269,6 +270,7 @@ function Show-Page {
             $script:progress = New-Object Windows.Forms.ProgressBar
             $script:progress.Width = $script:body.ClientSize.Width - 28; $script:progress.Height = 22
             $script:body.Controls.Add($script:progress)
+            Set-AtelierProgressTheme $script:progress
             $script:logs = New-Object Windows.Forms.TextBox
             $script:logs.Multiline = $true; $script:logs.ReadOnly = $true; $script:logs.ScrollBars = 'Vertical'
             $script:logs.Width = $script:body.ClientSize.Width - 28; $script:logs.Height = 250
@@ -329,7 +331,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'Atelier PXE | Assistant Windows | ' + $Config.boot_release
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.ClientSize = New-Object Drawing.Size(([math]::Min(980,$bounds.Width-30)),([math]::Min(690,$bounds.Height-50)))
@@ -341,9 +343,10 @@ $layout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.Si
 $form.Controls.Add($layout)
 $sidebar = New-Object Windows.Forms.FlowLayoutPanel
 $sidebar.Dock = 'Fill'; $sidebar.FlowDirection = 'TopDown'; $sidebar.WrapContents = $false
-$sidebar.BackColor = $ink; $sidebar.Padding = New-Object Windows.Forms.Padding(18,26,8,0)
-$brand = New-Text 'atelier / PXE' 19 $true; $brand.ForeColor = [Drawing.Color]::White; $sidebar.Controls.Add($brand)
-$tag = New-Text 'ASSISTANT WINDOWS' 8; $tag.ForeColor = [Drawing.ColorTranslator]::FromHtml('#AEC5BA'); $tag.Margin = New-Object Windows.Forms.Padding(0,0,0,30); $sidebar.Controls.Add($tag)
+$sidebar.BackColor = Get-AtelierColor 'blue'; $sidebar.Padding = New-Object Windows.Forms.Padding(18,26,8,0)
+$sidebar.Controls.Add((New-AtelierLogo))
+$brand = New-Text 'IQ Atelier' 19 $true; $sidebar.Controls.Add($brand)
+$tag = New-Text 'ASSISTANT WINDOWS' 8; $tag.ForeColor = [Drawing.ColorTranslator]::FromHtml('#657694'); $tag.Margin = New-Object Windows.Forms.Padding(0,0,0,30); $sidebar.Controls.Add($tag)
 $script:nav = @()
 foreach ($name in $script:steps) { $item=New-Text $name 10; $item.Margin=New-Object Windows.Forms.Padding(0,12,0,12); $sidebar.Controls.Add($item); $script:nav += $item }
 $layout.Controls.Add($sidebar,0,0)
@@ -355,11 +358,14 @@ $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]:
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,44))) | Out-Null
 $layout.Controls.Add($main,1,0)
 $header = New-Object Windows.Forms.FlowLayoutPanel
+Set-AtelierGradient $header
 $header.Dock='Fill';$header.FlowDirection='TopDown';$header.WrapContents=$false
 $script:title = New-Text 'Connexion' 25 $true; $header.Controls.Add($script:title)
 $script:description = New-Text '' 9; $script:description.ForeColor=$muted; $header.Controls.Add($script:description)
 $main.Controls.Add($header,0,0)
 $script:body = New-Object Windows.Forms.FlowLayoutPanel
+$script:body.BackColor=Get-AtelierColor 'surface'
+$script:body.Padding=New-Object Windows.Forms.Padding(12,8,0,8)
 $script:body.Dock='Fill';$script:body.FlowDirection='TopDown';$script:body.WrapContents=$false;$script:body.AutoScroll=$true
 $main.Controls.Add($script:body,0,1)
 $script:status = New-Text 'Ethernet / UEFI x64 / installation supervisee' 9

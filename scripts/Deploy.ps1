@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ServerUrl,
@@ -30,49 +30,47 @@ function Send-Event([string]$Status, [int]$Percent, [string]$Message) {
 }
 function Run-Checked([string]$Executable, [string[]]$Arguments) {
     & $Executable @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "$Executable a retourné le code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "$Executable a retourne le code $LASTEXITCODE" }
 }
 function Assert-Active {
     $current = Invoke-RestMethod -Uri "$endpoint/plan" -Headers $headers
-    if ($current.status -ne 'running') { throw 'Le déploiement n''est plus actif.' }
+    if ($current.status -ne 'running') { throw 'Le deploiement n''est plus actif.' }
 }
 
 try {
     if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Cet agent fonctionne uniquement dans WinPE.' }
     $uri = [Uri]$ServerUrl
-    if ($uri.Scheme -ne 'https' -and -not ($AllowHttpForLab -and $uri.Scheme -eq 'http')) { throw 'HTTPS requis. HTTP est réservé au laboratoire avec -AllowHttpForLab.' }
+    if ($uri.Scheme -ne 'https' -and -not ($AllowHttpForLab -and $uri.Scheme -eq 'http')) { throw 'HTTPS requis. HTTP est reserve au laboratoire avec -AllowHttpForLab.' }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $mutex = New-Object Threading.Mutex($false, 'Global\AtelierPXE-Deployment')
     $ownsMutex = $mutex.WaitOne(0)
-    if (-not $ownsMutex) { throw 'Un autre agent est déjà actif sur ce poste.' }
+    if (-not $ownsMutex) { throw 'Un autre agent est deja actif sur ce poste.' }
     $plan = Invoke-RestMethod -Uri "$endpoint/plan" -Headers $headers
-    if ($plan.status -ne 'queued') { throw 'Ce déploiement a déjà été commencé ; créez une nouvelle autorisation après diagnostic.' }
+    if ($plan.status -ne 'queued') { throw 'Ce deploiement a deja ete commence ; creez une nouvelle autorisation apres diagnostic.' }
     $macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-', ':').ToUpperInvariant() })
-    if ($plan.mac -notin $macs) { throw 'L''adresse MAC du poste ne correspond pas à la machine autorisée.' }
+    if ($plan.mac -notin $macs) { throw 'L''adresse MAC du poste ne correspond pas a la machine autorisee.' }
     Run-Checked 'wpeutil.exe' @('UpdateBootInfo')
     $firmware = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name PEFirmwareType).PEFirmwareType
-    if ($firmware -ne 2) { throw 'Le déploiement nécessite un démarrage UEFI (BIOS legacy non pris en charge).' }
+    if ($firmware -ne 2) { throw 'Le deploiement necessite un demarrage UEFI (BIOS legacy non pris en charge).' }
     $disk = Get-Disk -Number $plan.disk_number
-    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly -or $disk.BusType -eq 'USB') { throw 'Disque système, USB, hors ligne ou en lecture seule : opération refusée.' }
+    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly -or $disk.BusType -eq 'USB') { throw 'Disque systeme, USB, hors ligne ou en lecture seule : operation refusee.' }
     if ($disk.Size -lt 64GB) { throw 'Un disque de 64 Go minimum est requis.' }
     foreach ($letter in @('S','W','R')) {
-        if (Test-Path "${letter}:\") { throw "La lettre $letter est occupée. Libérez-la avant le déploiement." }
+        if (Test-Path "${letter}:\") { throw "La lettre $letter est occupee. Liberez-la avant le deploiement." }
     }
     $source = Get-Item -LiteralPath $ImagePath
-    if ($source.PSIsContainer -or $source.Length -ne $plan.image_size -or $source.Extension -ne '.wim') { throw 'La source doit être le fichier WIM enregistré dans la console.' }
+    if ($source.PSIsContainer -or ($source.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $source.Name -ne $plan.image_filename -or $source.Length -ne $plan.image_size -or $source.Extension -ne '.wim') { throw 'La source doit etre le fichier WIM enregistre dans la console.' }
     if ($source.FullName -notmatch '^\\\\') {
         $sourceDisk = Get-Partition -DriveLetter $source.FullName.Substring(0,1) | Get-Disk
-        if ($sourceDisk.Number -eq $disk.Number) { throw 'L''image source se trouve sur le disque à effacer.' }
+        if ($sourceDisk.Number -eq $disk.Number) { throw 'L''image source se trouve sur le disque a effacer.' }
     }
     $claim = Invoke-RestMethod -Uri "$endpoint/claim" -Method Post -Headers $headers
     $started = $true
     if (-not $claim.report_token -or -not $claim.report_expires) { throw 'Mettre a jour la console ATELIER-2 avant de deployer cette image WinPE. Aucun disque efface.' }
-    Send-Event 'running' 5 'Agent WinPE identifié ; contrôle de l''image source'
-    # One full WIM hash: keep a read-only lock from validation through DISM.
-    # Denying writes/deletion avoids a second multi-gigabyte read over SMB.
+    Send-Event 'running' 5 'Agent WinPE identifie ; controle de l''image source'
+    # The server hashes at registration. Avoid rereading the whole WIM over SMB.
+    # Keep the source immutable through metadata validation and DISM application.
     $imageLock = [IO.File]::Open($source.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-    $checksum = (Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
-    if ($checksum -ne $plan.image_sha256) { throw 'Le SHA-256 de l''image ne correspond pas au profil autorisé.' }
     # DismCmdlets rejects a missing edition/index before touching the disk.
     $edition = Get-WindowsImage -ImagePath $source.FullName -Index $plan.image_index
     if ($edition.Architecture -ne 9) { throw 'Une image Windows x64 est requise.' }
@@ -98,18 +96,18 @@ try {
     Assert-AtelierUnattendContent -Content $unattend
     Write-Host "IMAGE : $($edition.ImageName)"
     Write-Host "CIBLE : $($plan.hostname) / $($plan.mac)"
-    Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / série $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
-    Write-Host 'Toutes les partitions de ce disque seront supprimées.' -ForegroundColor Red
+    Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / serie $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
+    Write-Host 'Toutes les partitions de ce disque seront supprimees.' -ForegroundColor Red
     $expected = "EFFACER $($plan.hostname) DISQUE $($disk.Number)"
     $confirmation = if ($StartFromWizard -and $plan.internal_mode) { $expected } elseif ($LocalConfirmation) { $LocalConfirmation } else { Read-Host "Tapez exactement : $expected" }
-    if ($confirmation -cne $expected) { throw 'Confirmation locale refusée ; aucun disque effacé.' }
+    if ($confirmation -cne $expected) { throw 'Confirmation locale refusee ; aucun disque efface.' }
     Assert-Active
     # Hold the source open for read and disallow writes/deletion during apply.
     try {
-        Send-Event 'running' 20 'Image vérifiée ; création des partitions UEFI/GPT'
+        Send-Event 'running' 20 'Image verifiee ; creation des partitions UEFI/GPT'
         Assert-Active
         $currentDisk = Get-Disk -Number $plan.disk_number
-        if ($currentDisk.UniqueId -ne $disk.UniqueId -or $currentDisk.Size -ne $disk.Size) { throw 'L''identité du disque a changé.' }
+        if ($currentDisk.UniqueId -ne $disk.UniqueId -or $currentDisk.Size -ne $disk.Size) { throw 'L''identite du disque a change.' }
         $partitionScript = @"
 select disk $($plan.disk_number)
 clean
@@ -138,12 +136,12 @@ exit
         Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
     } finally { if ($imageLock) { $imageLock.Dispose(); $imageLock=$null } }
     Assert-Active
-    Send-Event 'running' 80 'Configuration du nom du poste et du démarrage UEFI'
+    Send-Event 'running' 80 'Configuration du nom du poste et du demarrage UEFI'
     $payloadPath = 'W:\ProgramData\AtelierPXE'
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
     $publicRoot=Join-Path $PSScriptRoot 'trusted-root.cer'
     if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
@@ -180,12 +178,12 @@ exit
     Assert-Active
     Assert-AtelierUnattendFile -Path $answer.path -ExpectedHash $answer.sha256
     Assert-AtelierUnattendFile -Path $answerBackup.path -ExpectedHash $answerBackup.sha256
-    Send-Event 'staged' 100 'Image appliquée. Les logiciels seront téléchargés et installés silencieusement après le démarrage Windows.'
-    Write-Host 'Installation préparée. Vérifiez le journal, puis redémarrez avec wpeutil reboot. Le premier démarrage Windows reste à contrôler.' -ForegroundColor Green
+    Send-Event 'staged' 100 'Image appliquee. Les logiciels seront telecharges et installes silencieusement apres le demarrage Windows.'
+    Write-Host 'Installation preparee. Verifiez le journal, puis redemarrez avec wpeutil reboot. Le premier demarrage Windows reste a controler.' -ForegroundColor Green
 } catch {
     $failure = $_
     if ($started) {
-        try { Send-Event 'failed' $lastProgress $failure.Exception.Message } catch { Write-Warning 'Impossible de transmettre l''échec à la console.' }
+        try { Send-Event 'failed' $lastProgress $failure.Exception.Message } catch { Write-Warning 'Impossible de transmettre l''echec a la console.' }
     }
     Write-Error $failure -ErrorAction Continue
     exit 1

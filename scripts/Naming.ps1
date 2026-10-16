@@ -1,4 +1,4 @@
-﻿# Functions only: deterministic names from the BIOS serial number, no disk changes.
+# Functions only: deterministic names from the BIOS serial number, no disk changes.
 function Get-AtelierComputerName {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$SerialNumber,

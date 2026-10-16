@@ -42,7 +42,7 @@ def test_unattend_settings_escaping_and_first_logon_without_credentials(tmp_path
     assert document.find('.//u:UserLocale', NS).text == 'fr-CH'
     registered = document.find('.//u:RegisteredOwner', NS)
     assert (registered.text if registered is not None else '') == owner
-    assert 'C:\\ProgramData\\AtelierPXE\\FirstLogon.ps1' in document.find('.//u:CommandLine', NS).text
+    assert 'C:\\ProgramData\\AtelierPXE\\Start-Preparation.ps1' in document.find('.//u:CommandLine', NS).text
     assert '-WindowStyle Hidden' in document.find('.//u:CommandLine', NS).text
     # Interactive OOBE also runs the universal Fast Startup configuration.
     assert 'Prepare-Windows.ps1' in document.find('.//u:RunSynchronousCommand/u:Path', NS).text

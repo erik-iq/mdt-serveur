@@ -166,3 +166,12 @@ catch {{ @{{rejected=$true}} | ConvertTo-Json }}
 """)
     assert result['rejected'] is True
     assert not list(actual.iterdir())
+
+
+def test_offline_repair_keeps_background_launcher_when_payload_has_it(tmp_path):
+    windows, answer, payload, backup = fixture(tmp_path)
+    (payload/'Start-Preparation.ps1').write_text("Write-Output 'Fixture launcher'")
+    result=repair(tmp_path, windows, backup)
+    assert result['success'] is True, result
+    document=ET.fromstring(answer.read_bytes())
+    assert document.find('.//u:CommandLine', NS).text.endswith('Start-Preparation.ps1"')

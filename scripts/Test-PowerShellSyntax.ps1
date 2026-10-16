@@ -1,4 +1,4 @@
-﻿param([string]$ScriptsPath = $PSScriptRoot)
+param([string]$ScriptsPath = $PSScriptRoot)
 $ErrorActionPreference = 'Stop'
 $count = 0
 foreach ($file in Get-ChildItem $ScriptsPath -Filter '*.ps1') {

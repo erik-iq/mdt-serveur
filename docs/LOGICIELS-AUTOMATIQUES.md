@@ -1,3 +1,5 @@
+**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont ete retirees du site.
+
 # Actualiser les logiciels et exporter l’inventaire
 
 La révision **ATELIER-2.1** permet de récupérer les installateurs depuis le catalogue Microsoft WinGet et d’actualiser les logiciels d’Atelier sans modifier les bundles qui les utilisent. Elle ajoute aussi l’inventaire technique XML et CSV dans `C:\IQ_`.

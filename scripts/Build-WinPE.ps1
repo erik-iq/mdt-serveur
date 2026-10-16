@@ -1,4 +1,4 @@
-﻿#requires -RunAsAdministrator
+#requires -RunAsAdministrator
 #requires -Version 5.1
 [CmdletBinding()]
 param(
@@ -16,14 +16,14 @@ $ErrorActionPreference = 'Stop'
 $uri = [Uri]$ServerUrl
 if ($uri.Scheme -ne 'https' -and -not ($AllowHttpForLab -and $uri.Scheme -eq 'http')) { throw 'Utilisez HTTPS, ou -AllowHttpForLab uniquement en laboratoire.' }
 if ($uri.UserInfo -or $uri.Query -or $uri.Fragment -or $uri.AbsolutePath -ne '/') { throw 'URL du serveur invalide.' }
-if (Test-Path $OutputPath) { throw 'Le dossier de sortie existe déjà. Utilisez un nouveau chemin pour préserver vos fichiers.' }
+if (Test-Path $OutputPath) { throw 'Le dossier de sortie existe deja. Utilisez un nouveau chemin pour preserver vos fichiers.' }
 $adk = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit"
 $peRoot = Join-Path $adk 'Windows Preinstallation Environment'
 $envScript = Join-Path $adk 'Deployment Tools\DandISetEnv.bat'
 $copype = Join-Path $peRoot 'copype.cmd'
 $oc = Join-Path $peRoot 'amd64\WinPE_OCs'
-foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complémentaire WinPE absent : $path" } }
-foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','atelier.cmd')) {
+foreach ($path in @($envScript, $copype, $oc)) { if (-not (Test-Path $path)) { throw "ADK ou module complementaire WinPE absent : $path" } }
+foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png','atelier.cmd')) {
     if (-not (Test-Path (Join-Path $PSScriptRoot $script))) { throw "Mettez a jour tous les fichiers du projet avant la construction : $script absent." }
 }
 if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
@@ -32,7 +32,7 @@ if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { thro
 # Both batch files must run in the same process to retain the ADK environment.
 $copyArguments = '/d /s /c "call "{0}" && call "{1}" amd64 "{2}""' -f $envScript, $copype, $OutputPath
 $copyProcess = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgumentList $copyArguments -NoNewWindow -Wait -PassThru
-if ($copyProcess.ExitCode -ne 0) { throw "Échec de copype (code $($copyProcess.ExitCode))." }
+if ($copyProcess.ExitCode -ne 0) { throw "Echec de copype (code $($copyProcess.ExitCode))." }
 $mount = Join-Path $OutputPath 'mount'
 $wim = Join-Path $OutputPath 'media\sources\boot.wim'
 $mounted = $false
@@ -47,7 +47,7 @@ try {
     if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
     $target = Join-Path $mount 'Atelier'
     New-Item -ItemType Directory -Path $target | Out-Null
-    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1')) {
+    foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) {
         Copy-Item (Join-Path $PSScriptRoot $script) -Destination $target
     }
     # GitHub source archives can use LF. Always write a Windows batch file.
@@ -55,19 +55,19 @@ try {
     Set-Content (Join-Path $mount 'Windows\System32\atelier.cmd') -Value $recoveryMenu -Encoding ASCII
     if ($TrustedRootCertificate) {
         $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($TrustedRootCertificate)
-        if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorité de confiance.' }
+        if ($certificate.HasPrivateKey -or $TrustedRootCertificate -notmatch '\.cer$') { throw 'Fournissez uniquement le certificat racine public .cer de votre autorite de confiance.' }
         Copy-Item $TrustedRootCertificate (Join-Path $target 'trusted-root.cer')
     }
     $internalMode = $false
     $runtimeConfig = $null
     $runtimePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'data-runtime.json'
     if (Test-Path $runtimePath) { $runtimeConfig = Get-Content $runtimePath -Raw | ConvertFrom-Json; $internalMode = [bool]$runtimeConfig.internal_mode }
-    @{auto_enroll=[bool]$runtimeConfig.auto_enroll;hostname_prefix=$runtimeConfig.hostname_prefix;hostname_suffix_mode=$runtimeConfig.hostname_suffix_mode;internal_mode=$internalMode; server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='ATELIER-3'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
+    @{auto_enroll=[bool]$runtimeConfig.auto_enroll;hostname_prefix=$runtimeConfig.hostname_prefix;hostname_suffix_mode=$runtimeConfig.hostname_suffix_mode;internal_mode=$internalMode; server_url=$ServerUrl.TrimEnd('/'); allow_http_for_lab=[bool]$AllowHttpForLab; image_share=('\\' + $uri.Host + '\AtelierImages'); share_account=($env:COMPUTERNAME + '\DeployRead'); winpe_keyboard_layout=$WinPEKeyboardLayout; boot_release='ATELIER-4'; built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $target 'config.json') -Encoding UTF8
     # Each relaunch uses a new STA process; no credentials on its command line.
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
-    @{release='ATELIER-3';server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
+    @{release='ATELIER-4';server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
 } finally {
     if ($mounted) { Dismount-WindowsImage -Path $mount -Discard | Out-Null }
 }
@@ -76,4 +76,4 @@ if ($ImportIntoWds) {
     Import-WdsBootImage -Path $wim -NewImageName $WdsImageName | Out-Null
 }
 Write-Host "Image WinPE : $wim"
-Write-Host 'Testez une machine UEFI de laboratoire avant toute installation en production. Les images et séquences MDT existantes restent indépendantes.'
+Write-Host 'Testez une machine UEFI de laboratoire avant toute installation en production. Les images et sequences MDT existantes restent independantes.'

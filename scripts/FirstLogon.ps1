@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
@@ -23,18 +23,9 @@ function Start-Maintenance {
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Action $action -Trigger $triggers -Principal $principal -Settings $taskSettings -Force | Out-Null
-    if ($payload.settings.unattended) {
-        # Bounded automatic sessions allow continuation after update reboots.
-        $winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
-        foreach ($entry in @{AutoAdminLogon='1';DefaultUserName='Administrateur';DefaultDomainName=$env:COMPUTERNAME;DefaultPassword=''}.GetEnumerator()) {
-            New-ItemProperty $winlogon -Name $entry.Key -Value $entry.Value -PropertyType String -Force | Out-Null
-        }
-        New-ItemProperty $winlogon -Name AutoLogonCount -Value 5 -PropertyType DWord -Force | Out-Null
-        $sid = (Get-LocalUser -Name 'Administrateur').SID.Value
-        $uiAction = New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"')
-        $uiPrincipal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
-        Register-ScheduledTask -TaskName 'AtelierPXE-Progress' -Action $uiAction -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $sid) -Principal $uiPrincipal -Force | Out-Null
-    }
+    # Maintenance runs in SYSTEM; the open desktop remains available throughout.
+    . (Join-Path $DataPath 'Updates.ps1')
+    Disable-AtelierAutoLogon
     $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $toolsAction=New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Launch-Tools.ps1') + '"')
     $toolsPrincipal=New-ScheduledTaskPrincipal -UserId $userSid -LogonType Interactive -RunLevel Highest
@@ -42,6 +33,7 @@ function Start-Maintenance {
     Register-ScheduledTask -TaskName 'AtelierPXE-Tools' -Action $toolsAction -Trigger $toolsTriggers -Principal $toolsPrincipal -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew) -Force | Out-Null
     Set-Progress 'running' 75 'Logiciels et bureau prepares. Les mises a jour vont commencer...'
     Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
+    Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 
@@ -90,6 +82,9 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
 }
 
 try {
+    # This task is detached from OOBE. Wait for Explorer without blocking sign-in.
+    $desktopDeadline=(Get-Date).AddSeconds(60)
+    while (-not (Get-Process explorer -ErrorAction SilentlyContinue) -and (Get-Date) -lt $desktopDeadline) { Start-Sleep -Seconds 1 }
     Initialize-AtelierReportTrust -DataPath $DataPath
     if ($previous -and $previous.status -eq 'completed') { Start-Maintenance; return }
     Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
@@ -134,7 +129,7 @@ try {
         foreach ($tool in @($payload.tools)) {
             if (-not $tool -or -not (Test-AtelierManufacturer $tool.manufacturer $manufacturer)) { continue }
             try {
-                Set-Progress 'running' 58 ('Téléchargement de l outil constructeur : ' + $tool.name)
+                Set-Progress 'running' 58 ('Telechargement de l outil constructeur : ' + $tool.name)
                 $folder=Join-Path $DataPath 'Packages'
                 New-Item -ItemType Directory -Path $folder -Force | Out-Null
                 $target=Join-Path $folder $tool.asset.filename
@@ -144,7 +139,7 @@ try {
                 }
                 Assert-FileHash $target $tool.asset.sha256
                 $applicationsToPrepare += $tool
-            } catch { if ($target -and (Test-Path $target)) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue };$results.Add(@{name=$tool.name;status='failed';reason='Outil constructeur à préparer manuellement ; consulter first-logon.log.'});Write-Trace $_.Exception.Message }
+            } catch { if ($target -and (Test-Path $target)) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue };$results.Add(@{name=$tool.name;status='failed';reason='Outil constructeur a preparer manuellement ; consulter first-logon.log.'});Write-Trace $_.Exception.Message }
         }
     }
     foreach ($application in $applicationsToPrepare) {
@@ -203,14 +198,7 @@ try {
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'ready-tools.json') -Content (ConvertTo-Json -InputObject @($readyTools.ToArray()) -Depth 4) -NoBackup | Out-Null
     Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
-    if ($payload.settings.central_inventory) {
-        $cache=Join-Path $DataPath 'Inventory'
-        try {
-            & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $cache | Out-Null
-            . (Join-Path $DataPath 'Inventory-Transfer.ps1')
-            Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $cache | Out-Null
-        } catch { Write-Trace 'Inventaire à reprendre après les mises à jour Windows.' }
-    }
+    # Export once at finalization, after software and updates; no duplicate CIM scan.
     $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { 'completed' }
     @{status='completed';software_status=$softwareStatus; timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
     Start-Maintenance

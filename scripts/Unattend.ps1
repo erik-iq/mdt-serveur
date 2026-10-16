@@ -1,4 +1,4 @@
-﻿# Functions only: safe to load for XML validation without executing Windows setup.
+# Functions only: safe to load for XML validation without executing Windows setup.
 function New-AtelierUnattend {
     param([Parameter(Mandatory)][psobject]$Plan)
     $settings = $Plan.settings
@@ -53,8 +53,8 @@ $prepare
    $automatic
    <FirstLogonCommands>
     <SynchronousCommand xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" wcm:action="add">
-     <Order>1</Order><Description>Atelier PXE - logiciels et personnalisation</Description>
-     <CommandLine>powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\FirstLogon.ps1"</CommandLine>
+     <Order>1</Order><Description>Atelier PXE - preparation en arriere-plan</Description>
+     <CommandLine>powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\ProgramData\AtelierPXE\Start-Preparation.ps1"</CommandLine>
     </SynchronousCommand>
    </FirstLogonCommands>
   </component>
@@ -172,7 +172,10 @@ function Repair-AtelierOfflineUnattend {
     if ([IO.File]::GetAttributes($payloadFile) -band [IO.FileAttributes]::ReparsePoint) { throw 'Le fichier de personnalisation est un lien.' }
     $payload = [IO.File]::ReadAllText($payloadFile) | ConvertFrom-Json -ErrorAction Stop
     if (-not $payload.settings -or -not $payload.settings.keyboard -or -not $payload.settings.timezone -or -not $payload.settings.user_locale) { throw 'Parametres de personnalisation incomplets.' }
-    foreach ($name in @('FirstLogon.ps1','Unattend.ps1')) {
+    $requiredScripts=@('FirstLogon.ps1','Unattend.ps1')
+    $hasLauncher=[IO.File]::Exists([IO.Path]::Combine($payloadPath,'Start-Preparation.ps1'))
+    if ($hasLauncher) { $requiredScripts+='Start-Preparation.ps1' }
+    foreach ($name in $requiredScripts) {
         $scriptPath = [IO.Path]::Combine($payloadPath,$name)
         if (-not [IO.File]::Exists($scriptPath)) { throw "Script de premier demarrage absent : $name" }
         if ([IO.File]::GetAttributes($scriptPath) -band [IO.FileAttributes]::ReparsePoint) { throw "Script de premier demarrage lie : $name" }
@@ -184,6 +187,8 @@ function Repair-AtelierOfflineUnattend {
     }
     $plan = [pscustomobject]@{hostname=$ComputerName;locale=$Locale;settings=$payload.settings}
     $xml = New-AtelierUnattend -Plan $plan
+    # Repair old deployed payloads without referencing a launcher they do not have.
+    if (-not $hasLauncher) { $xml=$xml.Replace('Start-Preparation.ps1','FirstLogon.ps1') }
     Assert-AtelierUnattendContent -Content $xml
     if (-not [IO.Directory]::Exists($BackupDirectory)) { throw 'Le dossier prive de sauvegarde doit exister avant la reparation.' }
     $backupPath = [IO.Path]::Combine($BackupDirectory,'unattend.original.bin')

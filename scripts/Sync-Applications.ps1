@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$InstallPath,[string[]]$Packages=@('vlc','reader','chrome','anydesk'),[hashtable]$ApplicationBindings=@{},[string[]]$BundleIds=@(),[string]$WebJobId,[string]$WorkerId,[string]$SourcesPath=(Join-Path $PSScriptRoot 'software-sources.json'))
@@ -43,7 +43,7 @@ try { $locked=$mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $l
 if (-not $locked) { $mutex.Dispose(); throw 'Une synchronisation logicielle est deja active.' }
 try {
     $state=Invoke-SoftwareApi '/state'
-    if (-not $WebJobId -and $state.software_sync.job.status -in @('queued','running')) { throw 'Une demande du bouton WinGet est déjà en cours. Attendre son résultat avant une commande manuelle.' }
+    if (-not $WebJobId -and $state.software_sync.job.status -in @('queued','running')) { throw 'Une demande du bouton WinGet est deja en cours. Attendre son resultat avant une commande manuelle.' }
     if (@($state.deployments | Where-Object { $_.status -in @('queued','running') }).Count) { throw 'Terminer ou annuler les autorisations WinPE actives avant la synchronisation.' }
     $directory=Join-Path $config.data_dir 'software-sync'
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
@@ -51,19 +51,19 @@ try {
     if (Test-Path $bindingPath) { (Get-Content $bindingPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $bindings[$_.Name]=[string]$_.Value } }
     foreach ($entry in $ApplicationBindings.GetEnumerator()) { $bindings[$entry.Key]=$entry.Value }
     $results=@();$bundleResults=@();$completed=0
-    Send-SoftwareProgress 0 'Préparation du catalogue'
+    Send-SoftwareProgress 0 'Preparation du catalogue'
     foreach ($key in $Packages) {
         $source=$sources | Where-Object { $_.key -eq $key }
         $staging=Join-Path $directory ([guid]::NewGuid().ToString('N'))
         try {
-            Send-SoftwareProgress ([int](90*$completed/$Packages.Count)) ('Recherche et téléchargement : ' + $source.name)
+            Send-SoftwareProgress ([int](90*$completed/$Packages.Count)) ('Recherche et telechargement : ' + $source.name)
             $state=Invoke-SoftwareApi '/state'
             $existing=Find-AtelierSoftwareBinding $state $source $bindings[$key]
             New-Item -ItemType Directory -Path $staging | Out-Null
             $arguments=@('download','--id',$source.winget_id,'--exact','--source','winget','--architecture',$source.architecture,'--installer-type',$source.installer_type,'--scope','machine','--download-directory',$staging,'--accept-source-agreements','--accept-package-agreements','--disable-interactivity')
             Write-Host ('Recherche et telechargement de ' + $source.name + '...')
             Invoke-AtelierWinGetDownload -Executable $winget.Source -Arguments $arguments
-            Send-SoftwareProgress ([int](90*($completed+0.6)/$Packages.Count)) ('Vérification de la signature et du SHA-256 : ' + $source.name)
+            Send-SoftwareProgress ([int](90*($completed+0.6)/$Packages.Count)) ('Verification de la signature et du SHA-256 : ' + $source.name)
             $download=Get-AtelierDownloadedInstaller $staging $source
             $safeVersion=$download.version -replace '[^A-Za-z0-9._-]', '_'
             $filename=$key + '-' + $safeVersion + '-' + $download.sha256.Substring(0,16) + $source.extension
@@ -71,7 +71,7 @@ try {
             if (Test-Path -LiteralPath $target) {
                 if ((Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $download.sha256) { throw 'Un fichier existant different occupe le nom de destination.' }
             } else { Move-Item -LiteralPath $download.path -Destination $target }
-            Send-SoftwareProgress ([int](90*($completed+0.8)/$Packages.Count)) ('Mise à jour du catalogue : ' + $source.name)
+            Send-SoftwareProgress ([int](90*($completed+0.8)/$Packages.Count)) ('Mise a jour du catalogue : ' + $source.name)
             $asset=@($state.assets | Where-Object { $_.filename -eq $filename }) | Select-Object -First 1
             if (-not $asset) { $asset=Invoke-SoftwareApi '/assets' 'POST' @{filename=$filename;kind='application'} }
             $name=if ($existing) { $existing.name } else { $source.name }
@@ -90,8 +90,8 @@ try {
     $successful=@($results | Where-Object { $_.status -ne 'failed' } | ForEach-Object { $_.application_id })
     foreach ($bundleId in @($BundleIds | Select-Object -Unique)) {
         try {
-            Send-SoftwareProgress 95 'Application des logiciels vérifiés aux bundles sélectionnés'
-            if (-not $successful.Count) { throw 'Aucun logiciel vérifié à ajouter.' }
+            Send-SoftwareProgress 95 'Application des logiciels verifies aux bundles selectionnes'
+            if (-not $successful.Count) { throw 'Aucun logiciel verifie a ajouter.' }
             $bundle=Invoke-SoftwareApi ('/bundles/' + $bundleId + '/applications') 'POST' @{application_ids=$successful}
             $bundleResults+=@{id=$bundleId;name=$bundle.name;status='updated';application_ids=$successful}
         } catch { $bundleResults+=@{id=$bundleId;status='failed';message=$_.Exception.Message};Write-Warning $_.Exception.Message }

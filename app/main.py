@@ -58,7 +58,7 @@ class MachineInput(BaseModel):
         if not re.fullmatch(r"[0-9A-F]{2}(:[0-9A-F]{2}){5}", value):
             raise ValueError("Adresse MAC invalide")
         if int(value[:2], 16) & 1 or value == "00:00:00:00:00:00":
-            raise ValueError("Une adresse MAC unicast est nécessaire")
+            raise ValueError("Une adresse MAC unicast est necessaire")
         return value
 
 
@@ -97,7 +97,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     client_apps = client_software if client_software is not None else os.getenv('MDT_CLIENT_SOFTWARE', '') == '1'
     enrollment = auto_enroll if auto_enroll is not None else os.getenv('MDT_AUTO_ENROLL', '') == '1'
     if enrollment and not internal:
-        raise ValueError('L’arrivée automatique WinPE exige le mode interne')
+        raise ValueError('L arrivee automatique WinPE exige le mode interne')
     data = Path(data_dir or os.getenv("MDT_DATA_DIR", ROOT / "data")).resolve()
     data.mkdir(parents=True, exist_ok=True)
     artifacts = data / "artifacts"
@@ -111,13 +111,13 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 handle.write(secrets.token_urlsafe(32))
         token = token_file.read_text().strip()
     if len(token) < 24:
-        raise ValueError("MDT_ADMIN_TOKEN doit contenir au moins 24 caractères")
+        raise ValueError("MDT_ADMIN_TOKEN doit contenir au moins 24 caracteres")
     public_url = (base_url or os.getenv("MDT_BASE_URL", "http://127.0.0.1:8080")).rstrip("/")
     url = urlsplit(public_url)
     if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment or url.path:
-        raise ValueError("MDT_BASE_URL doit être une origine HTTP(S), sans chemin ni identifiants")
+        raise ValueError("MDT_BASE_URL doit etre une origine HTTP(S), sans chemin ni identifiants")
     if any(c in public_url for c in "\r\n\t '\""):
-        raise ValueError("MDT_BASE_URL contient des caractères non autorisés")
+        raise ValueError("MDT_BASE_URL contient des caracteres non autorises")
     db_path = data / "deployment.sqlite3"
 
     @contextmanager
@@ -234,10 +234,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def asset_path(asset):
         path = artifacts / asset["filename"]
         if path.is_symlink() or not path.is_file() or path.resolve().parent != artifacts.resolve():
-            raise HTTPException(409, "Fichier absent ou chemin non autorisé")
+            raise HTTPException(409, "Fichier absent ou chemin non autorise")
         stat = path.stat()
         if stat.st_size != asset["size"] or stat.st_mtime_ns != asset["mtime_ns"]:
-            raise HTTPException(409, "Fichier modifié : enregistrez une nouvelle image sous un autre nom")
+            raise HTTPException(409, "Fichier modifie : enregistrez une nouvelle image sous un autre nom")
         return path
 
     def profile_public(record):
@@ -339,9 +339,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         job = row(con, "deployments", identifier)
         supplied = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
         if not hmac.compare_digest(digest(supplied), job["token_hash"]):
-            raise HTTPException(401, "Jeton de déploiement invalide")
+            raise HTTPException(401, "Jeton de deploiement invalide")
         if job["status"] in TERMINAL:
-            raise HTTPException(409, "Déploiement terminé ou annulé")
+            raise HTTPException(409, "Deploiement termine ou annule")
         return job
 
     def event(con, identifier, status, progress, message):
@@ -352,7 +352,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "3.0"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0"}
 
     @api.get('/api/session')
     def session_options():
@@ -378,7 +378,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result['reports'] = [dict(r) for r in con.execute('''SELECT r.deployment_id,r.created_at,d.machine_id,
                 d.windows_status,json_extract(r.report_json,'$.hostname') AS hostname
                 FROM computer_reports r JOIN deployments d ON d.id=r.deployment_id ORDER BY r.created_at DESC LIMIT 100''')]
-            result['software_sync'] = software.state(con)
+            # The client WinGet path has no server worker UI to refresh/expire.
+            result['software_sync'] = None if client_apps else software.state(con)
             result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
@@ -398,19 +399,19 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 con.execute("INSERT INTO machines VALUES (?,?,?,?,?)", (identifier, body.hostname, body.mac, body.description, now()))
                 return row(con, "machines", identifier)
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Le nom ou l’adresse MAC existe déjà")
+            raise HTTPException(409, "Le nom ou l adresse MAC existe deja")
 
     @api.post("/api/assets", status_code=201, dependencies=[Depends(admin)])
     def add_asset(body: AssetInput, request: Request):
         path = artifacts / body.filename
         if path.is_symlink() or not path.is_file() or path.resolve().parent != artifacts.resolve():
-            raise HTTPException(400, "Déposez le fichier dans data/artifacts, sans lien symbolique")
+            raise HTTPException(400, "Deposez le fichier dans data/artifacts, sans lien symbolique")
         if body.kind in {"windows", "winpe"}:
             if path.suffix.lower() != ".wim":
-                raise HTTPException(400, "L’image doit porter l’extension .wim")
+                raise HTTPException(400, "L image doit porter l extension .wim")
             with path.open("rb") as handle:
                 if handle.read(8) != b"MSWIM\x00\x00\x00":
-                    raise HTTPException(400, "Une image WIM non fractionnée est requise")
+                    raise HTTPException(400, "Une image WIM non fractionnee est requise")
         if body.kind == 'application' and path.suffix.lower() not in {'.exe', '.msi', '.zip'}:
             raise HTTPException(400, 'Un installateur .exe/.msi ou un bundle .zip est requis')
         if body.kind == 'wallpaper':
@@ -432,7 +433,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 con.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", (identifier, body.filename, body.kind, checksum, stat.st_size, stat.st_mtime_ns, now()))
                 return row(con, "assets", identifier)
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Ce fichier est déjà enregistré")
+            raise HTTPException(409, "Ce fichier est deja enregistre")
 
     @api.post("/api/profiles", status_code=201, dependencies=[Depends(admin)])
     def add_profile(body: ProfileInput):
@@ -441,7 +442,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             with db(write=True) as con:
                 asset = row(con, "assets", body.asset_id)
                 if asset["kind"] != "windows":
-                    raise HTTPException(400, "Le profil nécessite une image Windows")
+                    raise HTTPException(400, "Le profil necessite une image Windows")
                 asset_path(asset)
                 settings = body.settings.model_dump() if body.settings else defaults_for_locale(body.locale)
                 resolved_settings(con, settings)
@@ -450,15 +451,15 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                              body.edition, json.dumps(settings, ensure_ascii=False)))
                 return profile_public(row(con, "profiles", identifier))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Ce nom de profil existe déjà")
+            raise HTTPException(409, "Ce nom de profil existe deja")
 
     def validate_application_asset(con, body):
         asset = asset_snapshot(con, body.asset_id, 'application')
         if asset['filename'].lower().endswith('.zip'):
             if not body.entry_point:
-                raise HTTPException(400, 'Le point d’entrée du ZIP est requis')
+                raise HTTPException(400, 'Le point d entree du ZIP est requis')
         elif body.entry_point or body.install_mode == 'portable':
-            raise HTTPException(400, 'Le point d’entrée et le mode portable sont réservés aux ZIP')
+            raise HTTPException(400, 'Le point d entree et le mode portable sont reserves aux ZIP')
         if body.install_mode == 'portable' and body.arguments:
             raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
 
@@ -475,7 +476,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                             (body.name, body.version, body.asset_id, body.arguments, body.entry_point, body.install_mode, body.manufacturer, identifier))
                 return row(con, 'applications', identifier)
         except sqlite3.IntegrityError:
-            raise HTTPException(409, 'Ce logiciel et cette version existent déjà')
+            raise HTTPException(409, 'Ce logiciel et cette version existent deja')
 
     @api.post('/api/applications', status_code=201, dependencies=[Depends(admin)])
     def add_application(body: ApplicationInput, request: Request):
@@ -489,7 +490,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                              body.install_mode, body.manufacturer, now()))
                 return row(con, 'applications', identifier)
         except sqlite3.IntegrityError:
-            raise HTTPException(409, 'Ce logiciel et cette version existent déjà')
+            raise HTTPException(409, 'Ce logiciel et cette version existent deja')
 
     @api.post('/api/bundles', status_code=201, dependencies=[Depends(admin)])
     def add_bundle(body: BundleInput):
@@ -503,7 +504,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                             (identifier, body.name, body.description, json.dumps(body.application_ids), now()))
                 return bundle_public(row(con, 'bundles', identifier))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, 'Ce nom de bundle existe déjà')
+            raise HTTPException(409, 'Ce nom de bundle existe deja')
 
     @api.post('/api/bundles/{identifier}/applications', dependencies=[Depends(admin)])
     def append_bundle(identifier: str, body: BundleApplications, request: Request):
@@ -532,7 +533,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 profile = profile_public(row(con, "profiles", body.profile_id))
                 asset_path(row(con, "assets", profile["asset_id"]))
                 if not internal and body.confirmation != "EFFACER " + machine["hostname"]:
-                    raise HTTPException(400, "Confirmation d’effacement incorrecte")
+                    raise HTTPException(400, "Confirmation d effacement incorrecte")
                 timestamp = now()
                 catalog = catalogue(con, body.profile_id, body.wizard_enabled)
                 selection = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
@@ -540,20 +541,20 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                             (identifier, body.machine_id, body.profile_id, body.disk_number, digest(agent_token), 'queued', 0,
                              timestamp, timestamp, int(body.wizard_enabled), json.dumps(catalog), json.dumps(selection),
                              digest(boot_code) if boot_code else None, (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat() if body.wizard_enabled else None))
-                event(con, identifier, "queued", 0, "Déploiement autorisé ; attente de l’agent WinPE")
+                event(con, identifier, "queued", 0, "Deploiement autorise ; attente de l agent WinPE")
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Un déploiement est déjà actif sur cette machine")
+            raise HTTPException(409, "Un deploiement est deja actif sur cette machine")
         return {"id": identifier, "agent_token": agent_token, "base_url": public_url,
                 'boot_code': '-'.join(boot_code[i:i+4] for i in range(0, 20, 4)) if boot_code else None}
 
     @api.post('/api/boot/discover')
     def boot_discover(body: BootDiscovery, request: Request):
         if not internal:
-            raise HTTPException(403, 'Connexion automatique désactivée')
+            raise HTTPException(403, 'Connexion automatique desactivee')
         if request.headers.get('sec-fetch-site') == 'cross-site' or request.headers.get('origin', public_url) != public_url:
-            raise HTTPException(403, 'Origine externe refusée')
-        if enrollment and body.release != 'ATELIER-3':
-            raise HTTPException(409, 'Démarrer sur la nouvelle image ATELIER-3 ; cette ancienne version WinPE ne prépare pas les logiciels et inventaires du nouveau parcours')
+            raise HTTPException(403, 'Origine externe refusee')
+        if enrollment and body.release != 'ATELIER-4':
+            raise HTTPException(409, 'Demarrer sur la nouvelle image ATELIER-4 ; cette ancienne version WinPE ne prepare pas les logiciels et inventaires du nouveau parcours')
         try:
             macs = list(dict.fromkeys(MachineInput.validate_mac(value) for value in body.macs))
         except ValueError as exc:
@@ -562,11 +563,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             records = [dict(r) for r in con.execute("""SELECT d.*,m.mac AS matched_mac FROM deployments d
                 JOIN machines m ON m.id=d.machine_id WHERE d.status IN ('queued','running')""") if r['matched_mac'] in macs]
             if len(records) > 1 or any(r['status'] == 'running' for r in records):
-                raise HTTPException(409, 'Un déploiement est déjà actif ou plusieurs postes correspondent')
+                raise HTTPException(409, 'Un deploiement est deja actif ou plusieurs postes correspondent')
             valid = [r for r in records if (enrollment or r['wizard_enabled']) and (enrollment or (r['boot_code_expires'] or '') > now())]
             if not valid and enrollment:
                 if records:
-                    raise HTTPException(409, 'Annuler la demande manuelle existante avant une arrivée automatique')
+                    raise HTTPException(409, 'Annuler la demande manuelle existante avant une arrivee automatique')
                 machines = [dict(r) for r in con.execute('SELECT * FROM machines') if r['mac'] in macs]
                 if len(machines) > 1:
                     raise HTTPException(409, 'Plusieurs machines connues correspondent aux MAC du poste')
@@ -574,26 +575,26 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                     machine = machines[0]
                     latest = con.execute('SELECT * FROM deployments WHERE machine_id=? ORDER BY created_at DESC LIMIT 1', (machine['id'],)).fetchone()
                     if latest and latest['status'] == 'staged' and latest['windows_status'] not in {'completed', 'failed', 'needs_attention'}:
-                        raise HTTPException(409, 'Windows est déjà préparé : démarrer sur le disque local pour terminer')
+                        raise HTTPException(409, 'Windows est deja prepare : demarrer sur le disque local pour terminer')
                 else:
                     machine = {'id': str(uuid.uuid4()), 'hostname': 'PC-' + macs[0].replace(':', ''), 'mac': macs[0]}
                 profiles = [profile_public(r) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
                 if not profiles:
-                    raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les éditions sur le serveur')
+                    raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les editions sur le serveur')
                 profile = profiles[0]
                 catalog = catalogue(con, profile['id'], True)
                 if not machines:
-                    con.execute('INSERT INTO machines VALUES (?,?,?,?,?)', (machine['id'], machine['hostname'], machine['mac'], 'Arrivée automatique WinPE', now()))
+                    con.execute('INSERT INTO machines VALUES (?,?,?,?,?)', (machine['id'], machine['hostname'], machine['mac'], 'Arrivee automatique WinPE', now()))
                 identifier, timestamp = str(uuid.uuid4()), now()
                 selection = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
                 con.execute("""INSERT INTO deployments(id,machine_id,profile_id,disk_number,token_hash,status,progress,created_at,updated_at,wizard_enabled,catalog_json,selection_json,boot_code_expires)
                     VALUES (?,?,?,0,?,'queued',0,?,?,1,?,?,?)""",
                     (identifier, machine['id'], profile['id'], digest(secrets.token_urlsafe(32)), timestamp, timestamp,
                      json.dumps(catalog), json.dumps(selection), (datetime.now(timezone.utc)+timedelta(hours=2)).isoformat()))
-                event(con, identifier, 'queued', 0, 'Poste détecté automatiquement ; attente du choix Windows et de la confirmation locale du disque')
+                event(con, identifier, 'queued', 0, 'Poste detecte automatiquement ; attente du choix Windows et de la confirmation locale du disque')
                 valid = [row(con, 'deployments', identifier)]
             if len(valid) != 1:
-                raise HTTPException(409, 'Créer une autorisation pour cette MAC ou activer l’arrivée automatique WinPE')
+                raise HTTPException(409, 'Creer une autorisation pour cette MAC ou activer l arrivee automatique WinPE')
             job, new_token = valid[0], secrets.token_urlsafe(32)
             if enrollment:
                 refreshed = catalogue(con, job['profile_id'], True)
@@ -619,12 +620,12 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db(write=True) as con:
             record = con.execute("SELECT * FROM deployments WHERE boot_code_hash=? AND status='queued' AND boot_code_expires>?", (digest(code), now())).fetchone()
             if not record:
-                raise HTTPException(401, 'Code d’installation absent, expiré ou déjà utilisé')
+                raise HTTPException(401, 'Code d installation absent, expire ou deja utilise')
             job = dict(record)
             machine = row(con, 'machines', job['machine_id'])
             macs = {value.replace('-', ':').upper() for value in body.macs}
             if machine['mac'] not in macs:
-                raise HTTPException(403, 'Ce code est réservé à un autre poste')
+                raise HTTPException(403, 'Ce code est reserve a un autre poste')
             new_token = secrets.token_urlsafe(32)
             con.execute('UPDATE deployments SET token_hash=?,updated_at=? WHERE id=?', (digest(new_token), now(), job['id']))
             return {'id': job['id'], 'agent_token': new_token, 'plan': plan_data(con, job), 'catalog': json.loads(job['catalog_json'])}
@@ -634,32 +635,32 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db(write=True) as con:
             job = agent(con, identifier, authorization)
             if job['status'] != 'queued':
-                raise HTTPException(409, 'Les paramètres sont figés après le début du déploiement')
+                raise HTTPException(409, 'Les parametres sont figes apres le debut du deploiement')
             if not job['wizard_enabled']:
-                raise HTTPException(403, 'Le choix dans l’assistant n’a pas été autorisé pour ce poste')
+                raise HTTPException(403, 'Le choix dans l assistant n a pas ete autorise pour ce poste')
             catalog = json.loads(job['catalog_json'])
             if body.profile_id not in {p['id'] for p in catalog.get('profiles', [])}:
-                raise HTTPException(403, 'Ce profil ne fait pas partie de l’autorisation')
+                raise HTTPException(403, 'Ce profil ne fait pas partie de l autorisation')
             settings = body.settings.model_dump()
             allowed_apps = {a['id'] for a in catalog['applications']}
             allowed_bundles = {b['id'] for b in catalog['bundles']}
             allowed_wallpapers = {w['id'] for w in catalog['wallpapers']}
             if (not set(settings['application_ids']) <= allowed_apps or not set(settings['bundle_ids']) <= allowed_bundles
                     or (settings['wallpaper_asset_id'] and settings['wallpaper_asset_id'] not in allowed_wallpapers)):
-                raise HTTPException(403, 'La sélection contient un élément non autorisé')
+                raise HTTPException(403, 'La selection contient un element non autorise')
             duplicate = con.execute('SELECT id FROM machines WHERE hostname=? COLLATE NOCASE AND id!=?', (body.hostname, job['machine_id'])).fetchone()
             if duplicate:
-                raise HTTPException(409, 'Ce nom est déjà réservé à un autre poste')
+                raise HTTPException(409, 'Ce nom est deja reserve a un autre poste')
             for active in con.execute("SELECT id,selection_json FROM deployments WHERE status IN ('queued','running') AND id!=?", (identifier,)):
                 if json.loads(active['selection_json']).get('hostname', '').lower() == body.hostname.lower():
-                    raise HTTPException(409, 'Ce nom est déjà utilisé par un autre déploiement actif')
+                    raise HTTPException(409, 'Ce nom est deja utilise par un autre deploiement actif')
             resolved_settings(con, settings)
             if enrollment:
                 con.execute('UPDATE machines SET hostname=? WHERE id=?', (body.hostname, job['machine_id']))
             selected = body.model_dump(exclude={'disk_number'})
             con.execute('UPDATE deployments SET profile_id=?,selection_json=?,disk_number=?,updated_at=? WHERE id=?',
                         (body.profile_id, json.dumps(selected), body.disk_number if body.disk_number is not None else job['disk_number'], now(), identifier))
-            event(con, identifier, 'queued', 0, f'Assistant : profil et paramètres validés pour {body.hostname}')
+            event(con, identifier, 'queued', 0, f'Assistant : profil et parametres valides pour {body.hostname}')
             return plan_data(con, row(con, 'deployments', identifier))
 
     @api.get("/api/deployments/{identifier}/events", dependencies=[Depends(admin)])
@@ -673,9 +674,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db(write=True) as con:
             job = row(con, "deployments", identifier)
             if job["status"] in TERMINAL:
-                raise HTTPException(409, "Déploiement déjà terminé")
+                raise HTTPException(409, "Deploiement deja termine")
             con.execute("UPDATE deployments SET status='cancelled',updated_at=? WHERE id=?", (now(), identifier))
-            event(con, identifier, "cancelled", job["progress"], "Annulation demandée ; un DISM déjà lancé ne peut pas être interrompu à distance")
+            event(con, identifier, "cancelled", job["progress"], "Annulation demandee ; un DISM deja lance ne peut pas etre interrompu a distance")
         return {"status": "cancelled"}
 
     @api.get("/api/agent/{identifier}/plan")
@@ -698,12 +699,12 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db(write=True) as con:
             job = agent(con, identifier, authorization)
             if job["status"] != "queued":
-                raise HTTPException(409, "Ce déploiement a déjà été pris en charge")
+                raise HTTPException(409, "Ce deploiement a deja ete pris en charge")
             plan_data(con, job)
             report_token = secrets.token_urlsafe(32)
             expires = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
             con.execute("UPDATE deployments SET status='running',updated_at=?,boot_code_hash=NULL,report_token_hash=?,report_expires=? WHERE id=?", (now(), digest(report_token), expires, identifier))
-            event(con, identifier, "running", 0, "L’agent WinPE a réservé le déploiement")
+            event(con, identifier, "running", 0, "L agent WinPE a reserve le deploiement")
         return {"claimed": True, "report_token": report_token, "report_expires": expires}
 
     def windows_agent(con, identifier, authorization):
@@ -724,10 +725,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             tools = json.loads(job['catalog_json']).get('tools', [])
             allowed = next((tool['asset'] for tool in tools if tool['asset']['id'] == asset_id), None)
             if not allowed:
-                raise HTTPException(403, 'Outil absent de ce déploiement')
+                raise HTTPException(403, 'Outil absent de ce deploiement')
             asset = row(con, 'assets', asset_id)
             if asset['sha256'] != allowed['sha256']:
-                raise HTTPException(409, 'Outil modifié depuis le démarrage')
+                raise HTTPException(409, 'Outil modifie depuis le demarrage')
             path = asset_path(asset)
         return FileResponse(path, media_type='application/octet-stream', filename=asset['filename'])
 
@@ -803,7 +804,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db() as con:
             asset = row(con, "assets", identifier)
             if asset["kind"] not in BOOT_KINDS:
-                raise HTTPException(403, "Image d’installation protégée")
+                raise HTTPException(403, "Image d installation protegee")
             path = asset_path(asset)
         return FileResponse(path, media_type="application/octet-stream")
 

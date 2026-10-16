@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 param([string]$OutputDirectory=$PSScriptRoot)
 $ErrorActionPreference='Stop'
 
@@ -37,11 +37,13 @@ if (-not $previous -or $previous.numero_serie -ne $serial) { Save-AtelierWarrant
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
+. (Join-Path $PSScriptRoot 'Theme.ps1')
 $form=New-Object Windows.Forms.Form
 $form.Text='IQ | Garantie constructeur';$form.ClientSize=New-Object Drawing.Size(660,420);$form.StartPosition='CenterScreen'
 $form.Font=New-Object Drawing.Font('Segoe UI',10)
 $label=New-Object Windows.Forms.Label
-$label.Location=New-Object Drawing.Point(20,15);$label.Size=New-Object Drawing.Size(620,85)
+$logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(10,10)
+$label.Location=New-Object Drawing.Point(90,15);$label.Size=New-Object Drawing.Size(550,85)
 $label.Text=$report.constructeur + ' ' + $report.modele + "`r`nSN : " + $serial + ' | Produit : ' + $report.produit + "`r`nConfirmer les dates sur le site officiel, puis les saisir ci-dessous."
 $open=New-Object Windows.Forms.Button;$open.Text='Site constructeur';$open.Location=New-Object Drawing.Point(20,105);$open.Size=New-Object Drawing.Size(180,32);$open.Enabled=[bool]$url
 $open.Add_Click({Start-Process $url})
@@ -77,5 +79,6 @@ $save.Add_Click({
         $notice.Text='Garantie.txt et Garantie.json enregistres. Relancer Generer-Rapport.cmd pour actualiser le PDF.'
     } catch { $notice.Text='Dates AAAA-MM-JJ attendues. ' + $_.Exception.Message }
 })
-$form.Controls.AddRange(@($label,$open,$copy,$save,$notice))
-try { if ($url) { Start-Process $url };[void]$form.ShowDialog() } finally { $form.Dispose() }
+$form.Controls.AddRange(@($logo,$label,$open,$copy,$save,$notice))
+try { if ($url) { Start-Process $url };Set-AtelierFormTheme $form
+[void]$form.ShowDialog() } finally { $form.Dispose() }

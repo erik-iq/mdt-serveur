@@ -53,11 +53,12 @@ def render(source):
 
 
 if __name__ == '__main__':
-    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html'), ('ATELIER-3.md','atelier3.html')]:
+    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html'), ('ATELIER-3.md','atelier3.html'), ('ATELIER-4.md','atelier4.html')]:
         body=render((ROOT/'docs'/filename).read_text())
+        body=body.replace('href="ATELIER-4.md"','href="/static/atelier4.html"')
         body=body.replace('href="ATELIER-3.md"','href="/static/atelier3.html"')
         body=body.replace('href="LOGICIELS-AUTOMATIQUES.md"','href="/static/software-guide.html"')
         body=body.replace('href="MISE-A-JOUR-ATELIER-2.md"','href="/static/upgrade.html"').replace('href="GUIDE-UTILISATEUR.md"','href="/static/guide.html"')
         body=re.sub(r'href="([A-Z][A-Z0-9-]+\.md(?:#[a-z0-9-]+)?)"', r'href="https://github.com/erik-iq/mdt-serveur/blob/main/docs/\1"', body)
-        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE — Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> · <a href="/static/guide.html">Guide utilisateur</a> · <a href="/static/upgrade.html">Mise à jour</a></nav><main>'+body+'</main></body></html>'
+        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><img src="/static/brand-logo.png" width="58" height="48" alt="IQ" style="vertical-align:middle"> <a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise a jour</a></nav><main>'+body+'</main></body></html>'
         (ROOT/'app'/'static'/destination).write_text(html)

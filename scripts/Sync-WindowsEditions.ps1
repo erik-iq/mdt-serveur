@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$InstallPath)
@@ -31,4 +31,4 @@ foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
         Write-Host ('Profil cree : ' + $name + ' (index ' + $image.ImageIndex + ')')
     }
 }
-Write-Host 'Profils vérifiés. En mode ATELIER-3, choisir Pro ou Famille directement dans WinPE.'
+Write-Host 'Profils verifies. En mode ATELIER-4, choisir Pro ou Famille directement dans WinPE.'

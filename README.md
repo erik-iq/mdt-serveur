@@ -1,17 +1,21 @@
-# Atelier PXE
+# IQ Atelier PXE
 
 Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
 
-La version **0.2** ajoute un assistant graphique directement sur le PC démarré par PXE : sélection de Windows, nom du poste, clavier, région, fuseau horaire, logiciels/bundles, thème et fond d’écran. La console web prépare le catalogue et les autorisations. L’agent vérifie la MAC, l’UEFI, les SHA-256 et le disque avant de supprimer ses partitions.
+La revision **ATELIER-4** utilise le theme IQ bleu/lilas dans le site, WinPE et la progression Windows. Les postes arrivent automatiquement dans Atelier ; le choix Pro/Famille et la confirmation du disque sont dans WinPE. Le bureau s ouvre pendant que les logiciels WinGet et la preparation s executent en arriere-plan. Windows Update effectue une passe avec recherche limitee a 90 secondes, sans attente de reprise de 15 minutes ni redemarrage impose. Le demarrage rapide Windows reste desactive.
 
-La révision **INTERNE-1** ajoute un [parcours interne à activer sur le serveur](docs/MODE-INTERNE.md) : console sans jeton, connexion WinPE sans code ni mot de passe SMB à saisir, récapitulatif sans phrase de confirmation, nom `LE-T15-` suivi des quatre derniers chiffres du numéro de série BIOS, compte Administrateur sans mot de passe, progression dans Windows et maintenance automatique. Le dossier **C:\IQ_** reçoit le rapport batterie, le diagnostic de licence et une copie du fond d'écran.
+Le dossier **C:\IQ_** classe les outils par categorie. Les rapports PDF se trouvent dans **Rapports** ; les inventaires XML/CSV sont transmis au serveur .250 et accessibles depuis l activite du poste. Les pages Infrastructure PXE et Logiciels & bundles sont retirees. Le SHA-256 complet du WIM est calcule a l enregistrement sur le serveur ; il n est plus recalcule dans WinPE a chaque deploiement. Les controles rapides et `/CheckIntegrity /Verify` de DISM sont conserves.
+
+**Commencer ici :** [guide utilisateur](docs/GUIDE-UTILISATEUR.md) et [mise a jour ATELIER-4, limites et nettoyage](docs/ATELIER-4.md). La mise a jour utilise `scripts/Upgrade-Atelier4.ps1` depuis l archive d une revision publiee sur `codex/atelier-2`. Les anciennes images WinPE sont refusees avant tout effacement. Le WIM est reconstruit sur Windows avec l ADK, les pilotes et le certificat du serveur.
+
+Les tests automatises ne remplacent pas un deploiement reel sur Server 2025/WinPE : ce controle doit etre effectue sur un poste de laboratoire.
 
 ![Console Atelier PXE avec des données synthétiques de test](docs/console.png)
 
 Cette première version est un atelier **supervisé**, à valider sur un PC de laboratoire. Le code Windows est fourni mais n’a pas été exécuté sur Server 2025/WinPE dans l’environnement Linux de développement. Un état `staged` signifie « image appliquée et démarrage préparé » ; les clients ATELIER-2 transmettent ensuite les états Windows et leur rapport à la console.
 
 
-## Parcours ATELIER-2
+## Historique : parcours ATELIER-2
 
 Le [guide utilisateur](docs/GUIDE-UTILISATEUR.md) présente l’atelier à une personne qui découvre le projet. La [procédure ATELIER-2](docs/MISE-A-JOUR-ATELIER-2.md) décrit la mise à jour de DEPLOY-01 et la reconstruction WinPE.
 

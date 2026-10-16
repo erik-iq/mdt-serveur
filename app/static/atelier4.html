@@ -1,0 +1,61 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><img src="/static/brand-logo.png" width="58" height="48" alt="IQ" style="vertical-align:middle"> <a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise a jour</a></nav><main><h1>IQ Atelier 4 - bureau disponible et preparation en arriere-plan</h1>
+<p>Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer <code>-BrandLogoPath C:\chemin\logo.png</code> au script de mise a jour.</p>
+<h2>Ce qui change</h2>
+<ul>
+<li>Le site contient Vue d ensemble, Parc machines et Profils Windows. Les pages Infrastructure PXE et Logiciels &amp; bundles sont retirees.</li>
+<li>WinPE cree automatiquement la demande du poste. Le choix de Windows Pro/Famille et la confirmation du disque restent sur le poste.</li>
+<li>Le premier demarrage enregistre une tache de preparation puis rend la main a Windows. Les logiciels WinGet et les diagnostics tournent apres l ouverture du bureau. L animation Windows de premiere connexion est desactivee ; les operations natives obligatoires du premier demarrage doivent tout de meme se terminer.</li>
+<li>La fenetre de suivi est reductible. Aucune console PowerShell visible n est necessaire.</li>
+<li>Windows Update effectue une seule passe. La recherche asynchrone est limitee a 90 secondes : aucune mise a jour trouvee est annonce seulement si la recherche a reussi. Si le delai est depasse, une annulation de recherche est demandee et la verification est reportee avec un avertissement. Les telechargements et installations de mises a jour effectivement trouvees peuvent durer davantage ; le bureau reste disponible. Les politiques Windows Update/WSUS sont conservees.</li>
+<li>Aucune relance Windows Update dans 15 minutes, aucune succession de cinq passes, aucun redemarrage automatique impose pendant le travail. Un redemarrage requis apparait dans le suivi et le rapport. Une relance de la tache une fois terminee ne reprend que la transmission du rapport.</li>
+<li>Un seul inventaire technique final est collecte apres les logiciels et les mises a jour. Les reprises de transmission reutilisent les fichiers existants.</li>
+<li>Les sources des scripts et les textes de l interface sont en ASCII sans accents. Les donnees collectees restent en UTF-8 : les vrais noms du materiel et les valeurs d inventaire ne sont pas translitteres.</li>
+</ul>
+<h2>Verification de l image et vitesse</h2>
+<p>Le SHA-256 complet du WIM reste calcule lors de son enregistrement sur le serveur. Le serveur refuse un fichier dont la taille ou la date ont change. WinPE ne relit plus la totalite du WIM pour recalculer son SHA-256 avant chaque installation : cela evite un parcours reseau de plusieurs gigaoctets avant DISM.</p>
+<p>WinPE controle encore le fichier et sa taille, l index, l architecture x64, l edition, la langue, la MAC, l UEFI et le disque cible. Un verrou de lecture empeche la modification du WIM durant son utilisation. DISM conserve <code>/CheckIntegrity /Verify</code> pendant l application.</p>
+<p><strong>Limite :</strong> ces controles ne prouvent plus a chaque deploiement que tous les octets correspondent a l empreinte enregistree. Une image alteree conservant sa taille/date pourrait passer le controle initial ; DISM ne remplace pas une comparaison cryptographique complete. Conserver les droits d ecriture du partage limites aux administrateurs et reenregistrer une image apres tout remplacement. Le gain depend de la taille du WIM, du disque et du reseau.</p>
+<h2>Dossier IQ</h2>
+<div class="table"><table><thead><tr><th>Dossier</th><th>Contenu</th></tr></thead><tbody>
+<tr><td><code>C:\IQ_\Diagnostics</code></td><td>Son, webcam, clavier, batterie et resultats</td></tr>
+<tr><td><code>C:\IQ_\Licence</code></td><td>Etat de l activation Windows</td></tr>
+<tr><td><code>C:\IQ_\Rapports</code></td><td>Rapport-Deploiement.pdf, JSON, et Generer-Rapport.cmd</td></tr>
+<tr><td><code>C:\IQ_\Inventaire</code></td><td>Export-Inventaire.cmd pour regenerer et transmettre XML/CSV</td></tr>
+<tr><td><code>C:\IQ_\Garantie</code></td><td>Outil de verification et dates confirmees sur le portail constructeur</td></tr>
+<tr><td><code>C:\IQ_\Personnalisation</code></td><td>Fond d ecran</td></tr>
+</tbody></table></div>
+<p>Les XML/CSV sont sur <code>.250</code> dans <code>&lt;data_dir&gt;\inventaires\NOM-DU-PC\ID-DEPLOIEMENT</code>. Dans Activite de deploiement, cliquer <strong>Dossier inventaire</strong> pour copier le chemin serveur ou telecharger les deux fichiers. Le PDF est egalement disponible sur la ligne du poste. Les anciens resultats connus sont deplaces dans leur categorie lors de la preparation du dossier ; les fichiers inconnus sont conserves. L organisation des machines deja deployees ne change pas sans execution des nouveaux scripts.</p>
+<h2>Mettre a jour DEPLOY-01 (.250)</h2>
+<p>Executer la commande fournie dans la conversation dans <strong>Windows PowerShell 5.1 administrateur sur DEPLOY-01</strong>. Elle telecharge une revision precise et appelle <code>scripts\Upgrade-Atelier4.ps1</code>. Ne pas utiliser une archive de <code>main</code>, qui peut etre plus ancienne.</p>
+<p>Le script retrouve l installation par sa tache planifiee, sauvegarde code/configuration et SQLite, installe la revision 4, active le parcours automatique, synchronise les editions du WIM, reconstruit WinPE avec les pilotes detectes puis l importe dans WDS sous <strong>Atelier PXE - ATELIER-4 - date</strong>. Les nouvelles dependances graphiques et le lanceur en arriere-plan sont inclus dans le WIM. Un simple remplacement du site ne suffit pas.</p>
+<p>Exemple avec chemins explicites, depuis la nouvelle archive extraite :</p>
+<pre><code>&amp; .\scripts\Upgrade-Atelier4.ps1 `
+    -InstallPath &#x27;C:\AtelierPXE\console&#x27; `
+    -OutputRoot &#x27;D:\AtelierPXE&#x27; `
+    -TrustedRootCertificate &#x27;C:\AtelierPXE\certs\AtelierPXE-lab.cer&#x27; `
+    -DriversPath &#x27;D:\AtelierPXE\Drivers\WinPE-x64&#x27;</code></pre>
+<p>L archive ne fournit pas de WIM preconstruit : l ADK, les pilotes et le certificat public du serveur sont utilises pour le produire sur Windows. Ne pas interrompre le montage/enregistrement de DISM. Le chemin exact de <code>media\sources\boot.wim</code> est affiche a la fin. Les anciens WinPE sont refuses par la console avant tout effacement.</p>
+<h2>Nettoyage du serveur</h2>
+<p>Apres construction et import verifies de la nouvelle image, les anciennes images WDS <strong>Atelier</strong> et leurs anciens dossiers de construction WinPE sont supprimes. Les images MDT restent independantes.</p>
+<p>Le nettoyage complementaire traite uniquement les dossiers temporaires de mise a jour identifiables par leur nom et leur contenu (<code>Atelier-2/3/4-&lt;guid&gt;</code>, <code>Maj-Atelier2/3/4-&lt;guid&gt;</code>), ainsi que les anciennes sauvegardes identifiees. Il conserve au moins les trois sauvegardes les plus recentes par dossier de sauvegardes, les dossiers de moins d une heure, les chemins actifs/proteges et les dossiers contenant des liens. L installation courante, ses donnees, la nouvelle image, les pilotes, certificats et contenus inconnus sont conserves. Les fichiers de logiciels historiques encore references dans la base ne sont pas supprimes automatiquement. Journal : <code>&lt;data_dir&gt;\cleanup\nettoyage-date.json</code>.</p>
+<p>Pour voir la selection avant un nettoyage manuel, fournir le vrai dossier d installation :</p>
+<pre><code>&amp; &#x27;C:\AtelierPXE\console\scripts\Clear-AtelierObsolete.ps1&#x27; `
+    -InstallPath &#x27;C:\AtelierPXE\console&#x27; -WhatIf</code></pre>
+<p><code>-WhatIf</code> ne supprime rien et n ecrit aucun journal. La mise a jour complete effectue deja le nettoyage apres ses controles.</p>
+<h2>Verifier apres mise a jour</h2>
+<ol>
+<li>Recharger le site avec Ctrl+F5 : logo IQ, theme bleu/lilas, trois pages.</li>
+<li>Demarrer un poste de test UEFI sur ATELIER-4 ; choisir edition, nom et disque puis confirmer.</li>
+<li>Retirer le demarrage PXE prioritaire apres application : demarrer sur le disque Windows.</li>
+<li>Verifier l arrivee au bureau et la progression reductible pendant WinGet.</li>
+<li>Verifier <code>C:\IQ_\Rapports\Rapport-Deploiement.pdf</code>, les categories IQ et les XML/CSV sur .250.</li>
+<li>Si Windows Update est reporte, consulter l avertissement et lancer les mises a jour depuis Parametres plus tard. Le poste n est pas declare a jour sans recherche reussie.</li>
+</ol>
+<p>Journaux Windows : <code>C:\ProgramData\AtelierPXE\first-logon.log</code>, <code>maintenance.log</code>, <code>progress.json</code>, <code>reporting.log</code>, <code>software-logs</code>. Journaux du serveur : <code>&lt;data_dir&gt;\logs\console.log</code>. Le demarrage rapide Windows reste desactive a chaque deploiement ; le Fast Boot du BIOS est un reglage distinct.</p>
+<h2>Pistes utiles pour la suite</h2>
+<ul>
+<li>Actualiser regulierement le WIM Windows avec les mises a jour deja integrees : cela reduit le travail a effectuer sur chaque poste, sans supprimer les correctifs de securite.</li>
+<li>Preparer un cache local des pilotes par modele, avec validation et date de version, pour raccourcir les passages HP Image Assistant et Lenovo.</li>
+<li>Ajouter un etat Pret pour remise qui exige rapport disponible, activation verifiee et tests materiels valides, avec les points restants visibles.</li>
+</ul>
+<p>Les tests automatises utilisent des images et services simules. Un deploiement reel, les pilotes et l OOBE doivent etre verifies sur un poste Windows de laboratoire.</p></main></body></html>

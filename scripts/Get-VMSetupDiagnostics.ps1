@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 [CmdletBinding(DefaultParameterSetName='VM')]
 param(
     [Parameter(ParameterSetName='VM')][string]$VMName = 'PC-TEST-PXE',

@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 param([string]$OutputDirectory=$PSScriptRoot)
 $ErrorActionPreference='Stop'
@@ -26,6 +26,9 @@ try {
             if ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq "/$nonce/") {
                 $bytes=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'Tests-Materiel.html'))
                 $response.ContentType='text/html; charset=utf-8'
+            } elseif ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq "/$nonce/logo.png") {
+                $bytes=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'brand-logo.png'))
+                $response.ContentType='image/png'
             } elseif ($request.HttpMethod -eq 'POST' -and $request.Url.AbsolutePath -eq "/$nonce/result") {
                 if ($request.ContentLength64 -lt 0 -or $request.ContentLength64 -gt 16384) { $response.StatusCode=413;continue }
                 if ($request.Headers['Origin'] -ne "http://localhost:$port") { $response.StatusCode=403;continue }

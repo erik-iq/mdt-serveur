@@ -1,4 +1,4 @@
-﻿# Functions only. Upload through HTTPS with the deployment reporting token, no writable SMB share.
+# Functions only. Upload through HTTPS with the deployment reporting token, no writable SMB share.
 function Send-AtelierInventory {
     param([string]$DataPath,[string]$InventoryDirectory)
     $configuration=Join-Path $DataPath 'reporting.json'
@@ -23,7 +23,7 @@ function Send-AtelierInventory {
         }
         return $true
     } catch {
-        Add-Content -LiteralPath (Join-Path $DataPath 'reporting.log') -Value ((Get-Date -Format o) + ' Inventaire XML/CSV non transmis ; cache privé conservé pour reprise.') -Encoding UTF8
+        Add-Content -LiteralPath (Join-Path $DataPath 'reporting.log') -Value ((Get-Date -Format o) + ' Inventaire XML/CSV non transmis ; cache prive conserve pour reprise.') -Encoding UTF8
         return $false
     }
 }

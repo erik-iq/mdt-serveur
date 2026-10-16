@@ -43,9 +43,9 @@ function Get-ItemProperty { param($Path,$Name) [pscustomobject]@{HiberbootEnable
 """.replace('SCRIPT',str(ROOT/'scripts'/'New-DeploymentReport.ps1')).replace('DATA',str(data)).replace('OUTPUT',str(out)),encoding='utf-8-sig')
     result = subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert result.returncode == 0, result.stderr
-    report=json.loads((out/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
+    report=json.loads((out/'Rapports'/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
     assert report['status']=='completed' and report['inventory']['Numero de serie']=='TEST123456'
-    pdf=(out/'Rapport-Deploiement.pdf').read_bytes()
+    pdf=(out/'Rapports'/'Rapport-Deploiement.pdf').read_bytes()
     assert pdf.startswith(b'%PDF-1.4') and b'TEST123456' in pdf and b'%%EOF' in pdf
     start=int(pdf.split(b'startxref\n')[1].splitlines()[0])
     assert pdf[start:].startswith(b'xref\n')

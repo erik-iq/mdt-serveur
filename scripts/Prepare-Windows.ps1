@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 $ErrorActionPreference = 'Stop'
 $power = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
@@ -7,6 +7,10 @@ New-ItemProperty -Path $power -Name HiberbootEnabled -Value 0 -PropertyType DWor
 if ((Get-ItemProperty -Path $power -Name HiberbootEnabled).HiberbootEnabled -ne 0) { throw 'Desactivation du demarrage rapide Windows non verifiee.' }
 $dataPath = Join-Path $env:ProgramData 'AtelierPXE'
 $payload = Get-Content (Join-Path $dataPath 'personalization.json') -Raw | ConvertFrom-Json
+$policies = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+New-Item -Path $policies -Force | Out-Null
+# Skip the native first-sign-in animation; Windows still completes required setup.
+New-ItemProperty $policies -Name EnableFirstLogonAnimation -Value 0 -PropertyType DWord -Force | Out-Null
 if (-not $payload.settings.unattended) { return }
 # SID 500 exists on every Windows language; do not attempt to create its reserved name.
 $administrator = @(Get-LocalUser | Where-Object { $_.SID.Value -match '-500$' })

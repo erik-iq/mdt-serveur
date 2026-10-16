@@ -44,7 +44,7 @@ $session | Add-Member ScriptMethod CreateUpdateSearcher { return $this.Searcher 
 $session | Add-Member ScriptMethod CreateUpdateDownloader { return $this.Downloader }
 $session | Add-Member ScriptMethod CreateUpdateInstaller { return $this.Installer }
 try {
-    $result=Invoke-AtelierWindowsUpdates -SessionFactory { $session } -CollectionFactory { ,(New-Object Collections.ArrayList) }
+    $result=Invoke-AtelierWindowsUpdates -SearchTimeoutSeconds 0 -SessionFactory { $session } -CollectionFactory { ,(New-Object Collections.ArrayList) }
     $result | ConvertTo-Json -Depth 5 -Compress
 } catch { @{status='failed'} | ConvertTo-Json -Compress }
 '''.replace('CASE',case)
@@ -105,6 +105,26 @@ $result=Invoke-AtelierWindowsUpdates -PollMilliseconds 1 -SessionFactory { $sess
     assert result['cleaned']==3
     assert {p['phase'] for p in result['phases']} == {'search','download','install','installed'}
     assert any(p['percent']==47 and p['title']=='KB123 cumulative' for p in result['phases'])
+
+
+def test_search_deadline_aborts_without_blocking_cleanup_or_starting_download(tmp_path):
+    result=json.loads(execute(tmp_path,r'''
+$script:aborted=$false
+$job=[pscustomobject]@{IsCompleted=$false}
+$job | Add-Member ScriptMethod RequestAbort { $script:aborted=$true }
+$job | Add-Member ScriptMethod CleanUp { throw 'Unfinished cleanup must not block the deadline' }
+$searcher=[pscustomobject]@{Job=$job}
+$searcher | Add-Member ScriptMethod BeginSearch { param($criteria,$callback,$state);$this.Job }
+$searcher | Add-Member ScriptMethod EndSearch { throw 'Incomplete search must not be called up to date' }
+$session=[pscustomobject]@{ClientApplicationID='';Searcher=$searcher}
+$session | Add-Member ScriptMethod CreateUpdateSearcher { $this.Searcher }
+$session | Add-Member ScriptMethod CreateUpdateDownloader { throw 'No download before a successful search' }
+$clock=[Diagnostics.Stopwatch]::StartNew()
+try { Invoke-AtelierWindowsUpdates -SessionFactory {$session} -SearchTimeoutSeconds 1 -PollMilliseconds 20;throw 'Expected deadline' }
+catch { @{aborted=$script:aborted;timeout=($_.Exception -is [TimeoutException]);seconds=$clock.Elapsed.TotalSeconds} | ConvertTo-Json -Compress }
+'''))
+    assert result['aborted'] and result['timeout']
+    assert 1 <= result['seconds'] < 5
 
 
 @pytest.mark.parametrize(('serial','mode','name'),[

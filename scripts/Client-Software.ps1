@@ -1,4 +1,4 @@
-﻿# Functions only; install applications in the interactive Windows session, never in WinPE.
+# Functions only; install applications in the interactive Windows session, never in WinPE.
 function Get-AtelierClientWinGet {
     $command=Get-Command winget.exe -ErrorAction SilentlyContinue
     if ($command) { return $command.Source }
@@ -10,7 +10,7 @@ function Get-AtelierClientWinGet {
 }
 function Invoke-AtelierClientInstall {
     param([string]$Executable,[string[]]$Arguments,[string]$LogPath,[int]$TimeoutMilliseconds=2700000)
-    if (@($Arguments | Where-Object { $_ -notmatch '^[A-Za-z0-9._-]+$' }).Count) { throw 'Argument WinGet non autorisé.' }
+    if (@($Arguments | Where-Object { $_ -notmatch '^[A-Za-z0-9._-]+$' }).Count) { throw 'Argument WinGet non autorise.' }
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$Executable;$info.Arguments=$Arguments -join ' '
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
@@ -20,7 +20,7 @@ function Invoke-AtelierClientInstall {
         $output=$process.StandardOutput.ReadToEndAsync();$errors=$process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($TimeoutMilliseconds)) {
             # Do not launch another installer on top of an unknown running installation.
-            throw 'Installateur encore actif après 45 minutes : contrôler son processus avant de relancer.'
+            throw 'Installateur encore actif apres 45 minutes : controler son processus avant de relancer.'
         }
         [IO.File]::AppendAllText($LogPath,($output.Result + [Environment]::NewLine + $errors.Result),[Text.Encoding]::UTF8)
         return $process.ExitCode
@@ -42,26 +42,26 @@ function Install-AtelierClientSoftware {
     try {
         $winget=Get-AtelierClientWinGet
         if (-not $winget) {
-            & $OnProgress 10 'Préparation de WinGet dans Windows...'
+            & $OnProgress 10 'Preparation de WinGet dans Windows...'
             try { & (Join-Path $DataPath 'Install-WinGet.ps1') | Out-Null }
             catch { if (-not (Get-AtelierClientWinGet)) { throw } }
             $winget=Get-AtelierClientWinGet
         }
-        if (-not $winget) { throw 'WinGet indisponible après sa préparation dans cette session Windows.' }
+        if (-not $winget) { throw 'WinGet indisponible apres sa preparation dans cette session Windows.' }
     } catch {
         foreach ($key in $Packages) {
             $source=$sources | Where-Object { $_.key -eq $key } | Select-Object -First 1
-            $results.Add(@{id=$key;name=[string]$source.name;version='';status='failed';exit_code=-1;reason=('Préparation WinGet : ' + $_.Exception.Message)})
+            $results.Add(@{id=$key;name=[string]$source.name;version='';status='failed';exit_code=-1;reason=('Preparation WinGet : ' + $_.Exception.Message)})
         }
         return $results.ToArray()
     }
     $index=0
     foreach ($key in @($Packages | Select-Object -Unique)) {
         $source=$sources | Where-Object { $_.key -eq $key } | Select-Object -First 1
-        if (-not $source) { throw ('Logiciel non autorisé : ' + $key) }
+        if (-not $source) { throw ('Logiciel non autorise : ' + $key) }
         $index++
         if ($saved.ContainsKey($key)) { $results.Add($saved[$key]);continue }
-        & $OnProgress (10+[int](45*($index-1)/$Packages.Count)) ('Téléchargement et installation silencieuse : ' + $source.name)
+        & $OnProgress (10+[int](45*($index-1)/$Packages.Count)) ('Telechargement et installation silencieuse : ' + $source.name)
         $log=Join-Path $logs ($key + '.log')
         $code=$null
         try {

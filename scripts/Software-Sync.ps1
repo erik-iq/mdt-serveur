@@ -1,4 +1,4 @@
-﻿# Validation helpers for the single-installer YAML emitted by winget download.
+# Validation helpers for the single-installer YAML emitted by winget download.
 # This is deliberately not a general YAML evaluator; no manifest code is executed.
 function Get-AtelierManifestScalar {
     param([string]$Text,[string]$Name)
@@ -63,8 +63,8 @@ function Get-AtelierSoftwareErrorText {
             if ($detail -is [string]) { $text=$detail }
         } catch { }
     }
-    foreach ($secret in $Secrets) { if ($secret) { $text=$text.Replace($secret,'[masqué]') } }
-    $text=[regex]::Replace($text,'(?i)Bearer\s+[A-Za-z0-9._~+/-]+=*','Bearer [masqué]')
+    foreach ($secret in $Secrets) { if ($secret) { $text=$text.Replace($secret,'[masque]') } }
+    $text=[regex]::Replace($text,'(?i)Bearer\s+[A-Za-z0-9._~+/-]+=*','Bearer [masque]')
     $text=[regex]::Replace($text,'\x1B\[[0-?]*[ -/]*[@-~]','')
     return $text.Trim().Substring(0,[Math]::Min(1800,$text.Trim().Length))
 }
@@ -85,7 +85,7 @@ function Invoke-AtelierWinGetDownload {
     }
     $code=$global:LASTEXITCODE
     if ($null -eq $code -or $code -ne 0) {
-        $description=if ($null -eq $code) { 'programme non démarré' } else { 'code ' + $code + ' / 0x' + ([int]$code).ToString('X8') }
-        throw ('WinGet download en échec (' + $description + '). ' + ($tail.ToArray() -join ' | ') + ' Ancienne version conservée.')
+        $description=if ($null -eq $code) { 'programme non demarre' } else { 'code ' + $code + ' / 0x' + ([int]$code).ToString('X8') }
+        throw ('WinGet download en echec (' + $description + '). ' + ($tail.ToArray() -join ' | ') + ' Ancienne version conservee.')
     }
 }

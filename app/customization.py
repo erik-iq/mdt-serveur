@@ -6,28 +6,28 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 KEYBOARDS = [
-    {'id': '040c:0000040c', 'name': 'Français — AZERTY'},
-    {'id': '080c:0000080c', 'name': 'Français — Belgique'},
-    {'id': '100c:0000100c', 'name': 'Français — Suisse'},
-    {'id': '0409:00000409', 'name': 'Anglais — États-Unis'},
-    {'id': '0809:00000809', 'name': 'Anglais — Royaume-Uni'},
-    {'id': '0407:00000407', 'name': 'Allemand — Allemagne'},
+    {'id': '040c:0000040c', 'name': 'Francais - AZERTY'},
+    {'id': '080c:0000080c', 'name': 'Francais - Belgique'},
+    {'id': '100c:0000100c', 'name': 'Francais - Suisse'},
+    {'id': '0409:00000409', 'name': 'Anglais - Etats-Unis'},
+    {'id': '0809:00000809', 'name': 'Anglais - Royaume-Uni'},
+    {'id': '0407:00000407', 'name': 'Allemand - Allemagne'},
 ]
 TIMEZONES = [
     {'id': 'Romance Standard Time', 'name': 'Paris / Bruxelles / Madrid'},
     {'id': 'W. Europe Standard Time', 'name': 'Zurich / Berlin / Rome'},
     {'id': 'GMT Standard Time', 'name': 'Londres / Lisbonne'},
     {'id': 'UTC', 'name': 'UTC'},
-    {'id': 'Eastern Standard Time', 'name': 'Montréal / New York'},
+    {'id': 'Eastern Standard Time', 'name': 'Montreal / New York'},
     {'id': 'Pacific Standard Time', 'name': 'Vancouver / Los Angeles'},
-    {'id': 'Arabian Standard Time', 'name': 'Dubaï'},
+    {'id': 'Arabian Standard Time', 'name': 'Dubai'},
     {'id': 'Tokyo Standard Time', 'name': 'Tokyo'},
 ]
 REGIONS = [{'id': x, 'name': x} for x in ['fr-FR', 'fr-BE', 'fr-CH', 'en-US', 'en-GB', 'de-DE']]
 SOFTWARE_PACKAGES = [{'id': 'vlc', 'name': 'VLC'}, {'id': 'reader', 'name': 'Adobe Reader'},
                      {'id': 'chrome', 'name': 'Google Chrome'}, {'id': 'anydesk', 'name': 'AnyDesk'}]
 OPTIONS = {'software_packages': SOFTWARE_PACKAGES, 'keyboards': KEYBOARDS, 'timezones': TIMEZONES, 'regions': REGIONS,
-           'themes': [{'id': 'unchanged', 'name': 'Conserver le thème Windows'},
+           'themes': [{'id': 'unchanged', 'name': 'Conserver le theme Windows'},
                       {'id': 'light', 'name': 'Clair'}, {'id': 'dark', 'name': 'Sombre'}]}
 
 
@@ -73,14 +73,14 @@ class Personalization(BaseModel):
     @classmethod
     def printable(cls, value):
         if any(ord(c) < 32 for c in value):
-            raise ValueError('Caractères de contrôle interdits')
+            raise ValueError('Caracteres de controle interdits')
         return value
 
     @field_validator('application_ids', 'bundle_ids', 'winget_packages')
     @classmethod
     def unique_ids(cls, value):
         if len(value) != len(set(value)):
-            raise ValueError('Sélection dupliquée')
+            raise ValueError('Selection dupliquee')
         return value
 
 
@@ -98,7 +98,7 @@ class ApplicationInput(BaseModel):
     @classmethod
     def printable(cls, value):
         if any(ord(c) < 32 for c in value):
-            raise ValueError('Caractères de contrôle interdits')
+            raise ValueError('Caracteres de controle interdits')
         return value
 
     @field_validator('entry_point')
@@ -106,7 +106,7 @@ class ApplicationInput(BaseModel):
     def safe_entry(cls, value):
         if value and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/-]*\.(exe|msi)', value, re.I)
                       or any(part in {'', '.', '..'} for part in value.split('/'))):
-            raise ValueError('Indiquez un chemin relatif .exe/.msi dans le ZIP, sans traversée de dossier')
+            raise ValueError('Indiquez un chemin relatif .exe/.msi dans le ZIP, sans traversee de dossier')
         return value
 
 
@@ -119,7 +119,7 @@ class BundleInput(BaseModel):
     @classmethod
     def unique(cls, value):
         if len(value) != len(set(value)):
-            raise ValueError('Logiciel dupliqué dans le bundle')
+            raise ValueError('Logiciel duplique dans le bundle')
         return value
 
 

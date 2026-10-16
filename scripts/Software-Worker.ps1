@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$InstallPath)
@@ -36,8 +36,8 @@ try {
         $child=$null;$job=$null
         try {
             $ready=[bool](Get-Command winget.exe -ErrorAction SilentlyContinue)
-            $heartbeat=@{worker_id=$workerId;state='not_ready';message='WinGet absent : exécuter Install-WinGet.ps1 dans cette session, puis redémarrer la tâche agent.'}
-            if ($ready) { $heartbeat.state='ready';$heartbeat.message='Agent WinGet prêt' }
+            $heartbeat=@{worker_id=$workerId;state='not_ready';message='WinGet absent : executer Install-WinGet.ps1 dans cette session, puis redemarrer la tache agent.'}
+            if ($ready) { $heartbeat.state='ready';$heartbeat.message='Agent WinGet pret' }
             Invoke-WorkerApi '/worker/heartbeat' $heartbeat | Out-Null
             if ($ready) {
                 $job=(Invoke-WorkerApi '/worker/claim' @{worker_id=$workerId}).job
@@ -53,27 +53,27 @@ try {
                     while ($child.State -in @('Running','NotStarted')) {
                         Invoke-WorkerApi '/worker/heartbeat' @{worker_id=$workerId;state='busy';job_id=$job.id;message='Synchronisation en cours'} | Out-Null
                         Receive-SoftwareChild $child $diagnostics
-                        if ((Get-Date) -gt $deadline) { throw 'Délai maximal de synchronisation dépassé (4 heures).' }
+                        if ((Get-Date) -gt $deadline) { throw 'Delai maximal de synchronisation depasse (4 heures).' }
                         Start-Sleep -Seconds 3
                     }
                     Receive-SoftwareChild $child $diagnostics
                     $resultPath=Join-Path (Join-Path $directory 'job-results') ($job.id + '.json')
-                    $result=@{};$status='failed';$message='Échec de la synchronisation.'
+                    $result=@{};$status='failed';$message='Echec de la synchronisation.'
                     if (Test-Path -LiteralPath $resultPath) {
                         $result=Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
                         $failures=@(@($result.applications)+@($result.bundles) | Where-Object { $_.status -eq 'failed' })
                         $successes=@($result.applications | Where-Object { $_.status -ne 'failed' })
-                        $status='completed';$message='Logiciels et bundles à jour'
+                        $status='completed';$message='Logiciels et bundles a jour'
                         if ($failures.Count) {
                             $status=if ($successes.Count) { 'partial' } else { 'failed' }
-                            $message='Certains éléments ont échoué. Consulter le détail ; les anciennes versions restent disponibles.'
+                            $message='Certains elements ont echoue. Consulter le detail ; les anciennes versions restent disponibles.'
                         }
                     } else {
                         if ($child.ChildJobs[0].JobStateInfo.Reason) {
                             $text=Get-AtelierSoftwareErrorText $child.ChildJobs[0].JobStateInfo.Reason @($headers.Authorization,($headers.Authorization -replace '^Bearer ',''))
                             if ($text -and -not $diagnostics.Contains($text)) { $diagnostics.Add($text) }
                         }
-                        $message='Aucun bilan produit par le processus PowerShell (état : ' + $child.State + ').'
+                        $message='Aucun bilan produit par le processus PowerShell (etat : ' + $child.State + ').'
                         if ($diagnostics.Count) { $message=$diagnostics[0] }
                         $result=@{diagnostics=@($diagnostics.ToArray())}
                         Write-SoftwareWorkerLog ('Demande ' + $job.id + ' : ' + ($diagnostics -join ' | ') + ' ' + $message)
@@ -88,7 +88,7 @@ try {
             if ($child -and $child.State -eq 'Running') { Stop-Job $child -ErrorAction SilentlyContinue }
             if ($job) {
                 try { Invoke-WorkerApi ('/jobs/' + $job.id + '/finish') @{worker_id=$workerId;status='failed';message=$failure.Substring(0,[Math]::Min(500,$failure.Length))} | Out-Null }
-                catch { throw 'Agent déconnecté. Redémarrage requis pour récupérer la synchronisation.' }
+                catch { throw 'Agent deconnecte. Redemarrage requis pour recuperer la synchronisation.' }
             }
         } finally {
             if ($child) { Remove-Job $child -Force -ErrorAction SilentlyContinue }

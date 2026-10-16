@@ -1,109 +1,78 @@
-# Utiliser Atelier PXE
+# IQ Atelier - guide utilisateur
 
-**Nouveau parcours ATELIER-3 :** arrivée automatique des PC, logiciels silencieux après Windows et inventaires sur .250. Consulter [le guide ATELIER-3](ATELIER-3.md) pour cette configuration.
+IQ Atelier installe Windows sur les ordinateurs de l atelier depuis le reseau. Le serveur de deploiement est DEPLOY-01, `192.168.99.250`. Le site permet de suivre les installations et retrouver leurs rapports. Consulter [le guide de mise a jour ATELIER-4](ATELIER-4.md) pour mettre le serveur et WinPE a niveau.
 
-Atelier PXE installe Windows sur un ordinateur démarré par le réseau, prépare ses logiciels et produit un rapport de contrôle. Ce guide décrit le serveur déjà installé dans l’atelier et le parcours **ATELIER-2**. L’installation efface le disque choisi : sauvegarder les données avant de commencer.
+## Avant de commencer
 
-## Actualiser les logiciels et obtenir le détail technique
+Sauvegarder les donnees du poste : le deploiement efface toutes les partitions du disque choisi. Brancher l alimentation et un cable reseau. Le poste doit demarrer en UEFI. Verifier qu une image Windows et ses profils Pro/Famille sont disponibles dans Atelier.
 
-Avec ATELIER-2.1, le technicien peut actualiser les installateurs depuis WinGet avec `Sync-Applications.ps1`, sans télécharger manuellement chaque nouvelle version. Les bundles conservent leurs références. Sur les nouveaux postes, `C:\IQ_\Inventaire-Technique.xml` et `.csv` détaillent le matériel, les pilotes, les logiciels et les licences disponibles. `Export-Inventaire.cmd` relance la collecte ; `Generer-Rapport.cmd` actualise également ces exports. Suivre le [guide WinGet et inventaire](LOGICIELS-AUTOMATIQUES.md).
+## Installer un ordinateur
 
-## Comprendre les trois machines
+1. Allumer le poste et choisir son demarrage reseau UEFI/PXE dans le menu de demarrage du constructeur.
+2. Choisir l image **Atelier PXE - ATELIER-4 - date**. L assistant IQ Atelier s ouvre. Le poste et sa demande apparaissent automatiquement sur le site ; aucune autorisation prealable n y est necessaire.
+3. Choisir Windows Pro ou Famille. Cette edition doit correspondre a la licence du poste. Un profil correspond a un index precis du WIM Windows, pas a un fichier ISO monte arbitrairement.
+4. Verifier le nom du PC, le clavier, le fuseau et la region. Le nom peut etre propose depuis le numero de serie puis modifie.
+5. Choisir les logiciels WinGet : VLC, Adobe Reader, Chrome, AnyDesk. Ils seront installes silencieusement dans Windows. Choisir le theme et le fond d ecran si necessaire.
+6. Lire le recapitulatif, choisir le bon disque en verifiant sa taille et son numero de serie. **Installer Windows** efface ce disque.
+7. Attendre la fin de l application de l image. Redemarrer sur le disque local Windows, avec le demarrage reseau retire de la priorite.
+8. Windows termine ses operations natives puis ouvre le compte de preparation Administrateur. L installation des logiciels et la preparation continuent en arriere-plan. La fenetre IQ Atelier peut etre reduite pour travailler.
+9. Consulter le resultat final. Un avertissement signifie qu un point reste a verifier : logiciel en echec, mise a jour reportee ou redemarrage requis. Le suivi ne prouve pas qu un test manuel a ete effectue.
 
-| Élément | Rôle | Adresse ou emplacement |
-| --- | --- | --- |
-| DEPLOY-01 | Serveur des images Windows et de la console Atelier | `192.168.99.250` |
-| Hôte Hyper-V | Ordinateur qui héberge les machines virtuelles | `192.168.99.253` |
-| PC cible | Ordinateur à installer, physique ou VM `PC-TEST-PXE` | Son adresse MAC est enregistrée dans Atelier |
+Le compte de preparation utilise le mode automatique deja configure dans l atelier. Avant remise au client, configurer le compte final et sa securite selon votre procedure. L ouverture automatique est desactivee a la fin de la preparation.
 
-Ouvrir la console à **https://192.168.99.250**. En mode interne, elle s’ouvre sans jeton. Le réseau de l’atelier doit donc rester accessible aux personnes autorisées à déployer. Le projet utilise WDS pour démarrer une image WinPE personnalisée ; il applique ensuite le WIM avec DISM. Il ne requiert pas une séquence de tâches MDT.
+## Utiliser le site
 
-**WinPE** est le petit Windows de démarrage qui affiche l’assistant d’installation. **WIM** est le fichier contenant les éditions de Windows. Un **profil** associe une édition du WIM à une langue et des réglages. Un **bundle** regroupe les logiciels à installer.
+Ouvrir `https://192.168.99.250`. En mode interne, l acces administrateur est automatique sur le reseau de confiance de l atelier.
 
-## Préparer un poste
+- **Vue d ensemble** : progression de l image, etapes Windows, erreurs et avertissements. Cliquer sur le poste pour son journal.
+- **Parc machines** : noms, MAC et rapports disponibles.
+- **Profils Windows** : images enregistrees, editions/index, logiciels et personnalisation. Pour ajouter une image, copier le WIM dans `<data_dir>\artifacts` sur le serveur puis Enregistrer un fichier. Le SHA-256 est calcule a cet enregistrement.
 
-1. Brancher le poste en Ethernet, sur secteur, au réseau de l’atelier. Utiliser un disque dont les données peuvent être effacées.
-2. Dans **Parc machines**, enregistrer le nom du poste et la MAC de l’interface utilisée pour démarrer en PXE. La MAC d’un dock peut être différente de celle du PC.
-3. Dans **Profils Windows**, vérifier les profils disponibles. Le choix Pro ou Famille dépend du contenu du WIM et de la licence du poste. Un choix d’édition ne crée pas de licence.
-4. Dans **Logiciels et outils**, vérifier le bundle, les versions et le fond d’écran. Les applications HP sont réservées aux HP ; les applications Lenovo aux Lenovo.
-5. Créer une **nouvelle autorisation de déploiement**, avec le bon poste, le profil initial, le numéro du disque et **Autoriser le choix du profil et des paramètres dans l’assistant PXE** coché. Une autorisation expire après deux heures si l’installation n’a pas commencé.
+Dans Activite de deploiement, **Rapport PDF** telecharge le rapport du poste. **Dossier inventaire** affiche le chemin serveur et permet de telecharger XML et CSV. Les fichiers sont classes sous `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` sur .250. Le navigateur ne peut pas ouvrir de lui-meme l Explorateur d un autre ordinateur : copier le chemin dans l Explorateur du serveur, ou telecharger les fichiers depuis le site.
 
-## Choisir Pro ou Famille
+## Outils sur le poste Windows
 
-Le technicien prépare une fois les profils depuis les véritables métadonnées de l’image. Sur DEPLOY-01, en PowerShell administrateur :
+Ouvrir `C:\IQ_`. Les fichiers sont classes par categorie :
+
+| Dossier | Usage |
+| --- | --- |
+| Diagnostics | Double-cliquer Test-Materiel.cmd : tester les canaux sonores, autoriser la webcam puis appuyer sur les touches. Confirmer et enregistrer le resultat. Test-Batterie.cmd genere le rapport batterie. |
+| Licence | Verifier-Licence.cmd actualise l etat d activation Windows sans changer la licence. |
+| Rapports | Rapport-Deploiement.pdf et Generer-Rapport.cmd pour le regenerer et retenter son envoi. |
+| Inventaire | Export-Inventaire.cmd actualise XML/CSV et les transmet au serveur. |
+| Garantie | Verifier-Garantie.cmd ouvre le portail officiel HP, Lenovo ou Dell. Saisir les dates confirmees : aucune date n est inventee depuis le SN. |
+| Personnalisation | Fond d ecran selectionne. |
+
+L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Sur un HP dont HP Image Assistant a ete reference, son executable s ouvre automatiquement a la fin pour les pilotes ; une mise a jour BIOS n est pas lancee automatiquement.
+
+## Mises a jour et lenteur
+
+La recherche Windows Update s arrete apres environ 90 secondes si elle ne repond pas. Une recherche terminee sans resultat affiche Aucune mise a jour necessaire trouvee et passe a la suite. Une recherche interrompue affiche Non verifie / reporte et laisse Windows Update disponible dans Parametres. Les mises a jour effectivement trouvees peuvent prendre du temps a telecharger et installer, en arriere-plan. Un redemarrage requis est annonce, sans couper votre session.
+
+Internet est necessaire pour WinGet, les mises a jour et les portails de garantie. L installation d une application peut etre lente selon sa taille et son editeur ; consulter le nom de l etape et le journal, sans relancer simultanement le meme installateur.
+
+## En cas de probleme
+
+- PXE absent : verifier UEFI, Ethernet, pilotes WinPE et qu un seul serveur PXE repond.
+- Mauvaise edition : choisir un autre profil correspondant a la licence, ou faire synchroniser les profils depuis le WIM par l administrateur.
+- Echec avant partitionnement : lire le journal dans WinPE et dans l activite du site. Le disque ne doit pas etre efface tant que les controles ne sont pas passes.
+- Logiciel en echec : consulter `C:\ProgramData\AtelierPXE\software-logs` et le PDF. Le reste de la preparation peut continuer.
+- Rapport absent sur le site : le PDF local et le cache d inventaire restent conserves. Retablir le reseau puis lancer Rapports\Generer-Rapport.cmd.
+
+Journaux du poste : `C:\ProgramData\AtelierPXE\first-logon.log`, `maintenance.log`, `reporting.log`, `progress.json`. Sur le serveur : `<data_dir>\logs\console.log` et `<data_dir>\cleanup` pour le nettoyage.
+
+## Demarrer ou arreter le PXE
+
+Sur le serveur qui heberge le WDS concerne, ouvrir Windows PowerShell administrateur. Ne pas activer en meme temps l ancien MDT et le nouveau PXE sur le meme reseau.
 
 ```powershell
-& 'C:\AtelierPXE\console\scripts\Sync-WindowsEditions.ps1'
+# Arreter les reponses PXE
+wdsutil /Set-Server /AnswerClients:None
+Stop-Service WDSServer
+
+# Demarrer les reponses PXE
+Start-Service WDSServer
+wdsutil /Set-Server /AnswerClients:All
 ```
 
-Un profil existant pour ce WIM sert de modèle pour la langue, le bundle et le bureau. Le script ajoute uniquement les éditions Pro, Famille ou Famille unilingue présentes dans le WIM. Il ne télécharge et ne convertit aucune édition. Si Famille n’est pas proposée, fournir un WIM qui la contient. Ne pas deviner son index : les index varient selon le média Microsoft.
-
-Créer ensuite une **nouvelle autorisation**, car une autorisation mémorise le catalogue disponible au moment de sa création. Dans WinPE, l’étape **Windows** propose les profils Pro/Famille disponibles. Sans la case de choix dans l’assistant, seul le profil autorisé est accessible.
-
-## Installer Windows
-
-1. Démarrer le PC en **UEFI IPv4 / réseau**. Dans Hyper-V, utiliser le démarrage réseau de la VM cliente.
-2. Choisir la nouvelle image **Atelier PXE - ATELIER-2 - date**. Une image ancienne conserve ses anciens scripts.
-3. L’assistant retrouve la nouvelle autorisation par la MAC. En mode interne, aucun code PXE ni mot de passe SMB n’est à recopier. S’il ne trouve rien, vérifier la MAC et l’autorisation, puis cliquer sur Connexion.
-4. Choisir le profil Windows et vérifier le nom du PC, la région, le clavier, le fuseau, le bundle et le fond d’écran. Un numéro de série trop court ou générique impose un nom manuel.
-5. Lire le récapitulatif, surtout l’identité et la capacité du disque. **Installer Windows efface les partitions du disque indiqué.**
-6. Attendre la fin de WinPE. **Image appliquée / staged** signifie que les fichiers Windows et le démarrage sont prêts ; les logiciels et les mises à jour restent à exécuter.
-7. Éteindre WinPE avec `wpeutil shutdown`. Placer le disque / Windows Boot Manager avant le réseau, puis redémarrer. Sur un PC physique, utiliser son menu de démarrage si nécessaire.
-
-## Suivre la préparation dans Windows
-
-Le premier démarrage prépare le bureau et les logiciels. La fenêtre de progression affiche leur nom. Les processus PowerShell d’arrière-plan sont masqués.
-
-Windows Update affiche successivement **Recherche**, **Téléchargement** et **Installation**, avec les titres des mises à jour. La recherche n’expose pas de pourcentage fiable : la barre s’anime et indique une durée variable. Pendant le téléchargement et l’installation, le pourcentage représente l’étape en cours, pas le temps restant de tout le déploiement. Il peut repartir de zéro lors d’une nouvelle étape ou passe.
-
-La première recherche et les grosses mises à jour cumulatives peuvent être longues. Laisser le PC sur secteur et connecté. Le service Windows Update configuré sur le poste est conservé, y compris WSUS. Les pilotes et les mises à jour facultatives ne sont pas sélectionnés par ce parcours. Des redémarrages automatiques sont annoncés deux minutes à l’avance. La reprise est limitée à cinq passes, quatre redémarrages et six tentatives ; un problème temporaire donne une nouvelle tentative quinze minutes plus tard.
-
-Sur un HP compatible, le package portable **HP Image Assistant**, enregistré avec le point d’entrée `HPImageAssistant.exe`, s’ouvre après la maintenance Windows. Le technicien choisit alors les pilotes à installer. Son ouverture n’installe aucun pilote ou BIOS automatiquement. Un raccourci reste sur le bureau si une ouverture manuelle est nécessaire. La disponibilité des pilotes dépend de la prise en charge du modèle par HP Image Assistant.
-
-Le démarrage rapide **Windows** est désactivé pour tous les nouveaux déploiements. Le réglage Fast Boot du BIOS/UEFI n’est pas modifié.
-
-## Contrôler le poste dans C:\IQ_
-
-| Outil ou fichier | Utilisation |
-| --- | --- |
-| `Test-Materiel.cmd` | Ouvre les tests du son, de la webcam et du clavier dans le navigateur. Autoriser la webcam, tester et confirmer chaque résultat. |
-| `Tests-Materiel.json` | Résultats saisis par l’opérateur. « Non testé » ne signifie pas « conforme ». |
-| `Test-Batterie.cmd` | Génère le rapport batterie ; une VM ou un PC fixe peut légitimement ne pas avoir de batterie. |
-| `Verifier-Licence.cmd` | Actualise l’état d’activation Windows, sans modifier la licence. |
-| `Rapport-Deploiement.pdf` | Inventaire, édition et activation Windows, logiciels, mises à jour, avertissements et résultats matériels disponibles. |
-| `Generer-Rapport.cmd` | Régénère le PDF après les tests, la vérification de garantie ou les interventions manuelles, puis tente la transmission à Atelier. |
-| `Transmission-Rapport.json` | `sent` : reçu par Atelier ; `pending` : PDF local conservé et envoi à reprendre. |
-| `Verifier-Garantie.cmd` | Ouvre la vérification officielle du constructeur et permet de consigner les dates confirmées. |
-
-Les lanceurs peuvent demander l’autorisation administrateur pour écrire dans le dossier technique. Le test caméra montre l’image localement, sans l’enregistrer. Le clavier est testé uniquement dans sa zone dédiée ; Fn et certains raccourcis Windows demandent une vérification manuelle. Le son doit être confirmé à l’oreille. Ces outils ne peuvent pas certifier automatiquement l’état physique des périphériques.
-
-## Lire le rapport dans Atelier
-
-Après la fin ou l’arrêt définitif de la préparation, le PDF local est créé dans `C:\IQ_`. Le poste transmet ses informations à la console. Dans **Activité de déploiement**, le bouton **Rapport PDF** apparaît ; il est aussi disponible sur la ligne du poste dans **Parc machines**.
-
-La console distingue l’état WinPE et l’état Windows. **Terminé** concerne les opérations automatiques ; vérifier aussi les avertissements du PDF, l’activation, les périphériques et les pilotes. L’actualisation Microsoft Store est une demande à Windows : elle ne garantit pas que toutes les applications ont fini de se mettre à jour. Contrôler la bibliothèque du Store si nécessaire.
-
-Si la console est momentanément indisponible, le PDF reste local et l’envoi est retenté toutes les quinze minutes. Le jeton de rapport est valable quatorze jours depuis le début du déploiement. Passé ce délai, conserver le PDF local ; une intervention du technicien est nécessaire pour un nouveau rattachement. Ne pas copier les fichiers d’identifiants du dossier ProgramData dans un compte rendu.
-
-## Que faire en cas de problème
-
-| Symptôme | Vérification |
-| --- | --- |
-| WinPE ne démarre pas | Démarrage UEFI, câble, DHCP/WDS et choix de la bonne image. |
-| Réseau ou disque absent dans WinPE | Pilotes WinPE du modèle ; demander une reconstruction au technicien. |
-| Pro/Famille manque | Édition présente dans le WIM, synchronisation des profils, puis nouvelle autorisation avec choix activé. |
-| Mises à jour lentes | Phase affichée, titre de la mise à jour, connexion, heure du poste ; ne pas couper l’alimentation pendant l’installation. |
-| Nouvelle tentative prévue | Laisser le poste connecté ; consulter `maintenance.log` si les tentatives se répètent. |
-| À vérifier / échec | Lire le PDF et `C:\ProgramData\AtelierPXE\maintenance.log` ou `first-logon.log`. Ne pas effacer l’état pour relancer une boucle. |
-| Pas de PDF dans Atelier | Vérifier le PDF local et `Transmission-Rapport.json`, puis lancer `Generer-Rapport.cmd`. Les anciens clients antérieurs à ATELIER-2 n’ont pas cette remontée. |
-| Webcam refusée | Autorisation du navigateur, réglages de confidentialité Windows, cache, pilote. Ce refus ne prouve pas une panne. |
-
-## Terminer la recette
-
-Vérifier l’édition et l’activation Windows, le nom et le numéro de série, le Gestionnaire de périphériques, le son, la webcam, le clavier et la batterie si présente. Effectuer les mises à jour de pilotes voulues dans l’outil constructeur. Actualiser le rapport après les tests avec `Generer-Rapport.cmd`, puis vérifier son téléchargement depuis Atelier. Garder le PDF avec la fiche du poste.
-
-Pour la mise à jour du serveur et la reconstruction WinPE, suivre [la procédure ATELIER-2](MISE-A-JOUR-ATELIER-2.md). Pour une installation neuve de l’infrastructure, utiliser [INSTALLATION.md](INSTALLATION.md).
-
-## Mettre à jour les logiciels depuis le site
-
-Dans **Logiciels & bundles**, le bouton **Mettre à jour les logiciels** télécharge les nouvelles versions via WinGet, puis actualise le catalogue et les bundles choisis. Le dernier bilan indique les versions, succès et erreurs. Préparer une fois l’agent dans la session Windows du serveur : [guide WinGet](LOGICIELS-AUTOMATIQUES.md). Cette opération ne modifie pas WDS et ne nécessite pas de reconstruire WinPE.
+Ces commandes ne desinstallent pas les images ou la console. Un poste deja en train d appliquer son image doit terminer avant une operation de maintenance du serveur.
