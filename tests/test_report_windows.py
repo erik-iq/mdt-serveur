@@ -17,6 +17,8 @@ def test_local_report_inventory_and_offline_pdf(tmp_path,central):
     data = tmp_path / 'data'; data.mkdir()
     out = tmp_path / 'IQ'; out.mkdir()
     shutil.copy(ROOT/'scripts'/'Reporting.ps1', data/'Reporting.ps1')
+    timings=data/'timings';timings.mkdir()
+    (timings/'image.json').write_text(json.dumps({'run_id':'d1694e35-1c13-4e09-a8f6-d8b2ce03848d','source':'winpe','stage':'image','status':'completed','started_at':'2026-10-19T09:00:00Z','duration_seconds':125}))
     (data/'result.json').write_text(json.dumps({'status':'completed','applications':[{'name':'VLC','status':'completed','exit_code':0}]}))
     (data/'maintenance.json').write_text(json.dumps({'status':'completed','windows':{'status':'up_to_date','titles':[]},'store':{'status':'requested'}}))
     (out/'Licence-Windows.json').write_text('{"etat":"ACTIVE"}')
@@ -45,8 +47,10 @@ function Get-ItemProperty { param($Path,$Name) [pscustomobject]@{HiberbootEnable
     assert result.returncode == 0, result.stderr
     report=json.loads((out/'Rapports'/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
     assert report['status']=='completed' and report['inventory']['Numero de serie']=='TEST123456'
+    assert any(step['name']=='Duree - Application de Windows' and '125' in step['message'] for step in report['steps'])
     pdf=(out/'Rapports'/'Rapport-Deploiement.pdf').read_bytes()
     assert pdf.startswith(b'%PDF-1.4') and b'TEST123456' in pdf and b'%%EOF' in pdf
+    assert b'125 secondes mesurees' in pdf
     start=int(pdf.split(b'startxref\n')[1].splitlines()[0])
     assert pdf[start:].startswith(b'xref\n')
 

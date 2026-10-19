@@ -40,7 +40,7 @@ Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'Theme.ps1')
 $form=New-Object Windows.Forms.Form
 $form.Text='IQ | Garantie constructeur';$form.ClientSize=New-Object Drawing.Size(660,420);$form.StartPosition='CenterScreen'
-$form.Font=New-Object Drawing.Font('Segoe UI',10)
+$form.Font=New-AtelierFont -Size 10
 $label=New-Object Windows.Forms.Label
 $logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(600,15)
 $label.Location=New-Object Drawing.Point(20,15);$label.Size=New-Object Drawing.Size(550,85)

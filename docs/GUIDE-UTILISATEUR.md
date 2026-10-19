@@ -11,8 +11,8 @@ Sauvegarder les donnees du poste : le deploiement efface toutes les partitions d
 1. Allumer le poste et choisir son demarrage reseau UEFI/PXE dans le menu de demarrage du constructeur.
 2. Choisir l image **Atelier PXE - ATELIER-4 - date**. L assistant IQ Atelier s ouvre. Le poste et sa demande apparaissent automatiquement sur le site ; aucune autorisation prealable n y est necessaire.
 3. Choisir Windows Pro ou Famille. Cette edition doit correspondre a la licence du poste. Un profil correspond a un index precis du WIM Windows, pas a un fichier ISO monte arbitrairement.
-4. Verifier le nom du PC, le clavier, le fuseau et la region. Le nom peut etre propose depuis le numero de serie puis modifie.
-5. Choisir les logiciels WinGet : VLC, Adobe Reader, Chrome, AnyDesk. Ils seront installes silencieusement dans Windows. Choisir le theme et le fond d ecran si necessaire.
+4. Completer le nom du PC : seuls les quatre derniers chiffres du SN sont proposes, sans prefixe. Exemple : `8323` devient `ATELIER-8323`. Le nom doit commencer par une lettre, avec au maximum 15 lettres, chiffres ou tirets. Verifier le clavier et le fuseau ; la region et les formats sont proposes en `fr-CH`.
+5. Choisir les logiciels WinGet : VLC, Adobe Reader, Chrome, AnyDesk. Ils seront installes silencieusement dans Windows. Le fond `Fond Atelier.png` est propose s il est enregistre sur le serveur ; le theme et le fond restent modifiables. Proprietaire et organisation ne sont plus demandes.
 6. Lire le recapitulatif, choisir le bon disque en verifiant sa taille et son numero de serie. **Installer Windows** efface ce disque.
 7. Attendre la fin de l application de l image. Redemarrer sur le disque local Windows, avec le demarrage reseau retire de la priorite.
 8. Windows termine ses operations natives puis ouvre le compte de preparation Administrateur. L installation des logiciels et la preparation continuent en arriere-plan. La fenetre IQ Atelier peut etre reduite pour travailler.
@@ -25,10 +25,12 @@ Le compte de preparation utilise le mode automatique deja configure dans l ateli
 Ouvrir `https://192.168.99.250`. En mode interne, l acces administrateur est automatique sur le reseau de confiance de l atelier.
 
 - **Vue d ensemble** : progression de l image, etapes Windows, erreurs et avertissements. Cliquer sur le poste pour son journal.
-- **Parc machines** : noms, MAC et rapports disponibles.
+- **Parc machines** : noms, MAC et rapports disponibles. Cliquer un nom pour ouvrir la fiche ordinateur.
 - **Profils Windows** : images enregistrees, editions/index, logiciels et personnalisation. Pour ajouter une image, copier le WIM dans `<data_dir>\artifacts` sur le serveur puis Enregistrer un fichier. Le SHA-256 est calcule a cet enregistrement.
 
 Dans Activite de deploiement, **Rapport PDF** telecharge le rapport du poste. **Dossier inventaire** affiche le chemin serveur et permet de telecharger XML et CSV. Les fichiers sont classes sous `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` sur .250. Le navigateur ne peut pas ouvrir de lui-meme l Explorateur d un autre ordinateur : copier le chemin dans l Explorateur du serveur, ou telecharger les fichiers depuis le site.
+
+**Fiche ordinateur** rassemble historique, inventaire, PDF, resultats de tests, garantie connue et observations du technicien. Les observations sont enregistrees sur le serveur. Les nouveaux deploiements affichent les durees mesurees pour l image, WinGet, les outils constructeur, Windows Update et l inventaire. Les anciennes installations restent sans mesures. L utilisation manuelle de HP Image Assistant pour les pilotes n est pas chronometree. Apres un test ou une verification de garantie, regenerer le rapport depuis le poste pour actualiser la fiche.
 
 ## Outils sur le poste Windows
 

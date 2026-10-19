@@ -22,10 +22,13 @@ $inventoryPending=$false
 $refreshFinal=$finalInventory -and -not (Test-Path $finalMarker)
 if ($RefreshInventory -or $refreshFinal -or -not (Test-Path $xmlInventory) -or -not (Test-Path $csvInventory)) {
     try {
+        $inventoryTiming=if (Get-Command Start-AtelierTiming -ErrorAction SilentlyContinue) { Start-AtelierTiming $DataPath 'inventory' } else { '' }
         $export= & (Join-Path $DataPath 'Export-Inventaire.ps1') -OutputDirectory $inventoryDirectory
+        if ($inventoryTiming) { Stop-AtelierTiming $DataPath $inventoryTiming }
         if ($finalInventory) { @{date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $finalMarker -Encoding UTF8 }
         if ($export.SectionsIndisponibles) { $warnings.Add('Certaines categories de l inventaire technique sont indisponibles ; consulter les etats dans XML/CSV.') }
     } catch {
+        if ($inventoryTiming) { Stop-AtelierTiming $DataPath $inventoryTiming 'failed' }
         $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.')
         if ($payload.settings.central_inventory) {
             $inventoryPending=$true
@@ -108,6 +111,16 @@ if ($warranty) {
 if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en echec ; consulter software-logs et les etapes du rapport.') }
 $status=if ($apps.status -eq 'failed') { 'failed' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
+$timingDirectory=Join-Path $DataPath 'timings'
+if (Test-Path $timingDirectory) {
+    $stageNames=@{image='Application de Windows';software='Logiciels';manufacturer_tools='Preparation des outils constructeur';windows_update='Windows Update';inventory='Inventaire';personalization='Personnalisation'}
+    foreach ($timingFile in @(Get-ChildItem -LiteralPath $timingDirectory -Filter '*.json' -File | Select-Object -First 200)) {
+        $timing=Read-ReportJson $timingFile.FullName
+        if ($timing -and $timing.status -ne 'running' -and $stageNames.ContainsKey([string]$timing.stage)) {
+            $steps.Add(@{name=('Duree - '+$stageNames[[string]$timing.stage]);status=[string]$timing.status;message=([string]$timing.duration_seconds+' secondes mesurees');timestamp=[string]$timing.started_at})
+        }
+    }
+}
 if ($steps.Count -gt 230) { $warnings.Add('Historique PDF limite aux 230 dernieres entrees. Les journaux complets restent dans ProgramData.') }
 $report=[ordered]@{hostname=$env:COMPUTERNAME;status=$status;generated_at=[DateTime]::UtcNow.ToString('o');inventory=$inventory;steps=@($steps.ToArray() | Select-Object -Last 230);warnings=@($warnings.ToArray())}
 $json=$report | ConvertTo-Json -Depth 12
@@ -118,6 +131,7 @@ $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
 $lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
+if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'
 if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','needs_attention') -or $apps.status -eq 'failed')) {
     try {

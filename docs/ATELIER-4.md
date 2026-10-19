@@ -8,9 +8,23 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme `ui_revision: IQ-4.1` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.2` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.1`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.2`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+
+## Assistant et fiche ordinateur IQ-4.2
+
+Les polices WinForms utilisent un constructeur explicitement type : cela evite une interpretation de la taille comme un style italique. Le titre est moins grand, sa description peut revenir a la ligne et la liste Windows ne repete plus les informations du profil. Les reponses JSON annoncent explicitement UTF-8 pour Windows PowerShell 5.1. Les donnees existantes sont conservees : un nom deja enregistre avec des caracteres incorrects doit etre corrige dans sa source.
+
+Le nom propose dans WinPE est uniquement constitue des quatre derniers chiffres du SN, en conservant les zeros initiaux. Aucun prefixe ni nom de remplacement n est ajoute. Si le SN est absent, generique ou contient moins de quatre chiffres, le champ reste vide. **Completer le nom avant de continuer**, par exemple `8323` devient `ATELIER-8323` : le nom Windows valide doit commencer par une lettre et contenir au maximum 15 lettres, chiffres ou tirets. Le champ Prefixe et le bouton Recalculer sont retires.
+
+La region et les formats sont proposes en `fr-CH`. Cela ne change pas la langue du WIM ni automatiquement le clavier. Proprietaire et organisation ne sont plus demandes. Le fond `Fond Atelier.png` ou `fon atelier.png` est selectionne par defaut quand il est disponible. La mise a jour enregistre ce fichier si elle le trouve dans `<data_dir>\artifacts` ; sinon elle affiche un avertissement. Elle ne cree pas de faux fond d ecran. Pour l ajouter ensuite : copier le PNG dans ce dossier, puis Profils Windows, Enregistrer un fichier, type Fond d ecran.
+
+Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom dans **Parc machines**. La fiche regroupe identite materielle, licence, historique pagine, PDF, XML/CSV, tests, garantie connue et observations datees du technicien. Les observations sont conservees sur le serveur, independamment des rapports. Les tests et la garantie apparaissent apres utilisation de leurs outils et regeneration du rapport ; aucun resultat n est invente.
+
+Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation des outils constructeur, Windows Update et la collecte XML/CSV. Ces mesures apparaissent dans l historique de la fiche et les nouveaux rapports PDF. Le temps de preparation de HP Image Assistant ne mesure pas l installation manuelle des pilotes dans son interface. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
+
+La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
 
 ## Ce qui change
 
@@ -95,3 +109,17 @@ Journaux Windows : `C:\ProgramData\AtelierPXE\first-logon.log`, `maintenance.log
 - Ajouter un etat Pret pour remise qui exige rapport disponible, activation verifiee et tests materiels valides, avec les points restants visibles.
 
 Les tests automatises utilisent des images et services simules. Un deploiement reel, les pilotes et l OOBE doivent etre verifies sur un poste Windows de laboratoire.
+
+## Comment preparer un WIM Windows a jour
+
+Cette procedure est une proposition de maintenance. La mise a jour IQ-4.2 ne modifie pas votre WIM Windows et ne programme pas de maintenance automatique des images.
+
+Le principe est d installer une fois les correctifs dans une copie de l image, sur .250, au lieu de les reinstaller sur chaque ordinateur. Prevoir de l espace pour la copie, le montage et les fichiers temporaires. Les operations DISM se font sur Windows avec les outils compatibles avec la version cible.
+
+1. Conserver le WIM actuel pour le retour arriere. Creer une copie avec un nouveau nom, par exemple `Windows11-2026-10.wim`. Ne jamais monter en ecriture une image en cours de deploiement.
+2. Relever les index Pro et Famille avec DISM /Get-WimInfo, ainsi que la version, l architecture et les langues. Telecharger depuis le Catalogue Microsoft Update les paquets officiels correspondants ; verifier leurs prerequis. Selon la version, des mises a jour de pile de maintenance ou des mises a jour cumulatives de point de controle doivent etre ajoutees dans un ordre precis.
+3. Monter chaque index utilise dans un dossier vide, ajouter les paquets avec DISM /Add-Package, puis enregistrer avec /Unmount-Image /Commit. Traiter Pro et Famille : actualiser seulement un index ne met pas les autres a jour. Ne pas utiliser /ResetBase pour cette premiere procedure, afin de conserver les possibilites de retrait de correctifs.
+4. Tester les deux editions sur un poste de laboratoire : demarrage UEFI, edition et activation, reseau, pilotes, WinGet et rapport. Verifier aussi les correctifs restants dans Windows Update. Certaines mises a jour, les applications Store et les pilotes restent propres a chaque ordinateur.
+5. Enregistrer le nouveau WIM sous son nouveau nom dans Atelier, puis creer les profils pointant vers les bons index. Conserver les anciens profils jusqu a validation et choisir les nouveaux pour les prochains deploiements. Ne pas simplement remplacer les octets du fichier deja reference : le controle de taille/date et l empreinte enregistree doivent correspondre au nouveau fichier.
+
+On peut renouveler cette preparation chaque mois apres validation des correctifs. L objectif est de reduire fortement le telechargement et l installation repetes ; une courte verification Windows Update reste utile pour les correctifs parus apres la fabrication de l image. La reconstruction de WinPE concerne l assistant de deploiement : elle ne met pas a jour Windows dans le WIM d installation.

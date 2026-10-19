@@ -11,20 +11,20 @@ $form = New-Object Windows.Forms.Form
 $form.Text = 'IQ Atelier | Preparation en arriere-plan'
 $form.ClientSize = New-Object Drawing.Size(720,390)
 $form.StartPosition='CenterScreen'; $form.BackColor=Get-AtelierColor 'paper'
-$form.Font = New-Object Drawing.Font('Segoe UI',11)
+$form.Font = New-AtelierFont -Size 11
 $title=New-Object Windows.Forms.Label
 $header=New-Object Windows.Forms.Panel
 $header.Location=New-Object Drawing.Point(12,8);$header.Size=New-Object Drawing.Size(696,60)
 $logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(646,10)
 $title.Text='Preparation du poste'; $title.Location=New-Object Drawing.Point(13,13); $title.Size=New-Object Drawing.Size(610,38)
-$title.Font=New-Object Drawing.Font('Segoe UI',20,[Drawing.FontStyle]::Bold)
+$title.Font=New-AtelierFont -Size 20 -Bold $true
 $message=New-Object Windows.Forms.Label
 $message.Text='Chargement de la progression...';$message.Location=New-Object Drawing.Point(25,80);$message.Size=New-Object Drawing.Size(670,90)
 $bar=New-Object Windows.Forms.ProgressBar
 $bar.Location=New-Object Drawing.Point(25,174);$bar.Size=New-Object Drawing.Size(670,24);$bar.Maximum=100
 $note=New-Object Windows.Forms.Label
 $note.Text='Votre bureau est disponible. Vous pouvez reduire cette fenetre.'
-$note.Location=New-Object Drawing.Point(25,210);$note.Size=New-Object Drawing.Size(670,45);$note.Font=New-Object Drawing.Font('Segoe UI',9)
+$note.Location=New-Object Drawing.Point(25,210);$note.Size=New-Object Drawing.Size(670,45);$note.Font=New-AtelierFont -Size 9
 $details=New-Object Windows.Forms.TextBox
 $details.Location=New-Object Drawing.Point(25,263);$details.Size=New-Object Drawing.Size(670,95)
 $details.Multiline=$true;$details.ReadOnly=$true;$details.ScrollBars='Vertical'

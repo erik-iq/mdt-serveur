@@ -67,7 +67,7 @@ Set-SmbShare -Name 'AtelierImages' -EncryptData $true -Force
 if ($LASTEXITCODE -ne 0) { throw 'Permissions de lecture NTFS impossibles.' }
 $backup = $configPath + '.before-internal-' + [guid]::NewGuid().ToString('N')
 Copy-Item -LiteralPath $configPath -Destination $backup
-$config | Add-Member -NotePropertyName hostname_prefix -NotePropertyValue 'LE-T15-' -Force
+$config.PSObject.Properties.Remove('hostname_prefix')
 $config | Add-Member -NotePropertyName hostname_suffix_mode -NotePropertyValue $HostnameSuffixMode -Force
 $config | Add-Member -NotePropertyName internal_mode -NotePropertyValue $true -Force
 $config | Add-Member -NotePropertyName automatic_windows -NotePropertyValue $true -Force

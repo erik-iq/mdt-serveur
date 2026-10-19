@@ -20,7 +20,6 @@ $script:drive = $null
 $script:settings = $null
 $script:selectedProfile = $null
 $script:targetName = ''
-$script:namePrefix = [string]$Config.hostname_prefix
 $script:controls = @{}
 $script:operatorKeyboard = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($Config.winpe_keyboard_layout) { $Config.winpe_keyboard_layout } else { '040c:0000040c' }
 $script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
@@ -29,14 +28,11 @@ $script:manufacturer = [string]$computer.Manufacturer
 $script:serialNumber = ''
 $script:proposedName = ''
 $script:namingMessage = ''
-if ($Config.hostname_prefix) {
-    try {
-        $script:serialNumber = [string](Get-CimInstance Win32_BIOS).SerialNumber
-        $mode = if ($Config.hostname_suffix_mode) { $Config.hostname_suffix_mode } else { 'digits' }
-        $script:proposedName = Get-AtelierComputerName -SerialNumber $script:serialNumber -Prefix $Config.hostname_prefix -SuffixMode $mode
-        $script:namingMessage = 'Nom propose depuis le numero de serie BIOS ; vous pouvez le modifier.'
-    } catch { $script:namingMessage = $_.Exception.Message }
-}
+try {
+    $script:serialNumber=[string](Get-CimInstance Win32_BIOS).SerialNumber
+    $script:proposedName=Get-AtelierSerialSuffix -SerialNumber $script:serialNumber
+    $script:namingMessage='Quatre derniers chiffres du numero de serie. Completer le nom avant installation.'
+} catch { $script:namingMessage=$_.Exception.Message }
 $script:macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-',':').ToUpperInvariant() } | Select-Object -Unique)
 $script:root = $Config.server_url.TrimEnd('/')
 $script:share = if ($Config.image_share) { $Config.image_share } else { '\\' + ([Uri]$script:root).Host + '\AtelierImages' }
@@ -49,16 +45,15 @@ $muted=Get-AtelierColor 'muted'
 function New-Text([string]$Text, [int]$Size = 10, [bool]$Bold = $false) {
     $label = New-Object Windows.Forms.Label
     $label.Text = $Text; $label.AutoSize = $true; $label.BackColor=[Drawing.Color]::Transparent
-    $style = if ($Bold) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
-    $label.Font = New-Object Drawing.Font('Segoe UI', $Size, $style)
-    $label.ForeColor = $ink; $label.Margin = New-Object Windows.Forms.Padding(0,7,0,7)
+    $label.Font = New-AtelierFont -Size $Size -Bold $Bold
+    $label.ForeColor = $ink; $label.Margin = New-Object Windows.Forms.Padding(0,4,0,5)
     return $label
 }
 function New-Button([string]$Text, [bool]$Primary = $false) {
     $button = New-Object Windows.Forms.Button
     $button.Tag=if ($Primary) { 'primary' } else { '' }; $button.Text = $Text; $button.Width = 150; $button.Height = 40
     $button.FlatStyle = 'Flat'; $button.FlatAppearance.BorderSize = 0
-    $button.Font = New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Bold)
+    $button.Font = New-AtelierFont -Size 10 -Bold $true
     $button.BackColor = if ($Primary) { $accent } else { [Drawing.ColorTranslator]::FromHtml('#E9EDF8') }
     $button.ForeColor = if ($Primary) { [Drawing.Color]::White } else { $ink }
     $button.Margin = New-Object Windows.Forms.Padding(8,0,0,0)
@@ -74,7 +69,7 @@ function Add-Input([string]$Key, [string]$Label, [string]$Value = '', [bool]$Sec
     Add-Text $Label 10 $true | Out-Null
     $input = New-Object Windows.Forms.TextBox
     $input.Text = $Value; $input.UseSystemPasswordChar = $Secret
-    $input.Font = New-Object Drawing.Font('Segoe UI',11)
+    $input.Font = New-AtelierFont -Size 11
     $input.Width = $script:body.ClientSize.Width - 28
     $input.Margin = New-Object Windows.Forms.Padding(0,0,0,12)
     $script:controls[$Key] = $input; $script:body.Controls.Add($input)
@@ -83,7 +78,7 @@ function Add-Input([string]$Key, [string]$Label, [string]$Value = '', [bool]$Sec
 function Add-Choice([string]$Key, [string]$Label, [object[]]$Items, [string]$Value = '') {
     Add-Text $Label 10 $true | Out-Null
     $choice = New-Object Windows.Forms.ComboBox
-    $choice.DropDownStyle = 'DropDownList'; $choice.Font = New-Object Drawing.Font('Segoe UI',11)
+    $choice.DropDownStyle = 'DropDownList'; $choice.Font = New-AtelierFont -Size 11
     $choice.Width = $script:body.ClientSize.Width - 28
     $choice.Tag = @($Items)
     foreach ($item in $Items) { $choice.Items.Add([string]$item.name) | Out-Null }
@@ -102,7 +97,7 @@ function Add-Check([string]$Key, [string]$Text, [bool]$Checked, [bool]$Enabled =
     $check = New-Object Windows.Forms.CheckBox
     $check.Text = $Text; $check.Checked = $Checked; $check.Enabled = $Enabled
     $check.AutoSize = $false; $check.Width = $script:body.ClientSize.Width - 28; $check.Height = 30
-    $check.Font = New-Object Drawing.Font('Segoe UI',10); $check.Margin = New-Object Windows.Forms.Padding(0,3,0,3)
+    $check.Font = New-AtelierFont -Size 10; $check.Margin = New-Object Windows.Forms.Padding(0,3,0,3)
     $script:controls[$Key] = $check; $script:body.Controls.Add($check)
 }
 function Send-Json([string]$Path, [psobject]$Body, [bool]$Authenticated = $true) {
@@ -116,20 +111,23 @@ function Set-Profile([string]$Id) {
     if (-not $profile) { throw 'Profil absent de cette autorisation.' }
     $script:selectedProfile = $profile
     $script:settings = $profile.settings | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $script:settings.user_locale='fr-CH'
+    $script:settings.registered_owner='';$script:settings.organization=''
+    $defaultWallpaper=@($script:session.catalog.wallpapers | Where-Object { ($_.filename -replace '[ _-]','').ToLowerInvariant() -in @('fondatelier.png','fonatelier.png') } | Select-Object -First 1)
+    if ($defaultWallpaper.Count) { $script:settings.wallpaper_asset_id=$defaultWallpaper[0].id }
 }
 function Save-Page {
     switch ($script:page) {
         1 { $id = Choice-Value 'profile'; if ($id -ne $script:selectedProfile.id) { Set-Profile $id } }
         2 {
             $name = $script:controls.hostname.Text.Trim()
-            if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Nom du PC : 1 a 15 caracteres, lettres, chiffres et tirets.' }
+            if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Completer le nom : commencer par une lettre, puis utiliser au maximum 15 lettres, chiffres ou tirets.' }
             $script:targetName = $name
-            if ($script:controls.hostname_prefix) { $script:namePrefix=$script:controls.hostname_prefix.Text.Trim() }
             $script:settings.keyboard = Choice-Value 'keyboard'
             $script:settings.timezone = Choice-Value 'timezone'
             $script:settings.user_locale = Choice-Value 'user_locale'
-            $script:settings.registered_owner = $script:controls.owner.Text.Trim()
-            $script:settings.organization = $script:controls.organization.Text.Trim()
+            $script:settings.registered_owner=''
+            $script:settings.organization=''
         }
         3 {
             $script:settings.theme = Choice-Value 'theme'
@@ -195,34 +193,18 @@ function Show-Page {
             }
         }
         1 {
-            $items = @($script:session.catalog.profiles | ForEach-Object { [pscustomobject]@{id=$_.id; name=($_.name + ' | ' + $_.windows_version + ' ' + $_.edition + ' | ' + $_.locale)} })
+            $items = @($script:session.catalog.profiles | ForEach-Object { [pscustomobject]@{id=$_.id; name=[string]$_.name} })
             Add-Choice 'profile' 'Edition Windows (Pro / Famille) et profil' $items $script:selectedProfile.id | Out-Null
-            Add-Text 'Les versions proposees correspondent aux images enregistrees sur votre serveur. La langue de Windows est celle de l image selectionnee.' | Out-Null
-            Add-Text ('Profil initial : ' + $script:session.plan.profile_name) | Out-Null
+            Add-Text 'La liste utilise les images Windows du serveur. La langue depend de l''image choisie.' | Out-Null
         }
         2 {
             Add-Text ('Numero de serie BIOS : ' + $script:serialNumber) | Out-Null
             if ($script:namingMessage) { Add-Text $script:namingMessage | Out-Null }
             $name = Add-Input 'hostname' 'Nom du PC' $script:targetName
             $name.MaxLength = 15
-            if ($Config.hostname_prefix) {
-                Add-Input 'hostname_prefix' 'Prefixe du nom (ex. LE-T15-)' $script:namePrefix | Out-Null
-                $rename = New-Button 'Recalculer le nom'
-                $rename.Width=200
-                $rename.Add_Click({
-                    try {
-                        $prefix=$script:controls.hostname_prefix.Text.Trim().TrimEnd('-') + '-'
-                        $suffixMode=if ($Config.hostname_suffix_mode) { $Config.hostname_suffix_mode } else { 'digits' }
-                        $script:controls.hostname.Text=Get-AtelierComputerName -SerialNumber $script:serialNumber -Prefix $prefix -SuffixMode $suffixMode
-                    } catch { $script:status.Text=$_.Exception.Message }
-                })
-                $script:body.Controls.Add($rename)
-            }
             Add-Choice 'keyboard' 'Clavier' @($script:session.catalog.options.keyboards) $script:settings.keyboard | Out-Null
             Add-Choice 'timezone' 'Fuseau horaire' @($script:session.catalog.options.timezones) $script:settings.timezone | Out-Null
             Add-Choice 'user_locale' 'Region / formats' @($script:session.catalog.options.regions) $script:settings.user_locale | Out-Null
-            Add-Input 'owner' 'Proprietaire enregistre (facultatif)' $script:settings.registered_owner | Out-Null
-            Add-Input 'organization' 'Organisation (facultatif)' $script:settings.organization | Out-Null
         }
         3 {
             if ($script:settings.software_mode -eq 'winget') {
@@ -274,7 +256,7 @@ function Show-Page {
             $script:logs = New-Object Windows.Forms.TextBox
             $script:logs.Multiline = $true; $script:logs.ReadOnly = $true; $script:logs.ScrollBars = 'Vertical'
             $script:logs.Width = $script:body.ClientSize.Width - 28; $script:logs.Height = 250
-            $script:logs.Font = New-Object Drawing.Font('Consolas',9)
+            $script:logs.Font = New-AtelierFont -Family 'Consolas' -Size 9
             $script:body.Controls.Add($script:logs)
             Add-Text 'Image appliquee signifie que Windows est prepare. Le premier demarrage, les logiciels et le bureau seront verifies apres redemarrage.' | Out-Null
         }
@@ -309,7 +291,7 @@ function Connect-Post {
         if ($secure) { $secure.Dispose() }
     }
     $script:session = $connected
-    $script:targetName = if ($script:proposedName) { $script:proposedName } else { $connected.plan.hostname }
+    $script:targetName = $script:proposedName
     Set-Profile $connected.plan.profile_id
     $script:page = 1; $script:status.Text = 'Poste autorise. Les choix restent modifiables avant installation.'
     Show-Page
@@ -331,7 +313,8 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.1'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.2'
+$form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.ClientSize = New-Object Drawing.Size(([math]::Min(980,$bounds.Width-30)),([math]::Min(690,$bounds.Height-50)))
@@ -351,7 +334,7 @@ foreach ($name in $script:steps) { $item=New-Text $name 10; $item.Margin=New-Obj
 $layout.Controls.Add($sidebar,0,0)
 $main = New-Object Windows.Forms.TableLayoutPanel
 $main.Dock = 'Fill'; $main.RowCount = 4; $main.ColumnCount = 1; $main.Padding = New-Object Windows.Forms.Padding(24,20,24,14)
-$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,90))) | Out-Null
+$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,105))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,32))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,44))) | Out-Null
@@ -362,9 +345,14 @@ $header.Dock='Fill';$header.ColumnCount=2;$header.RowCount=1
 $header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
 $header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Absolute,48))) | Out-Null
 $headerText=New-Object Windows.Forms.FlowLayoutPanel
+$headerText.Padding=New-Object Windows.Forms.Padding(8,3,0,0)
 $headerText.Dock='Fill';$headerText.FlowDirection='TopDown';$headerText.WrapContents=$false;$headerText.BackColor=[Drawing.Color]::Transparent
-$script:title = New-Text 'Connexion' 25 $true; $headerText.Controls.Add($script:title)
+$script:title = New-Text 'Connexion' 21 $true; $headerText.Controls.Add($script:title)
 $script:description = New-Text '' 9; $script:description.ForeColor=$muted; $headerText.Controls.Add($script:description)
+$headerText.Add_SizeChanged({
+    $script:title.MaximumSize=New-Object Drawing.Size(([math]::Max(100,$this.ClientSize.Width-12)),0)
+    $script:description.MaximumSize=New-Object Drawing.Size(([math]::Max(100,$this.ClientSize.Width-12)),0)
+})
 $header.Controls.Add($headerText,0,0)
 $headerLogo=New-AtelierLogo;$headerLogo.Margin=New-Object Windows.Forms.Padding(4,10,4,0)
 $header.Controls.Add($headerLogo,1,0)

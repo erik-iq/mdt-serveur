@@ -34,14 +34,14 @@ OPTIONS = {'software_packages': SOFTWARE_PACKAGES, 'keyboards': KEYBOARDS, 'time
 def defaults_for_locale(locale):
     keyboard = {'fr-FR': '040c:0000040c', 'fr-BE': '080c:0000080c', 'fr-CH': '100c:0000100c',
                 'en-US': '0409:00000409', 'en-GB': '0809:00000809', 'de-DE': '0407:00000407'}.get(locale, '0409:00000409')
-    return Personalization(keyboard=keyboard, user_locale=locale).model_dump()
+    return Personalization(keyboard=keyboard, user_locale='fr-CH').model_dump()
 
 
 class Personalization(BaseModel):
     model_config = ConfigDict(extra='forbid')
     keyboard: str = '040c:0000040c'
     timezone: str = 'Romance Standard Time'
-    user_locale: str = Field(default='fr-FR', pattern=r'^[a-z]{2}-[A-Z]{2}$')
+    user_locale: str = Field(default='fr-CH', pattern=r'^[a-z]{2}-[A-Z]{2}$')
     registered_owner: str = Field(default='', max_length=80)
     organization: str = Field(default='', max_length=80)
     theme: Literal['unchanged', 'light', 'dark'] = 'unchanged'

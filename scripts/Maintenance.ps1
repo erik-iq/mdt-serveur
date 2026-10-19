@@ -52,6 +52,7 @@ try {
         if ($state.passes -lt 1) {
             Save-Maintenance 'running' 80 'Windows Update : une seule passe ; recherche limitee a 90 secondes.'
             $script:lastUpdateWrite=[DateTime]::MinValue
+            $updateTiming=if (Get-Command Start-AtelierTiming -ErrorAction SilentlyContinue) { Start-AtelierTiming $DataPath 'windows_update' } else { '' }
             try { $state.windows = Invoke-AtelierWindowsUpdates -SearchTimeoutSeconds 90 -OnProgress {
                 param($Detail)
                 $script:updateDetail=$Detail
@@ -65,6 +66,11 @@ try {
             } } catch {
                 $state.windows=[pscustomobject]@{status='deferred';count=0;reboot_required=$false;titles=@();message=$_.Exception.Message}
                 $warnings.Add(('Windows Update non verifie : ' + $_.Exception.Message))
+            }
+            if ($updateTiming) {
+                $timingStatus=if ($state.windows.status -eq 'deferred') { 'deferred' } else { 'completed' }
+                Stop-AtelierTiming $DataPath $updateTiming $timingStatus
+                Sync-AtelierTimings $DataPath
             }
             $state.windows_history=@($state.windows_history) + @(@{timestamp=[DateTime]::UtcNow.ToString('o');result=$state.windows})
             $state.passes++

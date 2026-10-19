@@ -1,7 +1,7 @@
 'use strict';
 let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
 const $ = id => document.getElementById(id);
-const labels = {partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
+const labels = {active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = s => new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const size = n => n > 1024**3 ? `${(n/1024**3).toFixed(2)} Go` : `${(n/1024**2).toFixed(1)} Mo`;
@@ -24,9 +24,9 @@ function render() {
   $('metric-active').textContent = state.totals.active;
   $('metric-staged').textContent = state.totals.staged;
   $('deployments-empty').hidden = state.deployments.length > 0;
-  $('deployments').innerHTML = state.deployments.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.mac)}</small></td><td>${esc(d.profile_name)}</td><td>${badge(d.status)}${d.windows_status?`<small>Windows : ${badge(d.windows_status)}</small><small>${esc(d.windows_message)}</small>`:''}</td><td><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td><button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button> ${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</td></tr>`).join('');
+  $('deployments').innerHTML = state.deployments.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.mac)}</small></td><td>${esc(d.profile_name)}</td><td>${badge(d.status)}${d.windows_status?`<small>Windows : ${badge(d.windows_status)}</small><small>${esc(d.windows_message)}</small>`:''}</td><td><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td><button class="text-button" data-computer="${esc(d.machine_id)}">Fiche ordinateur</button> <button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button> ${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</td></tr>`).join('');
   $('machines-empty').hidden = state.machines.length > 0;
-  $('machines').innerHTML = state.machines.map(m=>`<tr><td><b>${esc(m.hostname)}</b></td><td class="hash">${esc(m.mac)}</td><td>${esc(m.description)||'-'}</td><td>${date(m.created_at)}</td><td>${(state.reports||[]).filter(r=>r.machine_id===m.id).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} | PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join('');
+  $('machines').innerHTML = state.machines.map(m=>`<tr><td><button class="text-button" data-computer="${esc(m.id)}">${esc(m.hostname)}</button></td><td class="hash">${esc(m.mac)}</td><td>${esc(m.description)||'-'}</td><td>${date(m.created_at)}</td><td>${(state.reports||[]).filter(r=>r.machine_id===m.id).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} | PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join('');
   $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} | ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} | ${esc(p.locale)}<br>${esc(p.settings.timezone)} | ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.software_mode==='winget'?`${p.settings.winget_packages.length} logiciel(s) WinGet apres Windows`:`${p.settings.bundle_ids.length} bundle(s) | ${p.settings.application_ids.length} logiciel(s)`}<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Creez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis selectionnez l index de l edition avec DISM /Get-WimInfo.</p></div>';
   $('assets').innerHTML = state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}...</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistre.</td></tr>';
 
@@ -51,11 +51,11 @@ function openForm(kind) {
   let content='';
   if(kind==='machine') content=field('Nom Windows du poste','hostname','text','maxlength="15" placeholder="PC-ATELIER-01" pattern="[A-Za-z][A-Za-z0-9-]{0,14}"')+field('Adresse MAC PXE','mac','text','placeholder="00:11:22:33:44:55"')+'<label>Description<input name="description" maxlength="240" placeholder="Bureau, modele ou service"></label>';
   if(kind==='asset') content='<p>Copiez d abord le fichier dans data/artifacts. Son SHA-256 sera calcule par le serveur.</p>'+field('Nom exact du fichier','filename','text','placeholder="install.wim"')+select('Type','kind',[{id:'windows',name:'Image Windows (.wim)'},{id:'application',name:'Installateur / archive de logiciel (.exe, .msi, .zip)'},{id:'wallpaper',name:'Fond d ecran (.jpg, .png)'},{id:'winpe',name:'WinPE (.wim) - iPXE optionnel'},{id:'wimboot',name:'wimboot - iPXE'},{id:'bcd',name:'BCD - iPXE'},{id:'sdi',name:'boot.sdi - iPXE'}]);
-  if(kind==='profile') content=field('Nom du profil','name','text','maxlength="80" placeholder="Windows 11 Pro | FR"')+select('Image Windows','asset_id',state.assets.filter(a=>a.kind==='windows').map(a=>({id:a.id,name:a.filename})))+optionalField('Version Windows','windows_version','maxlength="24" placeholder="26H2 - version de votre image"')+select('Edition','edition',[{id:'Pro',name:'Windows Pro'},{id:'Famille',name:'Windows Famille'},{id:'Famille unilingue',name:'Windows Famille unilingue'},{id:'Enterprise',name:'Windows Entreprise'},{id:'Education',name:'Windows Education'},{id:'Autre',name:'Autre edition du WIM'}])+field('Index de l edition (DISM /Get-WimInfo)','image_index','number','min="1" max="100" value="1"')+field('Langue de l image Windows','locale','text','value="fr-FR" pattern="[a-z]{2}-[A-Z]{2}"')+'<details open><summary>Installation et personnalisation</summary>'+select('Clavier','keyboard',state.customization_options.keyboards)+select('Fuseau horaire','timezone',state.customization_options.timezones)+field('Region / formats','user_locale','text','value="fr-FR" pattern="[a-z]{2}-[A-Z]{2}"')+optionalField('Proprietaire enregistre','registered_owner','maxlength="80"')+optionalField('Organisation','organization','maxlength="80"')+select('Theme Windows','theme',state.customization_options.themes)+optionalSelect('Fond d ecran','wallpaper_asset_id',state.assets.filter(a=>a.kind==='wallpaper').map(a=>({id:a.id,name:a.filename})))+choiceList('Installation silencieuse apres Windows','winget_packages',state.customization_options.software_packages)+'</details>';
+  if(kind==='profile') content=field('Nom du profil','name','text','maxlength="80" placeholder="Windows 11 Pro | FR"')+select('Image Windows','asset_id',state.assets.filter(a=>a.kind==='windows').map(a=>({id:a.id,name:a.filename})))+optionalField('Version Windows','windows_version','maxlength="24" placeholder="26H2 - version de votre image"')+select('Edition','edition',[{id:'Pro',name:'Windows Pro'},{id:'Famille',name:'Windows Famille'},{id:'Famille unilingue',name:'Windows Famille unilingue'},{id:'Enterprise',name:'Windows Entreprise'},{id:'Education',name:'Windows Education'},{id:'Autre',name:'Autre edition du WIM'}])+field('Index de l edition (DISM /Get-WimInfo)','image_index','number','min="1" max="100" value="1"')+field('Langue de l image Windows','locale','text','value="fr-FR" pattern="[a-z]{2}-[A-Z]{2}"')+'<details open><summary>Installation et personnalisation</summary>'+select('Clavier','keyboard',state.customization_options.keyboards)+select('Fuseau horaire','timezone',state.customization_options.timezones)+field('Region / formats','user_locale','text','value="fr-CH" pattern="[a-z]{2}-[A-Z]{2}"')+select('Theme Windows','theme',state.customization_options.themes)+optionalSelect('Fond d ecran','wallpaper_asset_id',state.assets.filter(a=>a.kind==='wallpaper').map(a=>({id:a.id,name:a.filename})))+choiceList('Installation silencieuse apres Windows','winget_packages',state.customization_options.software_packages)+'</details>';
   if(kind==='deployment') content='<p class="warning-text">Ce deploiement supprimera toutes les partitions du disque choisi. Verifiez sa sauvegarde et son identite avant de confirmer sur le poste.</p>'+select('Poste cible','machine_id',state.machines.map(m=>({id:m.id,name:m.hostname+' | '+m.mac})))+select('Profil Windows','profile_id',state.profiles)+field('Numero de disque WinPE','disk_number','number','value="0" min="0" max="32"')+'<label class="check-row"><input name="wizard_enabled" type="checkbox" checked><span>Autoriser le choix du profil et des parametres dans l assistant PXE</span></label>'+(internalMode ? '<p>Le disque sera indique dans WinPE avant le lancement de l installation.</p>' : field('Confirmation : EFFACER suivi du nom exact du poste','confirmation','text','placeholder="EFFACER PC-ATELIER-01" autocomplete="off"'));
   $('form-fields').innerHTML=content;
   if(kind==='profile') $('form-fields').querySelectorAll('[name="winget_packages"]').forEach(input=>input.checked=true);
-  const defaults={keyboard:'040c:0000040c',timezone:'Romance Standard Time',theme:'unchanged',install_mode:'install',manufacturer:'all',edition:'Pro'};
+  const defaults={keyboard:'040c:0000040c',timezone:'Romance Standard Time',theme:'unchanged',user_locale:'fr-CH',wallpaper_asset_id:(state.assets.find(a=>a.kind==='wallpaper' && ['fondatelier.png','fonatelier.png'].includes(a.filename.toLowerCase().replace(/[ _-]/g,'')))?.id || ''),install_mode:'install',manufacturer:'all',edition:'Pro'};
   for(const [name,value] of Object.entries(defaults)) {const input=$('resource-form').elements.namedItem(name);if(input) input.value=value;}
   $('submit-resource').textContent=kind==='deployment'?'Autoriser l effacement':'Enregistrer';
   $('form-dialog').showModal();
@@ -71,7 +71,7 @@ $('resource-form').addEventListener('submit',async e=>{
   for(const key of ['image_index','disk_number']) if(key in data) data[key]=Number(data[key]);
   if(currentForm==='profile') {
     data.settings={};
-    for(const name of ['keyboard','timezone','user_locale','registered_owner','organization','theme','wallpaper_asset_id']) {data.settings[name]=data[name];delete data[name];}
+    for(const name of ['keyboard','timezone','user_locale','theme','wallpaper_asset_id']) {data.settings[name]=data[name];delete data[name];}
     data.settings.wallpaper_asset_id ||= null;
     for(const name of ['application_ids','bundle_ids']) {data.settings[name]=form.getAll(name);delete data[name];}
     {data.settings.software_mode='winget';data.settings.central_inventory=true;data.settings.winget_packages=form.getAll('winget_packages');delete data.winget_packages;}
@@ -90,6 +90,10 @@ async function showEvents(id) {
   catch(error) { $('notice').textContent=error.message; $('notice').hidden=false; }
 }
 document.addEventListener('click',async e=>{
+  const computer=e.target.closest('[data-computer]');if(computer){e.stopPropagation();await openComputer(computer.dataset.computer);return;}
+  const reportView=e.target.closest('[data-report-view]');if(reportView){e.stopPropagation();await viewComputerReport(reportView.dataset.reportView);return;}
+  const history=e.target.closest('[data-history-offset]');if(history){await openComputer(currentComputer,Number(history.dataset.historyOffset));return;}
+  const journal=e.target.closest('[data-journal]');if(journal){e.stopPropagation();await showEvents(journal.dataset.journal);return;}
   const directory=e.target.closest('[data-inventory]');if(directory){e.stopPropagation();await openInventory(directory.dataset.inventory);return;}
   const file=e.target.closest('[data-inventory-file]');if(file){await downloadInventory(file.dataset.inventoryFile,file.dataset.filename);return;}
   const report=e.target.closest('[data-report]');
@@ -158,4 +162,51 @@ async function downloadInventory(url,filename) {
 $('copy-inventory-directory').addEventListener('click',async()=>{
   try {await navigator.clipboard.writeText($('inventory-directory').value);}
   catch {$('inventory-directory').select();}
+});
+
+let currentComputer=null;
+function measuredDuration(seconds) {
+  if(!Number.isFinite(Number(seconds))) return 'Non mesure';
+  seconds=Math.max(0,Number(seconds));
+  if(seconds<1) return seconds.toFixed(2)+' s';
+  if(seconds<60) return Math.round(seconds)+' s';
+  return Math.floor(seconds/60)+' min '+Math.floor(seconds%60)+' s';
+}
+function timingRows(measurements) {
+  if(!measurements?.length) return '<p>Durees indisponibles pour ce deploiement. Les mesures seront recueillies avec le nouvel agent.</p>';
+  const names={running:'Fin de mesure non recue',completed:'Termine',failed:'Echec',deferred:'Reporte',interrupted:'Interrompu'};
+  return '<div class="table-wrap"><table><thead><tr><th>Etape</th><th>Duree mesuree</th><th>Etat</th></tr></thead><tbody>'+measurements.map(m=>`<tr><td>${esc(m.label)}<small>${esc(date(m.started_at))}</small></td><td>${m.status==='running' && !m.duration_seconds?'En attente':esc(measuredDuration(m.duration_seconds))}</td><td>${esc(names[m.status]||m.status)}</td></tr>`).join('')+'</tbody></table></div><p class="muted">Installation manuelle des pilotes dans HP Image Assistant : duree non mesuree. La preparation de l outil constructeur ne correspond pas a l installation des pilotes.</p>';
+}
+function renderComputerReport(report,id) {
+  const tests=report.steps.filter(s=>/^Test /i.test(s.name));
+  const warranty=Object.entries(report.inventory).filter(([key])=>/garantie/i.test(key));
+  $('computer-report').innerHTML=`<div class="actions"><button class="button secondary" data-report="${esc(id)}">Telecharger le PDF</button><button class="button secondary" data-inventory="${esc(id)}">Dossier inventaire</button></div><p>Rapport du ${esc(date(report.generated_at))} - ${badge(report.status)}</p><h3>Tests materiels</h3>${tests.length?tests.map(t=>`<p><b>${esc(t.name)}</b> : ${esc(labels[t.status]||t.status)} ${esc(t.message)}</p>`).join(''):'<p>Aucun resultat de test materiel transmis.</p>'}<h3>Garantie</h3>${warranty.length?warranty.map(([k,v])=>`<p>${esc(k)} : ${esc(labels[v]||v)}</p>`).join(''):'<p>Garantie non verifiee ou non transmise.</p>'}<h3>Avertissements</h3>${report.warnings.length?'<ul>'+report.warnings.map(w=>`<li>${esc(w)}</li>`).join('')+'</ul>':'<p>Aucun avertissement dans ce rapport.</p>'}<details><summary>Informations techniques</summary><dl class="computer-facts">${Object.entries(report.inventory).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details><details><summary>Deroulement complet du rapport</summary>${report.steps.map(s=>`<p><b>${esc(s.name)}</b> : ${esc(labels[s.status]||s.status)} - ${esc(s.message)}</p>`).join('')}</details>`;
+}
+async function viewComputerReport(id) {
+  try {renderComputerReport(await api('/deployments/'+encodeURIComponent(id)+'/report'),id);$('computer-report').scrollIntoView({behavior:'smooth',block:'start'});}
+  catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}
+}
+async function openComputer(id,offset=0) {
+  try {
+    const details=await api('/machines/'+encodeURIComponent(id)+'/details?offset='+offset);
+    currentComputer=id;
+    document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-computer');
+    document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page==='machines'));
+    $('breadcrumb').textContent='Fiche ordinateur';$('computer-title').textContent=details.machine.hostname;
+    $('computer-subtitle').textContent=details.machine.mac+' | '+details.total+' deploiement(s)';
+    const inventory=details.latest_report?.inventory || {};
+    $('computer-summary').innerHTML=`<h2>Identite du poste</h2><dl class="computer-facts">${['Constructeur','Modele','Numero de serie','Windows','RAM (Go)','Processeur','Activation Windows'].map(key=>`<dt>${esc(key)}</dt><dd>${esc(inventory[key]||'Non transmis')}</dd>`).join('')}</dl><p>${esc(details.machine.description)}</p>`;
+    $('computer-history').innerHTML=details.deployments.length?details.deployments.map(d=>`<article class="panel padding computer-history-entry"><div class="section-title"><div><h3>${esc(d.profile_name)} - ${esc(d.hostname)}</h3><p>${esc(date(d.created_at))} ${badge(d.windows_status||d.status)}</p></div><div class="actions"><button class="button secondary" data-journal="${esc(d.id)}">Journal</button><button class="button secondary" data-inventory="${esc(d.id)}">Inventaire</button>${d.has_report?`<button class="button secondary" data-report-view="${esc(d.id)}">Voir le rapport</button><button class="button secondary" data-report="${esc(d.id)}">PDF</button>`:''}</div></div><details><summary>Durees par etape</summary>${timingRows(d.timings)}</details></article>`).join(''):'<p>Aucun deploiement pour ce poste.</p>';
+    $('computer-pagination').innerHTML=(offset?`<button class="button secondary" data-history-offset="${Math.max(0,offset-details.limit)}">Historique precedent</button>`:'')+(details.has_more?`<button class="button secondary" data-history-offset="${offset+details.limit}">Historique suivant</button>`:'');
+    if(details.latest_report) renderComputerReport(details.latest_report,details.latest_report_deployment_id);else $('computer-report').innerHTML='<p>Aucun rapport recu. Les tests, informations Windows et garantie seront affiches apres transmission.</p>';
+    $('computer-notes').innerHTML=details.notes.length?details.notes.map(n=>`<article class="computer-note"><small>${esc(date(n.created_at))} ${esc(n.author)}</small><p>${esc(n.text)}</p></article>`).join(''):'<p>Aucune observation enregistree.</p>';
+  } catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}
+}
+$('computer-back').addEventListener('click',()=>document.querySelector('.nav[data-page="machines"]').click());
+$('computer-refresh').addEventListener('click',()=>currentComputer && openComputer(currentComputer));
+$('computer-note-form').addEventListener('submit',async event=>{
+  event.preventDefault();if(!currentComputer)return;
+  const button=event.target.querySelector('button');button.disabled=true;$('computer-note-error').textContent='';
+  try{await api('/machines/'+encodeURIComponent(currentComputer)+'/notes','POST',Object.fromEntries(new FormData(event.target)));event.target.reset();await openComputer(currentComputer);}
+  catch(error){$('computer-note-error').textContent=error.message;}finally{button.disabled=false;}
 });

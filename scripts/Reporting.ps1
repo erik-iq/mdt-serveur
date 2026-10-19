@@ -1,3 +1,4 @@
+if (Test-Path (Join-Path $PSScriptRoot 'Timings.ps1')) { . (Join-Path $PSScriptRoot 'Timings.ps1') }
 # Shared reporting functions. No inventory collection or network access on import.
 function Initialize-AtelierReportTrust {
     param([string]$DataPath)

@@ -1,6 +1,12 @@
 # One palette for WinPE and the interactive Windows tools.
 $script:AtelierTheme=Get-Content (Join-Path $PSScriptRoot 'theme.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 function Get-AtelierColor([string]$Name) { return [Drawing.ColorTranslator]::FromHtml($script:AtelierTheme.$Name) }
+function New-AtelierFont {
+    param([single]$Size=10,[bool]$Bold=$false,[string]$Family='Segoe UI')
+    $style=if ($Bold) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
+    # Four explicitly typed arguments avoid the Font(Font, FontStyle) overload.
+    return (New-Object Drawing.Font -ArgumentList @($Family,[single]$Size,$style,[Drawing.GraphicsUnit]::Point))
+}
 function New-AtelierLogo {
     $picture=New-Object Windows.Forms.PictureBox
     $picture.Size=New-Object Drawing.Size(40,40)

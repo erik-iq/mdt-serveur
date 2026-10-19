@@ -24,6 +24,7 @@ from app.windows_secrets import read_share_credentials
 from app.reports import ComputerReport, WindowsProgress, make_pdf, report_lines
 from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
+from app.computers import computer_routes
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -63,7 +64,7 @@ class MachineInput(BaseModel):
 
 
 class AssetInput(BaseModel):
-    filename: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
+    filename: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,120}$")
     kind: str = Field(pattern=r"^(wimboot|bcd|sdi|winpe|windows|application|wallpaper)$")
 
 
@@ -215,6 +216,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                     return PlainTextResponse('Rapport trop volumineux', status_code=413)
             request._body = bytes(body)
         response = await call_next(request)
+        if response.headers.get('content-type', '').startswith('application/json'):
+            # Windows PowerShell 5.1 otherwise guesses a legacy code page.
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
@@ -249,10 +253,19 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             raise HTTPException(409, "Fichier modifie : enregistrez une nouvelle image sous un autre nom")
         return path
 
-    def profile_public(record):
+    def profile_public(record, con):
         result = dict(record)
         saved = json.loads(result.pop('settings_json'))
         result['settings'] = Personalization.model_validate(saved or defaults_for_locale(result['locale'])).model_dump()
+        if internal:
+            result['settings'].update(user_locale='fr-CH', registered_owner='', organization='')
+            if not result['settings']['wallpaper_asset_id']:
+                for wallpaper in con.execute("SELECT * FROM assets WHERE kind='wallpaper' ORDER BY created_at DESC"):
+                    if re.sub(r'[ _-]','',wallpaper['filename']).lower() in {'fondatelier.png','fonatelier.png'}:
+                        try: asset_path(wallpaper)
+                        except HTTPException: continue
+                        result['settings']['wallpaper_asset_id']=wallpaper['id']
+                        break
         if client_apps:
             result['settings'].update(software_mode='winget', central_inventory=True, application_ids=[], bundle_ids=[])
         if automatic:
@@ -307,7 +320,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         profile_rows = con.execute('SELECT * FROM profiles ORDER BY name').fetchall() if interactive else [row(con, 'profiles', profile_id)]
         profiles = []
         for record in profile_rows:
-            profile = profile_public(record)
+            profile = profile_public(record, con)
             profile['asset'] = asset_snapshot(con, profile['asset_id'], 'windows')
             resolved_settings(con, profile['settings'])
             profiles.append(profile)
@@ -327,9 +340,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         selected = json.loads(job['selection_json'])
         machine = row(con, 'machines', job['machine_id'])
         if not selected:
-            profile = profile_public(row(con, 'profiles', job['profile_id']))
+            profile = profile_public(row(con, 'profiles', job['profile_id']), con)
             selected = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
-        profile = profile_public(row(con, 'profiles', selected['profile_id']))
+        profile = profile_public(row(con, 'profiles', selected['profile_id']), con)
         resolved = resolved_settings(con, selected['settings'])
         return selected, profile, machine, resolved
 
@@ -361,7 +374,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.1"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.2"}
 
     @api.get('/api/session')
     def session_options():
@@ -372,7 +385,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db() as con:
             result = {name: [dict(r) for r in con.execute(f"SELECT * FROM {name} ORDER BY created_at DESC")]
                       for name in ("machines", "assets", "applications")}
-            result['profiles'] = [profile_public(r) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
+            result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
             result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
                 d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name,
@@ -458,7 +471,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 con.execute("INSERT INTO profiles(id,name,asset_id,image_index,locale,created_at,windows_version,edition,settings_json) VALUES (?,?,?,?,?,?,?,?,?)",
                             (identifier, body.name, body.asset_id, body.image_index, body.locale, now(), body.windows_version,
                              body.edition, json.dumps(settings, ensure_ascii=False)))
-                return profile_public(row(con, "profiles", identifier))
+                return profile_public(row(con, "profiles", identifier), con)
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Ce nom de profil existe deja")
 
@@ -539,7 +552,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 if not client_apps:
                     software.no_active(con)
                 machine = row(con, "machines", body.machine_id)
-                profile = profile_public(row(con, "profiles", body.profile_id))
+                profile = profile_public(row(con, "profiles", body.profile_id), con)
                 asset_path(row(con, "assets", profile["asset_id"]))
                 if not internal and body.confirmation != "EFFACER " + machine["hostname"]:
                     raise HTTPException(400, "Confirmation d effacement incorrecte")
@@ -587,7 +600,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                         raise HTTPException(409, 'Windows est deja prepare : demarrer sur le disque local pour terminer')
                 else:
                     machine = {'id': str(uuid.uuid4()), 'hostname': 'PC-' + macs[0].replace(':', ''), 'mac': macs[0]}
-                profiles = [profile_public(r) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
+                profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
                 if not profiles:
                     raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les editions sur le serveur')
                 profile = profiles[0]
@@ -742,6 +755,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         return FileResponse(path, media_type='application/octet-stream', filename=asset['filename'])
 
     inventories.routes(api, windows_agent, admin, now)
+    computer_routes(api, db, admin, windows_agent, now)
 
     @api.post('/api/windows/{identifier}/progress')
     def windows_progress(identifier: str, body: WindowsProgress, authorization: str = Header(default='')):

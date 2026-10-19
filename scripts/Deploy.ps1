@@ -17,6 +17,8 @@ $endpoint = "$ServerUrl/api/agent/$DeploymentId"
 $lastProgress = 0
 $started = $false
 $imageLock = $null
+. (Join-Path $PSScriptRoot 'Timings.ps1')
+$timingPath=Join-Path $env:TEMP ('AtelierTiming-'+[guid]::NewGuid().ToString('N'))
 $mutex = $null
 $ownsMutex = $false
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
@@ -133,7 +135,10 @@ exit
         Wait-AtelierTargetPartitions -DiskNumber $disk.Number -ExpectedUniqueId ([string]$disk.UniqueId) -ExpectedSize $disk.Size
         Assert-Active
         Send-Event 'running' 35 'Application de l''image Windows (DISM)'
+        $imageTiming=Start-AtelierTiming $timingPath 'image' 'winpe'
         Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
+        Stop-AtelierTiming $timingPath $imageTiming
+        Sync-AtelierTimings $timingPath ([pscustomobject]@{server_url=$ServerUrl.TrimEnd('/');id=$DeploymentId;token=$claim.report_token})
     } finally { if ($imageLock) { $imageLock.Dispose(); $imageLock=$null } }
     Assert-Active
     Send-Event 'running' 80 'Configuration du nom du poste et du demarrage UEFI'
@@ -141,7 +146,8 @@ exit
     New-Item -ItemType Directory -Path $payloadPath -Force | Out-Null
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Timings.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    if (Test-Path (Join-Path $timingPath 'timings')) { Copy-Item -LiteralPath (Join-Path $timingPath 'timings') -Destination $payloadPath -Recurse -Force }
     $publicRoot=Join-Path $PSScriptRoot 'trusted-root.cer'
     if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
@@ -182,6 +188,10 @@ exit
     Write-Host 'Installation preparee. Verifiez le journal, puis redemarrez avec wpeutil reboot. Le premier demarrage Windows reste a controler.' -ForegroundColor Green
 } catch {
     $failure = $_
+    if ($imageTiming) {
+        Stop-AtelierTiming $timingPath $imageTiming 'failed'
+        Sync-AtelierTimings $timingPath ([pscustomobject]@{server_url=$ServerUrl.TrimEnd('/');id=$DeploymentId;token=$claim.report_token})
+    }
     if ($started) {
         try { Send-Event 'failed' $lastProgress $failure.Exception.Message } catch { Write-Warning 'Impossible de transmettre l''echec a la console.' }
     }

@@ -1,4 +1,12 @@
 # Functions only: deterministic names from the BIOS serial number, no disk changes.
+function Get-AtelierSerialSuffix {
+    param([AllowEmptyString()][string]$SerialNumber)
+    $serial=$SerialNumber.Trim().ToUpperInvariant()
+    if (-not $serial -or $serial -match '^(TO BE FILLED|DEFAULT STRING|SYSTEM SERIAL|NONE$|UNKNOWN$|NOT SPECIFIED|0+$|F+$)') { throw 'Numero de serie absent ou generique. Saisir le nom du poste.' }
+    $digits=$serial -replace '[^0-9]',''
+    if ($digits.Length -lt 4) { throw 'Le numero de serie contient moins de quatre chiffres. Saisir le nom du poste.' }
+    return $digits.Substring($digits.Length-4)
+}
 function Get-AtelierComputerName {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$SerialNumber,

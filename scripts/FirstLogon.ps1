@@ -111,11 +111,13 @@ try {
     }
     if ($payload.settings.software_mode -eq 'winget') {
         . (Join-Path $DataPath 'Client-Software.ps1')
+        $softwareTiming=Start-AtelierTiming $DataPath 'software'
         foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages @($payload.settings.winget_packages) -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
             $results.Add($entry)
             if ($entry.exit_code -in @(3010,1641)) { $restartNeeded=$true }
         }
     }
+    if ($softwareTiming) { Stop-AtelierTiming $DataPath $softwareTiming;Sync-AtelierTimings $DataPath }
     $appIndex = 0
     $readyTools=New-Object 'Collections.Generic.List[object]'
     $checkpointPath=Join-Path $DataPath 'packages-state.json'
@@ -123,6 +125,7 @@ try {
     if (Test-Path $checkpointPath) {
         foreach ($entry in @(Get-Content $checkpointPath -Encoding UTF8 -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
     }
+    $toolsTiming=Start-AtelierTiming $DataPath 'manufacturer_tools'
     $applicationsToPrepare=@($payload.applications)
     if ($payload.settings.software_mode -eq 'winget') {
         $applicationsToPrepare=@()
@@ -196,6 +199,8 @@ try {
         Write-Trace ("Logiciel prepare : " + $application.name)
     }
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'ready-tools.json') -Content (ConvertTo-Json -InputObject @($readyTools.ToArray()) -Depth 4) -NoBackup | Out-Null
+    Stop-AtelierTiming $DataPath $toolsTiming
+    Sync-AtelierTimings $DataPath
     Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
     # Export once at finalization, after software and updates; no duplicate CIM scan.
@@ -204,6 +209,9 @@ try {
     Start-Maintenance
     Write-Trace 'Personnalisation terminee. Consultez result.json pour les logiciels et le redemarrage eventuel.'
 } catch {
+    if ($softwareTiming) { Stop-AtelierTiming $DataPath $softwareTiming 'failed' }
+    if ($toolsTiming) { Stop-AtelierTiming $DataPath $toolsTiming 'failed' }
+    Sync-AtelierTimings $DataPath
     @{status='failed'; timestamp=(Get-Date).ToString('o'); message=$_.Exception.Message; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
     Set-Progress 'failed' 0 ('Preparation interrompue : ' + $_.Exception.Message)
     . (Join-Path $DataPath 'Updates.ps1')
