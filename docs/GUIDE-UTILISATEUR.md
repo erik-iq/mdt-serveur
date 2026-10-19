@@ -11,7 +11,7 @@ Sauvegarder les donnees du poste : le deploiement efface toutes les partitions d
 1. Allumer le poste et choisir son demarrage reseau UEFI/PXE dans le menu de demarrage du constructeur.
 2. Choisir l image **Atelier PXE - ATELIER-4 - date**. L assistant IQ Atelier s ouvre. Le poste et sa demande apparaissent automatiquement sur le site ; aucune autorisation prealable n y est necessaire.
 3. Choisir Windows Pro ou Famille. Cette edition doit correspondre a la licence du poste. Un profil correspond a un index precis du WIM Windows, pas a un fichier ISO monte arbitrairement.
-4. Completer le nom du PC : seuls les quatre derniers chiffres du SN sont proposes, sans prefixe. Exemple : `8323` devient `ATELIER-8323`. Le nom doit commencer par une lettre, avec au maximum 15 lettres, chiffres ou tirets. Verifier le clavier et le fuseau ; la region et les formats sont proposes en `fr-CH`.
+4. Completer le nom du PC : seuls les quatre derniers chiffres du SN sont proposes, sans prefixe. Exemple : `8323` devient `ATELIER-8323`. Le nom doit commencer par une lettre, avec au maximum 15 lettres, chiffres ou tirets. Le clavier de WinPE et de cet assistant est fixe en francais suisse (QWERTZ), sans choix de modification. Verifier le fuseau ; la region et les formats sont proposes en `fr-CH`.
 5. Choisir les logiciels WinGet : VLC, Adobe Reader, Chrome, AnyDesk. Ils seront installes silencieusement dans Windows. Le fond `Fond Atelier.png` est propose s il est enregistre sur le serveur ; le theme et le fond restent modifiables. Proprietaire et organisation ne sont plus demandes.
 6. Lire le recapitulatif, choisir le bon disque en verifiant sa taille et son numero de serie. **Installer Windows** efface ce disque.
 7. Attendre la fin de l application de l image. Redemarrer sur le disque local Windows, avec le demarrage reseau retire de la priorite.
@@ -45,7 +45,7 @@ Ouvrir `C:\IQ_`. Les fichiers sont classes par categorie :
 | Garantie | Verifier-Garantie.cmd ouvre le portail officiel HP, Lenovo ou Dell. Saisir les dates confirmees : aucune date n est inventee depuis le SN. |
 | Personnalisation | Fond d ecran selectionne. |
 
-L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Sur un HP dont HP Image Assistant a ete reference, l analyse puis l installation des SoftPaq compatibles se font automatiquement en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Le technicien lance le redemarrage quand les installations sont terminees. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
+L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Sur un HP, WinGet installe et verifie automatiquement HP Image Assistant apres le demarrage Windows, puis l analyse et l installation des SoftPaq compatibles se font en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Le technicien lance le redemarrage quand les installations sont terminees. HPIA se trouve dans `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
 
 ## Mises a jour et lenteur
 
@@ -61,6 +61,7 @@ Internet est necessaire pour WinGet, les mises a jour et les portails de garanti
 - Mauvaise edition : choisir un autre profil correspondant a la licence, ou faire synchroniser les profils depuis le WIM par l administrateur.
 - Echec avant partitionnement : lire le journal dans WinPE et dans l activite du site. Le disque ne doit pas etre efface tant que les controles ne sont pas passes.
 - Logiciel en echec : consulter `C:\ProgramData\AtelierPXE\software-logs` et le PDF. Le reste de la preparation peut continuer.
+- HPIA absent : consulter `C:\ProgramData\AtelierPXE\software-logs\hpia.log` et `hpia-result.json`. La nouvelle revision fournit `scripts\Repair-HPIA.ps1` a lancer sur le HP en administrateur apres la fin de la preparation pour reparer sans reinstaller Windows.
 - Rapport absent sur le site : le PDF local et le cache d inventaire restent conserves. Retablir le reseau puis lancer Rapports\Generer-Rapport.cmd.
 
 Journaux du poste : `C:\ProgramData\AtelierPXE\first-logon.log`, `maintenance.log`, `reporting.log`, `progress.json`. Sur le serveur : `<data_dir>\logs\console.log` et `<data_dir>\cleanup` pour le nettoyage.

@@ -70,7 +70,7 @@ function Invoke-AtelierHpia {
                 $readyPath=Join-Path $DataPath 'ready-tools.json'
                 $tools=if (Test-Path $readyPath) { @(Get-Content $readyPath -Encoding UTF8 -Raw | ConvertFrom-Json) } else { @() }
                 $tool=@($tools | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ieq 'HPImageAssistant.exe' } | Select-Object -First 1)
-                if (-not $tool.Count) { throw 'HP Image Assistant absent : enregistrer son ZIP officiel comme outil portable HP sur le serveur.' }
+                if (-not $tool.Count) { throw 'HP Image Assistant non installe ou non verifie par WinGet. Consulter C:\ProgramData\AtelierPXE\software-logs\hpia.log et result.json.' }
                 $tool=$tool[0]
                 $root=[IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'AtelierPXE\Tools')).TrimEnd([char[]]'\/')+[IO.Path]::DirectorySeparatorChar
                 $exe=[IO.Path]::GetFullPath([string]$tool.path)

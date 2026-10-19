@@ -121,17 +121,17 @@ def test_inventory_rejects_identity_mismatch_dtd_invalid_csv_and_expired_token(s
     assert client.post(base+'xml',headers=headers,content=b'<InventaireOrdinateur ordinateur="PC-LAB-01"/>').status_code==401
 
 
-def test_hp_tool_download_is_post_windows_and_scoped_to_its_snapshot(automatic):
+def test_new_deployment_no_longer_depends_on_legacy_hp_zip(automatic):
     client,data,_,_=automatic
     asset=register(client,data,'hp-tool.zip','application')
     tool=client.post('/api/applications',json={'name':'HP Image Assistant','asset_id':asset['id'],'entry_point':'HPImageAssistant.exe','install_mode':'portable','manufacturer':'hp'}).json()
     other=register(client,data,'other.exe','application')
     session=discover(client).json()
-    assert session['plan']['applications']==[] and session['plan']['tools'][0]['id']==tool['id']
+    assert session['plan']['applications']==[] and session['plan']['tools']==[]
     route='/api/agent/'+session['id']
     reporter=client.post(route+'/claim',headers=auth(session['agent_token'])).json()['report_token']
     base='/api/windows/'+session['id']+'/tools/'
-    assert client.get(base+asset['id'],headers=auth(reporter)).status_code==200
+    assert client.get(base+asset['id'],headers=auth(reporter)).status_code==403
     assert client.get(base+asset['id'],headers=auth(session['agent_token'])).status_code==401
     assert client.get(base+other['id'],headers=auth(reporter)).status_code==403
 

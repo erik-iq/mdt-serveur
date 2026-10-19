@@ -52,7 +52,7 @@ def report_lines(report, events=()):
     yield 'AVERTISSEMENTS ET LIMITES'
     yield from report.get('warnings', [])
     yield 'Les tests son, webcam et clavier exigent une verification humaine.'
-    yield 'Windows Update et Microsoft Store restent a effectuer manuellement avec IQ-4.3.'
+    yield 'Windows Update et Microsoft Store restent a effectuer manuellement avec IQ-4.4.'
 
 
 def make_pdf(lines):

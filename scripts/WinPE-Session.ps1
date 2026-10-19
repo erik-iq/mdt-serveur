@@ -23,18 +23,18 @@ function Write-AtelierBootEvent {
 function Set-AtelierOperatorKeyboard {
     param(
         [Parameter(Mandatory)]
-        [ValidatePattern('^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}$')]
+        [ValidateSet('100c:0000100c')]
         [string]$Layout
     )
     & wpeutil.exe SetKeyboardLayout $Layout | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "WinPE ne peut pas activer le clavier $Layout (code $LASTEXITCODE)." }
     # wpeutil sets the WinPE default. Select the layout on this UI thread too,
-    # including when the operator changes it while the form is already open.
+    # using the same fixed French Swiss layout as the offline boot image.
     Add-Type -AssemblyName System.Windows.Forms
     $cultureId = [Convert]::ToInt32($Layout.Substring(0,4),16)
     $language = [Windows.Forms.InputLanguage]::FromCulture([Globalization.CultureInfo]::GetCultureInfo($cultureId))
     if (-not $language -or $language.Culture.LCID -ne $cultureId) {
-        throw "Le clavier $Layout n'est pas disponible dans cette session WinPE. Choisissez un autre clavier dans le menu atelier."
+        throw "Le clavier francais suisse $Layout est indisponible. Reconstruire WinPE et consulter le journal de demarrage."
     }
     [Windows.Forms.InputLanguage]::CurrentInputLanguage = $language
 }

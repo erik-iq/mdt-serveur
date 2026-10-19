@@ -106,41 +106,32 @@ try {
         if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraichir le fond d ecran.' }
         Write-Trace 'Fond d ecran applique.'
     }
-    if ($payload.settings.software_mode -eq 'winget') {
-        . (Join-Path $DataPath 'Client-Software.ps1')
+    . (Join-Path $DataPath 'Client-Software.ps1')
+    $hpWinGetTool=$null
+    $clientPackages=@()
+    if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
+    if (Test-AtelierManufacturer 'hp' $manufacturer) { $clientPackages+=@('hpia') }
+    if ($clientPackages.Count) {
         $softwareTiming=Start-AtelierTiming $DataPath 'software'
-        foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages @($payload.settings.winget_packages) -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
+        foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages $clientPackages -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
             $results.Add($entry)
             if ($entry.exit_code -in @(3010,1641)) { $restartNeeded=$true }
+            if ($entry.id -eq 'hpia' -and $entry.status -eq 'completed') { $hpWinGetTool=$entry.tool }
         }
     }
     if ($softwareTiming) { Stop-AtelierTiming $DataPath $softwareTiming;Sync-AtelierTimings $DataPath }
     $appIndex = 0
     $readyTools=New-Object 'Collections.Generic.List[object]'
+    if ($hpWinGetTool) { $readyTools.Add($hpWinGetTool) }
     $checkpointPath=Join-Path $DataPath 'packages-state.json'
     $checkpoints=@{}
     if (Test-Path $checkpointPath) {
         foreach ($entry in @(Get-Content $checkpointPath -Encoding UTF8 -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
     }
     $toolsTiming=Start-AtelierTiming $DataPath 'manufacturer_tools'
-    $applicationsToPrepare=@($payload.applications)
+    $applicationsToPrepare=@($payload.applications | Where-Object { -not ($_.manufacturer -eq 'hp' -and ([IO.Path]::GetFileName([string]$_.entry_point) -ieq 'HPImageAssistant.exe')) })
     if ($payload.settings.software_mode -eq 'winget') {
         $applicationsToPrepare=@()
-        foreach ($tool in @($payload.tools)) {
-            if (-not $tool -or -not (Test-AtelierManufacturer $tool.manufacturer $manufacturer)) { continue }
-            try {
-                Set-Progress 'running' 58 ('Telechargement de l outil constructeur : ' + $tool.name)
-                $folder=Join-Path $DataPath 'Packages'
-                New-Item -ItemType Directory -Path $folder -Force | Out-Null
-                $target=Join-Path $folder $tool.asset.filename
-                $reporter=Get-Content (Join-Path $DataPath 'reporting.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-                if (-not (Test-Path $target)) {
-                    Invoke-WebRequest -UseBasicParsing -Uri ($reporter.server_url + '/api/windows/' + $reporter.id + '/tools/' + $tool.asset.id) -Headers @{Authorization=('Bearer ' + $reporter.token)} -OutFile $target -TimeoutSec 300 | Out-Null
-                }
-                Assert-FileHash $target $tool.asset.sha256
-                $applicationsToPrepare += $tool
-            } catch { if ($target -and (Test-Path $target)) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue };$results.Add(@{name=$tool.name;status='failed';reason='Outil constructeur a preparer manuellement ; consulter first-logon.log.'});Write-Trace $_.Exception.Message }
-        }
     }
     foreach ($application in $applicationsToPrepare) {
         $appIndex++

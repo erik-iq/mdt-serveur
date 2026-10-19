@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.3` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.4` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.3`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.4`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -18,7 +18,7 @@ Les polices WinForms utilisent un constructeur explicitement type : cela evite u
 
 Le nom propose dans WinPE est uniquement constitue des quatre derniers chiffres du SN, en conservant les zeros initiaux. Aucun prefixe ni nom de remplacement n est ajoute. Si le SN est absent, generique ou contient moins de quatre chiffres, le champ reste vide. **Completer le nom avant de continuer**, par exemple `8323` devient `ATELIER-8323` : le nom Windows valide doit commencer par une lettre et contenir au maximum 15 lettres, chiffres ou tirets. Le champ Prefixe et le bouton Recalculer sont retires.
 
-La region et les formats sont proposes en `fr-CH`. Cela ne change pas la langue du WIM ni automatiquement le clavier. Proprietaire et organisation ne sont plus demandes. Le fond `Fond Atelier.png` ou `fon atelier.png` est selectionne par defaut quand il est disponible. La mise a jour enregistre ce fichier si elle le trouve dans `<data_dir>\artifacts` ; sinon elle affiche un avertissement. Elle ne cree pas de faux fond d ecran. Pour l ajouter ensuite : copier le PNG dans ce dossier, puis Profils Windows, Enregistrer un fichier, type Fond d ecran.
+La region et les formats sont proposes en `fr-CH`. Cela ne change pas la langue du WIM. Depuis IQ-4.4, WinPE impose le clavier francais suisse ; l assistant utilise aussi cette disposition pour le Windows deploye, sans selecteur de clavier. Proprietaire et organisation ne sont plus demandes. Le fond `Fond Atelier.png` ou `fon atelier.png` est selectionne par defaut quand il est disponible. La mise a jour enregistre ce fichier si elle le trouve dans `<data_dir>\artifacts` ; sinon elle affiche un avertissement. Elle ne cree pas de faux fond d ecran. Pour l ajouter ensuite : copier le PNG dans ce dossier, puis Profils Windows, Enregistrer un fichier, type Fond d ecran.
 
 Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom dans **Parc machines**. La fiche regroupe identite materielle, licence, historique pagine, PDF, XML/CSV, tests, garantie connue et observations datees du technicien. Les observations sont conservees sur le serveur, independamment des rapports. Les tests et la garantie apparaissent apres utilisation de leurs outils et regeneration du rapport ; aucun resultat n est invente.
 
@@ -26,9 +26,17 @@ Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGe
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
 
-## Preparation HP et mises a jour manuelles IQ-4.3
+## Installation HPIA par WinGet et clavier fixe IQ-4.4
 
-Le ZIP officiel extrait de HP Image Assistant doit deja etre enregistre comme outil portable HP, avec `HPImageAssistant.exe` comme point d entree. Le serveur reutilise cette reference hors bundles ; le client telecharge l outil apres Windows, verifie empreinte et signature HP, puis l execute dans la tache SYSTEM. Sur un autre constructeur, cette etape est ignoree. Sur un HP sans outil, le resultat est A verifier, sans faux succes.
+La revision IQ-4.3 dependait d un ZIP HPIA deja enregistre sur le serveur. En son absence, la preparation signalait A verifier mais ne pouvait pas installer HPIA. L absence de fenetre HPIA etait normale en mode silencieux ; elle ne prouvait pas a elle seule une absence d execution.
+
+Depuis IQ-4.4, un HP ajoute automatiquement `HP.ImageAssistant` aux installations WinGet du premier demarrage, meme si aucun des quatre logiciels usuels n est coche. Aucun ZIP ni bundle HP du serveur n est necessaire. Le paquet officiel extrait HPIA ; il ne lance pas lui-meme les mises a jour des pilotes. Atelier verifie l executable et sa signature HP, enregistre son empreinte puis lance l analyse et l installation des SoftPaq dans la finalisation SYSTEM. Sur un autre constructeur, HPIA n est pas installe.
+
+Le dossier demande a WinGet est `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`, protege en ecriture pour Administrateurs/SYSTEM. Le manifeste declare une architecture x64 et des arguments d extraction, sans scope : Atelier utilise `--location` et ne force pas `--scope machine` pour ce seul paquet. Si WinGet retourne un succes mais que l executable est absent ou sa signature invalide, le rapport indique l echec. La reprise d une installation deja verifiee controle de nouveau le fichier ; un executable disparu declenche sa reinstallation.
+
+WinGet n est pas pris en charge dans WinPE. Les scripts de preparation sont inclus dans WinPE puis copies dans Windows ; WinGet et HPIA sont executes apres le premier demarrage Windows, dans leur contexte pris en charge. Le clavier WinPE est prepare hors ligne par DISM puis active au demarrage en `100c:0000100c` (francais suisse / QWERTZ). Les selecteurs de clavier de l assistant et du menu de reprise sont retires ; une ancienne configuration ou variable AZERTY/US ne remplace pas cette valeur.
+
+Le manifeste WinGet a ete verifie dans [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/h/HP/ImageAssistant/5.3.6/HP.ImageAssistant.installer.yaml). Les prochains deploiements utilisent la version proposee par la source WinGet au moment de l installation, sans figer HPIA en 5.3.6.
 
 La commande HPIA utilise `/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive`, avec dossiers dedies `/ReportFolder` et `/SoftpaqDownloadFolder`. L analyse recherche les recommandations du modele et de la version Windows, puis les SoftPaq correspondants sont selectionnes et traites. All couvre pilotes, logiciels, BIOS et firmwares recommandes compatibles. Cela ne force pas un paquet incompatible, ni un BIOS protege par mot de passe. Les scripts Atelier ne demandent aucun redemarrage et n ajoutent pas de parametre de redemarrage. Le comportement interne de chaque SoftPaq reste celui de HP ; valider le parcours BIOS sur le modele avant usage en serie. Certains firmwares terminent leur installation au redemarrage manuel du technicien ; le flash peut ensuite declencher ses propres cycles.
 
@@ -37,6 +45,14 @@ La progression affiche le traitement HP et sa duree reelle, sans inventer de pou
 Une passe HP au maximum est lancee automatiquement. Un resultat termine est reutilise pour les reprises de rapport. Une execution interrompue ou depassant 45 minutes est signalee A verifier : aucun installateur ou flash n est tue, et aucune seconde installation HP n est lancee automatiquement. Verifier les processus et le rapport HP avant une intervention manuelle ; garder le poste alimente pendant un flash. Le code 256 signifie aucune recommandation ; un modele non pris en charge ou des SoftPaq en echec ne sont pas declares installes.
 
 Reference des parametres et limitations par version : [guide HP Image Assistant](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf). Les tests de cette revision simulent HPIA sous Linux et ne valident pas les flashs BIOS ou les paquets HP reels.
+
+## Reparer un HP deja deploye sans reinstaller Windows
+
+Telecharger et extraire la nouvelle revision sur le PC HP, puis executer `scripts\Repair-HPIA.ps1` depuis Windows PowerShell administrateur. Ne pas executer cette reparation sur DEPLOY-01. La preparation initiale doit etre terminee. Le script refuse une tache Atelier ou un flash HP actif, sauvegarde les anciens resultats et les scripts remplaces sous `C:\ProgramData\AtelierPXE\repair-backups`, installe/verifie HPIA par WinGet puis reprend les SoftPaq. Les autres logiciels et leurs resultats sont conserves. L ancien resultat HPIA est archive avant cette reprise manuelle explicite.
+
+Le PDF et l inventaire sont regeneres apres les mises a jour HP, puis leur transmission est retentee avec l identifiant du deploiement existant. Un jeton expire ou un reseau indisponible laisse les fichiers locaux et un envoi a reprendre. Aucun redemarrage n est demande par Atelier.
+
+Pour comprendre une absence de HPIA : consulter `C:\ProgramData\AtelierPXE\hpia-result.json`, `result.json`, `first-logon.log` et `software-logs\hpia.log`. Le dernier fichier existe a partir de l installation WinGet IQ-4.4. L absence de fenetre de HPIA est normale ; verifier les fichiers et les rapports natifs.
 
 ## Ce qui change
 

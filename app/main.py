@@ -303,19 +303,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         return {'settings': settings, 'applications': apps, 'wallpaper': wallpaper}
 
     def client_portable_tools(con):
-        # Keep the existing HP tool independent of software bundles and WinPE staging.
-        if not client_apps:
-            return []
-        for record in con.execute("SELECT * FROM applications WHERE install_mode='portable' AND manufacturer='hp' ORDER BY created_at DESC"):
-            app = dict(record)
-            if app['entry_point'].split('/')[-1].lower() != 'hpimageassistant.exe':
-                continue
-            try:
-                app['asset'] = asset_snapshot(con, app['asset_id'], 'application')
-            except HTTPException:
-                continue
-            if app['asset']['filename'].lower().endswith('.zip'):
-                return [app]
+        # HP Image Assistant is installed by WinGet inside Windows. No ZIP
+        # registration or server-side bundle is needed for a new deployment.
         return []
 
     def catalogue(con, profile_id, interactive):
@@ -376,7 +365,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.3"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.4"}
 
     @api.get('/api/session')
     def session_options():

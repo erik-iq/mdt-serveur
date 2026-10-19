@@ -9,8 +9,8 @@ param(
     [string]$WdsImageName = 'Atelier PXE - Assistant Windows x64',
     [switch]$ImportIntoWds,
     [switch]$AllowHttpForLab,
-    [ValidatePattern('^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}$')]
-    [string]$WinPEKeyboardLayout = '040c:0000040c'
+    [ValidateSet('100c:0000100c')]
+    [string]$WinPEKeyboardLayout = '100c:0000100c'
 )
 $ErrorActionPreference = 'Stop'
 $uri = [Uri]$ServerUrl
@@ -45,6 +45,9 @@ try {
         if (Test-Path $language) { Add-WindowsPackage -Path $mount -PackagePath $language | Out-Null }
     }
     if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
+    $keyboardArguments='/Image:"{0}" /Set-InputLocale:100c:0000100c' -f $mount
+    $keyboardProcess=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\dism.exe') -ArgumentList $keyboardArguments -NoNewWindow -Wait -PassThru
+    if ($keyboardProcess.ExitCode -ne 0) { throw ('Impossible de preparer le clavier francais suisse dans WinPE (code '+$keyboardProcess.ExitCode+').') }
     $target = Join-Path $mount 'Atelier'
     New-Item -ItemType Directory -Path $target | Out-Null
     foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','FirstLogon.ps1','WinPE-Session.ps1','Partitions.ps1','Naming.ps1','Prepare-Windows.ps1','Maintenance.ps1','Progress.ps1','Updates.ps1','Prepare-IQTools.ps1','Test-Batterie.ps1','Verifier-Licence.ps1','Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','HP-ImageAssistant.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Timings.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) {

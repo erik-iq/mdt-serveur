@@ -78,6 +78,17 @@ def test_keyboard_failure_leaves_wizard_accessible(tmp_path):
         'Starting', 'ConfigurationReady', 'KeyboardFailed', 'CertificateReady', 'OpeningWizard', 'Closed']
 
 
+def test_swiss_keyboard_is_fixed_despite_legacy_config_and_environment(tmp_path,monkeypatch):
+    launcher=boot_fixture(tmp_path)
+    monkeypatch.setenv('ATELIER_WINPE_KEYBOARD','0409:00000409')
+    with (tmp_path/'WinPE-Session.ps1').open('a') as helper:
+        helper.write("\nfunction Set-AtelierOperatorKeyboard { param($Layout) Set-Content (Join-Path $PSScriptRoot 'keyboard.txt') $Layout }\n")
+    (tmp_path/'Wizard.ps1').write_text("Write-Output 'Wizard opened'")
+    result=invoke(launcher)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert (tmp_path/'keyboard.txt').read_text(encoding='utf-8-sig').strip()=='100c:0000100c'
+
+
 def test_error_record_message_details_and_invocation_are_not_logged(tmp_path):
     helper = str(ROOT / 'scripts' / 'WinPE-Session.ps1').replace("'", "''")
     journal = str(tmp_path / 'startup.log').replace("'", "''")

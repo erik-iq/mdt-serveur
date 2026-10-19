@@ -9,12 +9,12 @@ try {
     if (-not $config.server_url) { throw 'Adresse du serveur absente de config.json.' }
     Write-Host ('Atelier PXE | ' + $config.boot_release + ' | ' + $config.server_url) -ForegroundColor Cyan
     Write-AtelierBootEvent -Path $bootLog -Stage ConfigurationReady
-    $layout = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($config.winpe_keyboard_layout) { $config.winpe_keyboard_layout } else { '040c:0000040c' }
+    $layout = '100c:0000100c'
     try {
         Set-AtelierOperatorKeyboard -Layout $layout
         Write-AtelierBootEvent -Path $bootLog -Stage KeyboardReady
     } catch {
-        # Leave the keyboard selector accessible if the requested layout is missing.
+        # Keep diagnostics accessible if the fixed layout cannot be loaded.
         Write-AtelierBootEvent -Path $bootLog -Stage KeyboardFailed -Failure $_
         Write-Warning $_.Exception.Message
     }

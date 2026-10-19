@@ -5,7 +5,7 @@ param(
     [string]$InstallPath,
     [string]$OutputRoot='D:\AtelierPXE',
     [string]$TrustedRootCertificate='C:\AtelierPXE\certs\AtelierPXE-lab.cer',
-    [ValidatePattern('^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}$')][string]$WinPEKeyboardLayout='040c:0000040c',
+    [ValidateSet('100c:0000100c')][string]$WinPEKeyboardLayout='100c:0000100c',
     [string]$DriversPath
 )
 $ErrorActionPreference='Stop'

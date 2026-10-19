@@ -21,7 +21,7 @@ $script:settings = $null
 $script:selectedProfile = $null
 $script:targetName = ''
 $script:controls = @{}
-$script:operatorKeyboard = if ($env:ATELIER_WINPE_KEYBOARD) { $env:ATELIER_WINPE_KEYBOARD } elseif ($Config.winpe_keyboard_layout) { $Config.winpe_keyboard_layout } else { '040c:0000040c' }
+$script:operatorKeyboard = '100c:0000100c'
 $script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
 $script:manufacturer = [string]$computer.Manufacturer
@@ -112,6 +112,7 @@ function Set-Profile([string]$Id) {
     $script:selectedProfile = $profile
     $script:settings = $profile.settings | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     $script:settings.user_locale='fr-CH'
+    $script:settings.keyboard='100c:0000100c'
     $script:settings.registered_owner='';$script:settings.organization=''
     $defaultWallpaper=@($script:session.catalog.wallpapers | Where-Object { ($_.filename -replace '[ _-]','').ToLowerInvariant() -in @('fondatelier.png','fonatelier.png') } | Select-Object -First 1)
     if ($defaultWallpaper.Count) { $script:settings.wallpaper_asset_id=$defaultWallpaper[0].id }
@@ -123,7 +124,7 @@ function Save-Page {
             $name = $script:controls.hostname.Text.Trim()
             if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Completer le nom : commencer par une lettre, puis utiliser au maximum 15 lettres, chiffres ou tirets.' }
             $script:targetName = $name
-            $script:settings.keyboard = Choice-Value 'keyboard'
+            $script:settings.keyboard = '100c:0000100c'
             $script:settings.timezone = Choice-Value 'timezone'
             $script:settings.user_locale = Choice-Value 'user_locale'
             $script:settings.registered_owner=''
@@ -165,22 +166,8 @@ function Show-Page {
         0 {
             Add-Text ($script:manufacturer + ' / ' + $computer.Model) 12 $true | Out-Null
             Add-Text ('MAC Ethernet : ' + ($script:macs -join ' / ')) | Out-Null
-            $keyboard = Add-Choice 'operator_keyboard' 'Clavier de cet assistant' @(
-                [pscustomobject]@{id='040c:0000040c';name='Francais - AZERTY'},
-                [pscustomobject]@{id='100c:0000100c';name='Suisse romand - QWERTZ'},
-                [pscustomobject]@{id='0409:00000409';name='Anglais US - QWERTY'}
-            ) $script:operatorKeyboard
-            $keyboard.Add_SelectedIndexChanged({
-                try {
-                    $operatorLayout = Choice-Value 'operator_keyboard'
-                    Set-AtelierOperatorKeyboard -Layout $operatorLayout
-                    $script:operatorKeyboard = $operatorLayout
-                    $script:status.Text = 'Clavier applique. Verifiez la saisie dans le champ de test.'
-                } catch {
-                    [void][Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'Clavier WinPE','OK','Warning')
-                }
-            })
-            Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez azerty et 123' | Out-Null
+            Add-Text 'Clavier francais suisse - QWERTZ (fixe)' | Out-Null
+            Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez qwertz et 123' | Out-Null
             if (-not $Config.internal_mode) {
             Add-Text 'Enregistrez cette MAC dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
             Add-Input 'code' 'Code d installation' '' $true | Out-Null
@@ -202,7 +189,7 @@ function Show-Page {
             if ($script:namingMessage) { Add-Text $script:namingMessage | Out-Null }
             $name = Add-Input 'hostname' 'Nom du PC' $script:targetName
             $name.MaxLength = 15
-            Add-Choice 'keyboard' 'Clavier' @($script:session.catalog.options.keyboards) $script:settings.keyboard | Out-Null
+            Add-Text 'Clavier Windows : francais suisse - QWERTZ (fixe)' | Out-Null
             Add-Choice 'timezone' 'Fuseau horaire' @($script:session.catalog.options.timezones) $script:settings.timezone | Out-Null
             Add-Choice 'user_locale' 'Region / formats' @($script:session.catalog.options.regions) $script:settings.user_locale | Out-Null
         }
@@ -210,6 +197,7 @@ function Show-Page {
             if ($script:settings.software_mode -eq 'winget') {
                 Add-Text 'Installation silencieuse apres le demarrage Windows' 12 $true | Out-Null
                 foreach ($package in @($script:session.catalog.options.software_packages)) { Add-Check ('winget-' + $package.id) $package.name ($package.id -in @($script:settings.winget_packages)) }
+                if ($script:manufacturer -match '(?i)^(HP|Hewlett[ -]Packard)(\b|\s)') { Add-Text 'HP Image Assistant : installe automatiquement avec WinGet, puis analyse et installation des SoftPaq HP.' | Out-Null }
             } else {
             Add-Text 'Bundles' 12 $true | Out-Null
             foreach ($bundle in @($script:session.catalog.bundles)) { Add-Check ('bundle-' + $bundle.id) $bundle.name ($bundle.id -in @($script:settings.bundle_ids)) }
@@ -313,7 +301,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.3'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.4'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea

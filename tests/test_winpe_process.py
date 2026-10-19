@@ -63,6 +63,15 @@ function Mount-WindowsImage {{
     Set-Content -LiteralPath {ps_quote(mounted)} -Value 'mounted'
 }}
 function Add-WindowsPackage {{ param($Path, $PackagePath) }}
+function Start-Process {{
+    [CmdletBinding()]
+    param($FilePath,$ArgumentList,[switch]$NoNewWindow,[switch]$Wait,[switch]$PassThru)
+    if ([IO.Path]::GetFileName($FilePath) -ieq 'dism.exe') {{
+        if ($ArgumentList -notlike '*/Set-InputLocale:100c:0000100c*') {{ throw 'Swiss keyboard not prepared offline' }}
+        return [pscustomobject]@{{ExitCode=0}}
+    }}
+    Microsoft.PowerShell.Management\\Start-Process @PSBoundParameters
+}}
 function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) }}
 & {ps_quote(BUILD_SCRIPT)} -ServerUrl 'https://192.168.99.250' -OutputPath {ps_quote(output)}
 """, encoding='utf-8-sig')
@@ -99,7 +108,7 @@ function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) 
     assert (output / 'mount' / 'Atelier' / 'WinPE-Session.ps1').exists()
     assert (output / 'mount' / 'Atelier' / 'Partitions.ps1').exists()
     configuration = json.loads((output / 'mount' / 'Atelier' / 'config.json').read_text(encoding='utf-8-sig'))
-    assert configuration['winpe_keyboard_layout'] == '040c:0000040c'
+    assert configuration['winpe_keyboard_layout'] == '100c:0000100c'
     assert configuration['boot_release'] == 'ATELIER-4'
     assert configuration['internal_mode'] is False
     for name in ['Prepare-Windows.ps1', 'Maintenance.ps1', 'Updates.ps1', 'Progress.ps1',
