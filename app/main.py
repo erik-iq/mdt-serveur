@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -193,6 +193,15 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     api = FastAPI(title="Atelier PXE", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
     api.state.data_dir = data
+    # A new asset URL on every byte change prevents old CSS/JS from styling new HTML.
+    static_root = ROOT / 'app' / 'static'
+    index_html = (static_root / 'index.html').read_text(encoding='utf-8')
+    ui_assets = {}
+    for filename in ('style.css', 'app.js', 'brand-logo.png'):
+        version = file_hash(static_root / filename)[:16]
+        original = '/static/' + filename
+        ui_assets[filename] = original + '?v=' + version
+        index_html = index_html.replace('"' + original + '"', '"' + ui_assets[filename] + '"')
 
     @api.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -210,7 +219,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-        if request.url.path.startswith(("/api", "/boot")):
+        if request.url.path == '/' or request.url.path.startswith(("/api", "/boot", "/static/")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -352,7 +361,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.1"}
 
     @api.get('/api/session')
     def session_options():
@@ -814,7 +823,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     @api.get("/")
     def index():
-        return FileResponse(ROOT / "app" / "static" / "index.html")
+        return HTMLResponse(index_html)
 
     api.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
     return api

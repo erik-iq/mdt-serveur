@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Console de deploiement</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="/" aria-label="Atelier PXE"><img class="brand-logo" src="/static/brand-logo.png" alt="Logo IQ"><span>IQ Atelier<span class="brand-sub">DEPLOIEMENT WINDOWS</span></span></a>
+  <a class="brand" href="/" aria-label="Atelier PXE"><span>IQ Atelier<span class="brand-sub">DEPLOIEMENT WINDOWS</span></span></a>
   <div class="workspace-label">ATELIER</div>
   <nav aria-label="Navigation principale">
     <button class="nav active" data-page="overview"><span>01</span> Vue d ensemble</button>
@@ -14,7 +14,7 @@
   <div class="sidebar-footer"><span>IQ ATELIER / 4</span><button id="logout">Deconnexion </button></div>
 </aside>
 <div class="shell">
-  <header class="topbar"><span>ESPACE DE DEPLOIEMENT <b>/</b> <span id="breadcrumb">Vue d ensemble</span></span><div><span id="connection" class="connection">Connexion...</span><span class="avatar" aria-label="Administrateur">AD</span></div></header>
+  <header class="topbar"><span>ESPACE DE DEPLOIEMENT <b>/</b> <span id="breadcrumb">Vue d ensemble</span></span><div><span id="connection" class="connection">Connexion...</span><img class="brand-logo" src="/static/brand-logo.png" width="40" height="40" decoding="async" alt="Logo IQ"></div></header>
   <main>
     <p id="automatic-mode" class="panel padding" hidden>Les postes qui demarrent dans WinPE apparaissent automatiquement ici. Choisissez Windows et confirmez le disque directement sur le poste ; aucune autorisation prealable sur ce site.</p><div id="notice" class="notice" role="status" hidden></div>
     <section id="page-overview" class="page">

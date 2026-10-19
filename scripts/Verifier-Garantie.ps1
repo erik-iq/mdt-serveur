@@ -42,8 +42,8 @@ $form=New-Object Windows.Forms.Form
 $form.Text='IQ | Garantie constructeur';$form.ClientSize=New-Object Drawing.Size(660,420);$form.StartPosition='CenterScreen'
 $form.Font=New-Object Drawing.Font('Segoe UI',10)
 $label=New-Object Windows.Forms.Label
-$logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(10,10)
-$label.Location=New-Object Drawing.Point(90,15);$label.Size=New-Object Drawing.Size(550,85)
+$logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(600,15)
+$label.Location=New-Object Drawing.Point(20,15);$label.Size=New-Object Drawing.Size(550,85)
 $label.Text=$report.constructeur + ' ' + $report.modele + "`r`nSN : " + $serial + ' | Produit : ' + $report.produit + "`r`nConfirmer les dates sur le site officiel, puis les saisir ci-dessous."
 $open=New-Object Windows.Forms.Button;$open.Text='Site constructeur';$open.Location=New-Object Drawing.Point(20,105);$open.Size=New-Object Drawing.Size(180,32);$open.Enabled=[bool]$url
 $open.Add_Click({Start-Process $url})

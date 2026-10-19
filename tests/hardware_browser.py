@@ -14,8 +14,9 @@ def run():
     received=[]
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8');self.end_headers()
-            self.wfile.write((ROOT/'scripts'/'Tests-Materiel.html').read_bytes())
+            logo=self.path.endswith('/logo.png')
+            self.send_response(200); self.send_header('Content-Type','image/png' if logo else 'text/html; charset=utf-8');self.end_headers()
+            self.wfile.write((ROOT/'scripts'/('brand-logo.png' if logo else 'Tests-Materiel.html')).read_bytes())
 
         def do_POST(self):
             assert self.path=='/test/result'
@@ -41,7 +42,7 @@ def run():
             expect(page.locator('#key-ArrowLeft')).to_have_class('key pressed')
             page.locator('#son').select_option('passed');page.locator('#webcam').select_option('passed')
             page.locator('#clavier').select_option('failed');page.locator('#clavier-comment').fill('Une touche manque')
-            page.locator('#save').click();expect(page.locator('#notice')).to_contain_text('Résultats enregistrés')
+            page.locator('#save').click();expect(page.locator('#notice')).to_contain_text('Resultats enregistres')
             assert received[0]['tests'][2]['status']=='failed'
             assert page.evaluate("document.getElementById('preview').srcObject === null")
             assert not errors,errors

@@ -1,5 +1,6 @@
 """Render the repository's two operator guides with only Python's standard library."""
 from html import escape
+import hashlib
 from pathlib import Path
 import re
 
@@ -60,5 +61,10 @@ if __name__ == '__main__':
         body=body.replace('href="LOGICIELS-AUTOMATIQUES.md"','href="/static/software-guide.html"')
         body=body.replace('href="MISE-A-JOUR-ATELIER-2.md"','href="/static/upgrade.html"').replace('href="GUIDE-UTILISATEUR.md"','href="/static/guide.html"')
         body=re.sub(r'href="([A-Z][A-Z0-9-]+\.md(?:#[a-z0-9-]+)?)"', r'href="https://github.com/erik-iq/mdt-serveur/blob/main/docs/\1"', body)
-        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><img src="/static/brand-logo.png" width="58" height="48" alt="IQ" style="vertical-align:middle"> <a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise a jour</a></nav><main>'+body+'</main></body></html>'
+        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise a jour</a><img class="brand-logo" src="/static/brand-logo.png" width="40" height="40" alt="IQ"></nav><main>'+body+'</main></body></html>'
+        for asset_name in ('guide.css','brand-logo.png'):
+            asset_path=ROOT/'app'/'static'/asset_name
+            fingerprint=hashlib.sha256(asset_path.read_bytes()).hexdigest()[:16]
+            original='/static/'+asset_name
+            html=html.replace('"'+original+'"','"'+original+'?v='+fingerprint+'"')
         (ROOT/'app'/'static'/destination).write_text(html)

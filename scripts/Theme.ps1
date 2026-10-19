@@ -3,7 +3,8 @@ $script:AtelierTheme=Get-Content (Join-Path $PSScriptRoot 'theme.json') -Encodin
 function Get-AtelierColor([string]$Name) { return [Drawing.ColorTranslator]::FromHtml($script:AtelierTheme.$Name) }
 function New-AtelierLogo {
     $picture=New-Object Windows.Forms.PictureBox
-    $picture.Size=New-Object Drawing.Size(76,66)
+    $picture.Size=New-Object Drawing.Size(40,40)
+    $picture.Anchor='Top,Right'
     $picture.SizeMode='Zoom';$picture.BackColor=[Drawing.Color]::Transparent
     $picture.Image=[Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'brand-logo.png'))
     $picture.Add_Disposed({ if ($this.Image) { $this.Image.Dispose() } })
@@ -20,6 +21,7 @@ function Set-AtelierFormTheme($Control) {
     foreach ($child in $Control.Controls) { Set-AtelierFormTheme $child }
 }
 function Set-AtelierGradient($Panel) {
+    $Panel.BackColor=Get-AtelierColor 'blue'
     $Panel.Add_Paint({
         $bounds=$this.ClientRectangle
         if ($bounds.Width -le 0 -or $bounds.Height -le 0) { return }

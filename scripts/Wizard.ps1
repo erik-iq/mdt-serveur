@@ -331,7 +331,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.1'
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.ClientSize = New-Object Drawing.Size(([math]::Min(980,$bounds.Width-30)),([math]::Min(690,$bounds.Height-50)))
@@ -344,7 +344,6 @@ $form.Controls.Add($layout)
 $sidebar = New-Object Windows.Forms.FlowLayoutPanel
 $sidebar.Dock = 'Fill'; $sidebar.FlowDirection = 'TopDown'; $sidebar.WrapContents = $false
 $sidebar.BackColor = Get-AtelierColor 'blue'; $sidebar.Padding = New-Object Windows.Forms.Padding(18,26,8,0)
-$sidebar.Controls.Add((New-AtelierLogo))
 $brand = New-Text 'IQ Atelier' 19 $true; $sidebar.Controls.Add($brand)
 $tag = New-Text 'ASSISTANT WINDOWS' 8; $tag.ForeColor = [Drawing.ColorTranslator]::FromHtml('#657694'); $tag.Margin = New-Object Windows.Forms.Padding(0,0,0,30); $sidebar.Controls.Add($tag)
 $script:nav = @()
@@ -357,11 +356,18 @@ $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]:
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,32))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,44))) | Out-Null
 $layout.Controls.Add($main,1,0)
-$header = New-Object Windows.Forms.FlowLayoutPanel
+$header = New-Object Windows.Forms.TableLayoutPanel
 Set-AtelierGradient $header
-$header.Dock='Fill';$header.FlowDirection='TopDown';$header.WrapContents=$false
-$script:title = New-Text 'Connexion' 25 $true; $header.Controls.Add($script:title)
-$script:description = New-Text '' 9; $script:description.ForeColor=$muted; $header.Controls.Add($script:description)
+$header.Dock='Fill';$header.ColumnCount=2;$header.RowCount=1
+$header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
+$header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Absolute,48))) | Out-Null
+$headerText=New-Object Windows.Forms.FlowLayoutPanel
+$headerText.Dock='Fill';$headerText.FlowDirection='TopDown';$headerText.WrapContents=$false;$headerText.BackColor=[Drawing.Color]::Transparent
+$script:title = New-Text 'Connexion' 25 $true; $headerText.Controls.Add($script:title)
+$script:description = New-Text '' 9; $script:description.ForeColor=$muted; $headerText.Controls.Add($script:description)
+$header.Controls.Add($headerText,0,0)
+$headerLogo=New-AtelierLogo;$headerLogo.Margin=New-Object Windows.Forms.Padding(4,10,4,0)
+$header.Controls.Add($headerLogo,1,0)
 $main.Controls.Add($header,0,0)
 $script:body = New-Object Windows.Forms.FlowLayoutPanel
 $script:body.BackColor=Get-AtelierColor 'surface'

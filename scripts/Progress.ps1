@@ -10,11 +10,13 @@ if (-not $mutex.WaitOne(0)) { $mutex.Dispose(); return }
 $form = New-Object Windows.Forms.Form
 $form.Text = 'IQ Atelier | Preparation en arriere-plan'
 $form.ClientSize = New-Object Drawing.Size(720,390)
-$form.StartPosition='CenterScreen'; $form.BackColor=[Drawing.ColorTranslator]::FromHtml('#F2F4F9')
+$form.StartPosition='CenterScreen'; $form.BackColor=Get-AtelierColor 'paper'
 $form.Font = New-Object Drawing.Font('Segoe UI',11)
 $title=New-Object Windows.Forms.Label
-$logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(12,6)
-$title.Text='Preparation du poste'; $title.Location=New-Object Drawing.Point(86,22); $title.Size=New-Object Drawing.Size(570,36)
+$header=New-Object Windows.Forms.Panel
+$header.Location=New-Object Drawing.Point(12,8);$header.Size=New-Object Drawing.Size(696,60)
+$logo=New-AtelierLogo;$logo.Location=New-Object Drawing.Point(646,10)
+$title.Text='Preparation du poste'; $title.Location=New-Object Drawing.Point(13,13); $title.Size=New-Object Drawing.Size(610,38)
 $title.Font=New-Object Drawing.Font('Segoe UI',20,[Drawing.FontStyle]::Bold)
 $message=New-Object Windows.Forms.Label
 $message.Text='Chargement de la progression...';$message.Location=New-Object Drawing.Point(25,80);$message.Size=New-Object Drawing.Size(670,90)
@@ -26,8 +28,11 @@ $note.Location=New-Object Drawing.Point(25,210);$note.Size=New-Object Drawing.Si
 $details=New-Object Windows.Forms.TextBox
 $details.Location=New-Object Drawing.Point(25,263);$details.Size=New-Object Drawing.Size(670,95)
 $details.Multiline=$true;$details.ReadOnly=$true;$details.ScrollBars='Vertical'
-$form.Controls.AddRange(@($logo,$title,$message,$bar,$note,$details))
+$header.Controls.AddRange(@($logo,$title))
+$form.Controls.AddRange(@($header,$message,$bar,$note,$details))
 Set-AtelierFormTheme $form
+Set-AtelierGradient $header
+$title.BackColor=[Drawing.Color]::Transparent;$logo.BackColor=[Drawing.Color]::Transparent
 $form.MinimizeBox=$true;$form.MaximizeBox=$false
 # Native visual styles otherwise force the green Windows progress color.
 Set-AtelierProgressTheme $bar
