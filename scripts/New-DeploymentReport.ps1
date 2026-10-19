@@ -71,6 +71,12 @@ if ($payload.deployment) { $inventory['Profil deploye']=[string]$payload.deploym
 $steps=New-Object 'Collections.Generic.List[object]'
 $apps=Read-ReportJson (Join-Path $DataPath 'result.json')
 $maintenance=Read-ReportJson (Join-Path $DataPath 'maintenance.json')
+$software=$null
+if ($payload.settings.software_mode -eq 'winget') {
+    . (Join-Path $DataPath 'Client-Software.ps1')
+    $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($apps.applications)
+    if ($software.status -ne 'completed') { $warnings.Add(('Logiciels non installes ou non verifies : '+($software.missing -join ', '))) }
+}
 $steps.Add(@{name='Personnalisation';status=$(if($apps){$apps.status}else{'unknown'});message=[string]$apps.message;timestamp=[string]$apps.timestamp})
 foreach ($app in @($apps.applications)) {
     if (-not $app) { continue }
@@ -123,7 +129,7 @@ if ($warranty) {
     } else { $warnings.Add('Garantie constructeur non verifiee.') }
 }
 if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en echec ; consulter software-logs et les etapes du rapport.') }
-$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
+$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($software -and $software.status -ne 'completed') { 'needs_attention' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 $timingDirectory=Join-Path $DataPath 'timings'
 if (Test-Path $timingDirectory) {
@@ -143,7 +149,7 @@ $lines=@('ATELIER PXE - Rapport de deploiement',('Poste : ' + $env:COMPUTERNAME 
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ($entry.Key + ' : ' + $entry.Value) }
 $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.5.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.6.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'

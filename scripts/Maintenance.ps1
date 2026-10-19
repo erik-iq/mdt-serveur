@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $DataPath 'Updates.ps1')
 . (Join-Path $PSScriptRoot 'IQ-Paths.ps1')
 . (Join-Path $DataPath 'HP-ImageAssistant.ps1')
+. (Join-Path $DataPath 'Client-Software.ps1')
 if (Test-Path (Join-Path $DataPath 'Reporting.ps1')) { . (Join-Path $DataPath 'Reporting.ps1') }
 $statePath = Join-Path $DataPath 'maintenance.json'
 $logPath = Join-Path $DataPath 'maintenance.log'
@@ -39,11 +40,18 @@ function Finish-Maintenance {
 }
 
 try {
-    if (Test-Path $statePath) { $state = Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json }
+    if (Test-Path $statePath) {
+        $loaded=Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json
+        foreach ($property in $state.PSObject.Properties) {
+            if (-not $loaded.PSObject.Properties[$property.Name]) { $loaded | Add-Member NoteProperty $property.Name $property.Value }
+        }
+        $state=$loaded
+    }
     if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
-    if ($state.status -in @('completed','needs_attention')) { Finish-Maintenance; return }
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+    $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
+    if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent etre termines avant la finalisation du poste.' }
     $state.attempts++
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }
@@ -52,7 +60,8 @@ try {
     # These legacy settings are deliberately ignored, even in an old payload.
     $state.windows=[pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update a lancer manuellement ; aucune recherche Atelier.'}
     $state.store=[pscustomobject]@{status='manual';completion_verified=$false;message='Microsoft Store a actualiser manuellement ; aucune recherche Atelier.'}
-    Save-Maintenance 'running' 80 'Logiciels selectionnes prepares. Windows Update et Microsoft Store restent manuels.'
+    $softwareMessage=if (-not $software.selected.Count) { 'Aucun logiciel selectionne : aucune installation demandee.' } elseif ($software.status -eq 'completed') { 'Logiciels verifies : '+$software.verified+'.' } else { 'Logiciels non installes ou non verifies : '+($software.missing -join ', ')+'.' }
+    Save-Maintenance 'running' 80 ($softwareMessage+' Windows Update et Microsoft Store restent manuels.')
     $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coche : installation et SoftPaq non demandes.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
     if ('hpia' -in @($payload.settings.winget_packages)) {
         $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
@@ -69,11 +78,11 @@ try {
     if (Test-Path $licenseScript) {
         try { & $licenseScript } catch { Add-Content -LiteralPath $logPath -Value 'Diagnostic de licence a relancer dans C:\IQ_.' -Encoding UTF8 }
     }
-    $message = 'Preparation terminee. Windows Update et Microsoft Store a lancer manuellement.'
-    if ($customization.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet necessitent une intervention. Consulter le rapport.') }
+    $message = 'Preparation terminee. '+$softwareMessage+' Windows Update et Microsoft Store a lancer manuellement.'
+    if ($software.status -ne 'completed' -or $customization.software_status -eq 'needs_attention') { $warnings.Add(($softwareMessage+' Consulter C:\ProgramData\AtelierPXE\software-logs et le rapport.')) }
     if ($state.reboot_required) { $warnings.Add('Redemarrage necessaire : le lancer depuis le menu Windows quand vous etes pret. Aucun redemarrage automatique demande par Atelier.') }
     $finalStatus=if ($warnings.Count) { 'needs_attention' } else { 'completed' }
-    if ($warnings.Count) { $message='Preparation terminee. ' + ($warnings -join ' ') }
+    if ($warnings.Count) { $message='Preparation incomplete ou a verifier. ' + ($warnings -join ' ') }
     Save-Maintenance $finalStatus 100 $message
     Finish-Maintenance
 } catch {

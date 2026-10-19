@@ -81,3 +81,7 @@ wdsutil /Set-Server /AnswerClients:All
 ```
 
 Ces commandes ne desinstallent pas les images ou la console. Un poste deja en train d appliquer son image doit terminer avant une operation de maintenance du serveur.
+
+## Si les logiciels sont absents apres Windows
+
+Consulter `C:\ProgramData\AtelierPXE\result.json`, puis `software-logs/winget-preparation.log` et les journaux de chaque logiciel. Une fin de preparation ne doit pas masquer une installation non verifiee : IQ-4.6 affiche A verifier et les noms concernes. Si aucune case n etait cochee, aucune application n est installee. Extraire la revision courante et executer `scripts/Repair-Software.ps1` sur le PC en PowerShell administrateur pour reprendre uniquement la selection enregistree, sans redeployer Windows. Attendre la fin de toute preparation deja active.

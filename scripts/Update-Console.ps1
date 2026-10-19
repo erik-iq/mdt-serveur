@@ -105,7 +105,7 @@ try {
     $deadline = (Get-Date).AddSeconds(20)
     do {
         try { $health = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 2 } catch { $health = $null }
-        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '4.0' -and $health.ui_revision -eq 'IQ-4.5') { $updated = $true; break }
+        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '4.0' -and $health.ui_revision -eq 'IQ-4.6') { $updated = $true; break }
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
     if (-not $updated) { throw 'La console 0.2.0 ne repond pas. Consultez data\logs\console.log et la sauvegarde.' }

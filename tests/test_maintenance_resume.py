@@ -14,8 +14,11 @@ pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell required')
 
 def run_worker(tmp_path,hp_status='completed',package_restart=False,hp_restart=False,packages=None):
     shutil.copy(ROOT/'scripts'/'Unattend.ps1',tmp_path/'Unattend.ps1')
+    shutil.copy(ROOT/'scripts'/'Client-Software.ps1',tmp_path/'Client-Software.ps1')
     (tmp_path/'personalization.json').write_text(json.dumps({'settings':{'windows_update':True,'store_update':True,'winget_packages':['hpia'] if packages is None else packages}}))
-    (tmp_path/'result.json').write_text(json.dumps({'status':'completed','restart_needed':package_restart}))
+    selected=['hpia'] if packages is None else packages
+    if not (tmp_path/'result.json').exists():
+        (tmp_path/'result.json').write_text(json.dumps({'status':'completed','restart_needed':package_restart,'applications':[{'id':p,'status':'completed','verification':{'method':'fixture'}} for p in selected]}))
     (tmp_path/'Updates.ps1').write_text(r'''
 function Invoke-AtelierWindowsUpdates { Set-Content (Join-Path $DataPath 'forbidden-scan') 'Windows';throw 'Forbidden Windows scan' }
 function Request-AtelierStoreUpdates { Set-Content (Join-Path $DataPath 'forbidden-scan') 'Store';throw 'Forbidden Store scan' }
@@ -95,3 +98,12 @@ def test_unchecked_hpia_never_runs_softpaqs_even_with_an_old_result(tmp_path,pac
     assert state['status']=='completed'
     assert state['hpia']['status']=='skipped' and 'non coche' in state['hpia']['message']
     assert not (tmp_path/'hp-calls').exists()
+
+
+@pytest.mark.parametrize('entries',[[],[{'id':'vlc','status':'completed'}],[{'id':'vlc','status':'failed','reason':'no install'}]])
+def test_missing_or_unverified_applications_cannot_keep_a_completed_status(tmp_path,entries):
+    (tmp_path/'result.json').write_text(json.dumps({'status':'completed','software_status':'completed','applications':entries}))
+    (tmp_path/'maintenance.json').write_text(json.dumps({'status':'completed','attempts':1,'message':'old success'}))
+    state=run_worker(tmp_path,packages=['vlc'])
+    assert state['status']=='needs_attention'
+    assert 'vlc' in state['message'] and 'incomplete' in state['message']

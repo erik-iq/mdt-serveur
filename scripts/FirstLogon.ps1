@@ -5,7 +5,6 @@ param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
 $ErrorActionPreference = 'Stop'
 $resultPath = Join-Path $DataPath 'result.json'
 $logPath = Join-Path $DataPath 'first-logon.log'
-$previous = if (Test-Path $resultPath) { Get-Content $resultPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
 $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 . (Join-Path $DataPath 'Unattend.ps1')
 . (Join-Path $DataPath 'Reporting.ps1')
@@ -28,7 +27,8 @@ function Start-Maintenance {
     Disable-AtelierAutoLogon
     # Old clients used an interactive task to open HPIA after maintenance.
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
-    Set-Progress 'running' 75 'Logiciels et bureau prepares. Pilotes constructeur et rapport en arriere-plan ; mises a jour Windows / Store manuelles.'
+    $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installes ou non verifies : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels verifies : '+$script:softwareSummary.verified+'.' }
+    Set-Progress 'running' 75 ($detail+' Finalisation et rapport en arriere-plan ; mises a jour Windows / Store manuelles.')
     Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
 }
@@ -83,7 +83,8 @@ try {
     $desktopDeadline=(Get-Date).AddSeconds(60)
     while (-not (Get-Process explorer -ErrorAction SilentlyContinue) -and (Get-Date) -lt $desktopDeadline) { Start-Sleep -Seconds 1 }
     Initialize-AtelierReportTrust -DataPath $DataPath
-    if ($previous -and $previous.status -eq 'completed') { Start-Maintenance; return }
+    # Always check the requested applications against this Windows installation.
+    # Captured WIMs and resumed clients may contain obsolete success files.
     Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
@@ -191,8 +192,9 @@ try {
     Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
     # Export once at finalization, after software and updates; no duplicate CIM scan.
-    $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { 'completed' }
-    @{status='completed';software_status=$softwareStatus; timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
+    $script:softwareSummary=Get-AtelierSoftwareSummary -Packages $clientPackages -Results @($results.ToArray())
+    $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { $script:softwareSummary.status }
+    @{status='completed';software_status=$softwareStatus;software_summary=$script:softwareSummary;deployment_id=[string]$payload.deployment.id;timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 8 | Set-Content $resultPath -Encoding UTF8
     Start-Maintenance
     Write-Trace 'Personnalisation terminee. Consultez result.json pour les logiciels et le redemarrage eventuel.'
 } catch {

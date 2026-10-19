@@ -149,6 +149,19 @@ function Write-AtelierVerifiedUtf8File {
     } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 }
 
+function Initialize-AtelierDeploymentPayload {
+    param([Parameter(Mandatory)][string]$Path)
+    $backup=$null
+    if (Test-Path -LiteralPath $Path) {
+        $item=Get-Item -LiteralPath $Path -Force
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Ancien dossier Atelier invalide ou lie : preparation refusee.' }
+        $backup=$Path+'-Previous-'+[guid]::NewGuid().ToString('N')
+        Move-Item -LiteralPath $Path -Destination $backup
+    }
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    return $backup
+}
+
 function Repair-AtelierOfflineUnattend {
     param(
         [Parameter(Mandatory)][string]$WindowsPath,

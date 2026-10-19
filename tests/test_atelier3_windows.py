@@ -28,6 +28,7 @@ assert args[args.index('--scope')+1]=='machine'
 key=args[args.index('--id')+1]
 with open(__file__+'.calls','a') as handle: handle.write(key+'\\n')
 print('Fixture '+key)
+if key=='VideoLAN.VLC':(pathlib.Path(__file__).parent/'vlc.exe').write_bytes(b'Installed VLC fixture')
 sys.exit(12 if key=='Google.Chrome' else 0)
 ''');executable.chmod(0o755)
     wrapper=tmp_path/'client.ps1'
@@ -35,6 +36,9 @@ sys.exit(12 if key=='Google.Chrome' else 0)
 . 'HELPER'
 . 'FILES'
 function Get-AtelierClientWinGet { return 'EXE' }
+function Get-ItemProperty {param($Path)
+ if(Test-Path 'DATA/vlc.exe'){[pscustomobject]@{DisplayName='VLC media player';Publisher='VideoLAN';DisplayVersion='3.0';InstallLocation='DATA';DisplayIcon='DATA/vlc.exe'}}
+}
 $first=@(Install-AtelierClientSoftware -DataPath 'DATA' -Packages @('vlc','chrome') -OnProgress {param($Percent,$Message)})
 $second=@(Install-AtelierClientSoftware -DataPath 'DATA' -Packages @('vlc','chrome') -OnProgress {param($Percent,$Message)})
 @{first=$first;second=$second}|ConvertTo-Json -Depth 6|Set-Content 'RESULT'

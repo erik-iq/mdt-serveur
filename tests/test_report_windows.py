@@ -13,10 +13,12 @@ pytestmark = pytest.mark.skipif(not PWSH, reason='PowerShell required')
 
 
 @pytest.mark.parametrize('central',[False,True])
-def test_local_report_inventory_and_offline_pdf(tmp_path,central):
+@pytest.mark.parametrize('unverified',[False,True])
+def test_local_report_inventory_and_offline_pdf(tmp_path,central,unverified):
     data = tmp_path / 'data'; data.mkdir()
     out = tmp_path / 'IQ'; out.mkdir()
     shutil.copy(ROOT/'scripts'/'Reporting.ps1', data/'Reporting.ps1')
+    shutil.copy(ROOT/'scripts'/'Client-Software.ps1', data/'Client-Software.ps1')
     timings=data/'timings';timings.mkdir()
     (timings/'image.json').write_text(json.dumps({'run_id':'d1694e35-1c13-4e09-a8f6-d8b2ce03848d','source':'winpe','stage':'image','status':'completed','started_at':'2026-10-19T09:00:00Z','duration_seconds':125}))
     (data/'result.json').write_text(json.dumps({'status':'completed','applications':[{'name':'VLC','status':'completed','exit_code':0}]}))
@@ -34,6 +36,9 @@ Set-Content (Join-Path $OutputDirectory 'Inventaire-Technique.xml') 'after-updat
 Set-Content (Join-Path $OutputDirectory 'Inventaire-Technique.csv') 'after-updates'
 [pscustomobject]@{SectionsIndisponibles=0}
 ''',encoding='utf-8-sig')
+    if unverified:
+        (data/'personalization.json').write_text(json.dumps({'settings':{'central_inventory':central,'software_mode':'winget','winget_packages':['vlc']}}))
+        (data/'result.json').write_text('{"status":"completed","software_status":"completed","applications":[]}')
     wrapper = tmp_path/'run.ps1'
     wrapper.write_text("""
 $env:COMPUTERNAME='PC-LAB-01'
@@ -47,7 +52,9 @@ function Get-ItemProperty { param($Path,$Name) [pscustomobject]@{HiberbootEnable
     result = subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert result.returncode == 0, result.stderr
     report=json.loads((out/'Rapports'/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
-    assert report['status']=='completed' and report['inventory']['Numero de serie']=='TEST123456'
+    assert report['status']==('needs_attention' if unverified else 'completed') and report['inventory']['Numero de serie']=='TEST123456'
+    if unverified:
+        assert any('Logiciels non installes ou non verifies : vlc' in warning for warning in report['warnings'])
     assert any(step['name']=='Duree - Application de Windows' and '125' in step['message'] for step in report['steps'])
     assert any(step['name']=='Windows Update' and step['status']=='manual' for step in report['steps'])
     assert any(step['name']=='Microsoft Store' and step['status']=='manual' for step in report['steps'])
