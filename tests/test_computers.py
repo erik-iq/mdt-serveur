@@ -44,6 +44,9 @@ def test_timings_use_reporter_credentials_and_do_not_regress_or_duplicate(system
     assert client.post(url,headers=reporter,json={'measurements':[stale]}).status_code==200
     rows=client.get('/api/deployments/'+job['id']+'/timings',headers=auth()).json()['measurements']
     assert len(rows)==1 and rows[0]['duration_seconds']==12.5 and rows[0]['status']=='completed'
+    hp={**entry,'run_id':str(uuid.uuid4()),'stage':'hp_updates'}
+    assert client.post(url,headers=reporter,json={'measurements':[hp]}).status_code==200
+    assert any(row['label']=='Mises a jour HP' for row in client.get('/api/deployments/'+job['id']+'/timings',headers=auth()).json()['measurements'])
     assert client.post(url,headers=reporter,json={'measurements':[{**entry,'stage':'image'}]}).status_code==409
     assert client.post(url,headers=reporter,json={'measurements':[{**entry,'duration_seconds':-1}]}).status_code==422
     assert client.post(url,headers=reporter,json={'measurements':[{**entry,'started_at':'2026-10-19T09:00:00'}]}).status_code==422

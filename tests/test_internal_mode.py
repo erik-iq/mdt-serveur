@@ -20,8 +20,8 @@ def test_internal_lifecycle_no_manual_secrets_and_scoped_share(tmp_path, monkeyp
     with TestClient(create_app(tmp_path, ADMIN, 'https://192.168.99.250', internal_mode=True, automatic_windows=True)) as client:
         _, _, profile, payload = prepare(client, tmp_path)
         assert profile['settings']['unattended'] is True
-        assert profile['settings']['windows_update'] is True
-        assert profile['settings']['store_update'] is True
+        assert profile['settings']['windows_update'] is False
+        assert profile['settings']['store_update'] is False
         payload.pop('confirmation')
         job = client.post('/api/deployments', json={**payload, 'wizard_enabled':True}).json()
         assert job['boot_code'] is None
@@ -71,3 +71,23 @@ def test_share_secret_never_sent_over_http(tmp_path, monkeypatch):
         _, _, _, payload = prepare(client, tmp_path)
         job = client.post('/api/deployments', json=payload).json()
         assert client.get('/api/agent/'+job['id']+'/share-credentials', headers=auth(job['agent_token'])).status_code == 403
+
+
+def test_legacy_profiles_and_wizard_cannot_reenable_windows_or_store_updates(tmp_path):
+    import json
+    with TestClient(create_app(tmp_path, ADMIN, internal_mode=True, automatic_windows=True)) as client:
+        _,_,profile,payload=prepare(client,tmp_path)
+        settings={**profile['settings'],'windows_update':True,'store_update':True}
+        with sqlite3.connect(tmp_path/'deployment.sqlite3') as con:
+            con.execute('UPDATE profiles SET settings_json=? WHERE id=?',(json.dumps(settings),profile['id']))
+        current=client.get('/api/state').json()['profiles'][0]['settings']
+        assert current['windows_update'] is current['store_update'] is False
+        job=client.post('/api/deployments',json={**payload,'wizard_enabled':True}).json()
+        response=client.post('/api/agent/'+job['id']+'/configure',headers=auth(job['agent_token']),json={'profile_id':profile['id'],'hostname':'PC-LAB-01','settings':settings})
+        assert response.status_code==200,response.text
+        assert response.json()['settings']['windows_update'] is response.json()['settings']['store_update'] is False
+        # An already saved selection from an older client is also normalized.
+        with sqlite3.connect(tmp_path/'deployment.sqlite3') as con:
+            con.execute('UPDATE deployments SET selection_json=? WHERE id=?',(json.dumps({'profile_id':profile['id'],'hostname':'PC-LAB-01','settings':settings}),job['id']))
+        plan=client.get('/api/agent/'+job['id']+'/plan',headers=auth(job['agent_token'])).json()
+        assert plan['settings']['windows_update'] is plan['settings']['store_update'] is False

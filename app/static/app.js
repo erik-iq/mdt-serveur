@@ -1,7 +1,7 @@
 'use strict';
 let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
 const $ = id => document.getElementById(id);
-const labels = {active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
+const labels = {manual:'Manuel',skipped:'Non applicable',active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = s => new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const size = n => n > 1024**3 ? `${(n/1024**3).toFixed(2)} Go` : `${(n/1024**2).toFixed(1)} Mo`;
@@ -175,7 +175,7 @@ function measuredDuration(seconds) {
 function timingRows(measurements) {
   if(!measurements?.length) return '<p>Durees indisponibles pour ce deploiement. Les mesures seront recueillies avec le nouvel agent.</p>';
   const names={running:'Fin de mesure non recue',completed:'Termine',failed:'Echec',deferred:'Reporte',interrupted:'Interrompu'};
-  return '<div class="table-wrap"><table><thead><tr><th>Etape</th><th>Duree mesuree</th><th>Etat</th></tr></thead><tbody>'+measurements.map(m=>`<tr><td>${esc(m.label)}<small>${esc(date(m.started_at))}</small></td><td>${m.status==='running' && !m.duration_seconds?'En attente':esc(measuredDuration(m.duration_seconds))}</td><td>${esc(names[m.status]||m.status)}</td></tr>`).join('')+'</tbody></table></div><p class="muted">Installation manuelle des pilotes dans HP Image Assistant : duree non mesuree. La preparation de l outil constructeur ne correspond pas a l installation des pilotes.</p>';
+  return '<div class="table-wrap"><table><thead><tr><th>Etape</th><th>Duree mesuree</th><th>Etat</th></tr></thead><tbody>'+measurements.map(m=>`<tr><td>${esc(m.label)}<small>${esc(date(m.started_at))}</small></td><td>${m.status==='running' && !m.duration_seconds?'En attente':esc(measuredDuration(m.duration_seconds))}</td><td>${esc(names[m.status]||m.status)}</td></tr>`).join('')+'</tbody></table></div><p class="muted">Mises a jour HP : analyse et installation des SoftPaq en arriere-plan avec IQ-4.3. La preparation de l outil est mesuree separement. Les anciennes installations manuelles ne sont pas chronometrees.</p>';
 }
 function renderComputerReport(report,id) {
   const tests=report.steps.filter(s=>/^Test /i.test(s.name));

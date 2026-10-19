@@ -8,14 +8,14 @@ from typing import Literal
 from fastapi import Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-STAGES={'image':'Application de Windows','software':'Logiciels','manufacturer_tools':'Preparation des outils constructeur','windows_update':'Windows Update','inventory':'Inventaire','personalization':'Personnalisation'}
+STAGES={'image':'Application de Windows','software':'Logiciels','manufacturer_tools':'Preparation des outils constructeur','hp_updates':'Mises a jour HP','windows_update':'Windows Update','inventory':'Inventaire','personalization':'Personnalisation'}
 
 
 class Measurement(BaseModel):
     model_config=ConfigDict(extra='forbid')
     run_id: uuid.UUID
     source: Literal['winpe','windows']
-    stage: Literal['image','software','manufacturer_tools','windows_update','inventory','personalization']
+    stage: Literal['image','software','manufacturer_tools','hp_updates','windows_update','inventory','personalization']
     status: Literal['running','completed','failed','deferred','interrupted']
     started_at: datetime
     duration_seconds: float=Field(ge=0,le=1209600)

@@ -269,7 +269,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         if client_apps:
             result['settings'].update(software_mode='winget', central_inventory=True, application_ids=[], bundle_ids=[])
         if automatic:
-            result['settings'].update(unattended=True, windows_update=True, store_update=True)
+            result['settings']['unattended']=True
+        result['settings'].update(windows_update=False, store_update=False)
         return result
 
     def bundle_public(record):
@@ -286,6 +287,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     def resolved_settings(con, settings):
         settings = Personalization.model_validate(settings).model_dump()
+        settings.update(windows_update=False, store_update=False)
         if client_apps:
             settings.update(software_mode='winget', central_inventory=True, application_ids=[], bundle_ids=[])
         ids = [] if settings['software_mode'] == 'winget' else list(settings['application_ids'])
@@ -374,7 +376,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.3"}
 
     @api.get('/api/session')
     def session_options():
@@ -483,7 +485,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         elif body.entry_point or body.install_mode == 'portable':
             raise HTTPException(400, 'Le point d entree et le mode portable sont reserves aux ZIP')
         if body.install_mode == 'portable' and body.arguments:
-            raise HTTPException(400, 'Omettre les arguments en mode portable ; HP Image Assistant est ouvert sans arguments')
+            raise HTTPException(400, 'Omettre les arguments en mode portable ; Atelier gere les parametres HP Image Assistant')
 
     @api.put('/api/applications/{identifier}', dependencies=[Depends(admin)])
     def update_application(identifier: str, body: ApplicationInput, request: Request):
@@ -664,6 +666,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             if body.profile_id not in {p['id'] for p in catalog.get('profiles', [])}:
                 raise HTTPException(403, 'Ce profil ne fait pas partie de l autorisation')
             settings = body.settings.model_dump()
+            settings.update(windows_update=False, store_update=False)
             allowed_apps = {a['id'] for a in catalog['applications']}
             allowed_bundles = {b['id'] for b in catalog['bundles']}
             allowed_wallpapers = {w['id'] for w in catalog['wallpapers']}
@@ -680,6 +683,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             if enrollment:
                 con.execute('UPDATE machines SET hostname=? WHERE id=?', (body.hostname, job['machine_id']))
             selected = body.model_dump(exclude={'disk_number'})
+            selected['settings']=settings
             con.execute('UPDATE deployments SET profile_id=?,selection_json=?,disk_number=?,updated_at=? WHERE id=?',
                         (body.profile_id, json.dumps(selected), body.disk_number if body.disk_number is not None else job['disk_number'], now(), identifier))
             event(con, identifier, 'queued', 0, f'Assistant : profil et parametres valides pour {body.hostname}')

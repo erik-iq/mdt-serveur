@@ -30,7 +30,7 @@ Ouvrir `https://192.168.99.250`. En mode interne, l acces administrateur est aut
 
 Dans Activite de deploiement, **Rapport PDF** telecharge le rapport du poste. **Dossier inventaire** affiche le chemin serveur et permet de telecharger XML et CSV. Les fichiers sont classes sous `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` sur .250. Le navigateur ne peut pas ouvrir de lui-meme l Explorateur d un autre ordinateur : copier le chemin dans l Explorateur du serveur, ou telecharger les fichiers depuis le site.
 
-**Fiche ordinateur** rassemble historique, inventaire, PDF, resultats de tests, garantie connue et observations du technicien. Les observations sont enregistrees sur le serveur. Les nouveaux deploiements affichent les durees mesurees pour l image, WinGet, les outils constructeur, Windows Update et l inventaire. Les anciennes installations restent sans mesures. L utilisation manuelle de HP Image Assistant pour les pilotes n est pas chronometree. Apres un test ou une verification de garantie, regenerer le rapport depuis le poste pour actualiser la fiche.
+**Fiche ordinateur** rassemble historique, inventaire, PDF, resultats de tests, garantie connue et observations du technicien. Les observations sont enregistrees sur le serveur. Les nouveaux deploiements affichent les durees mesurees pour l image, WinGet, les outils constructeur, les mises a jour HP et l inventaire. Les anciennes installations restent sans mesures. Les anciennes utilisations manuelles de HP Image Assistant ne sont pas chronometrees. Apres un test ou une verification de garantie, regenerer le rapport depuis le poste pour actualiser la fiche.
 
 ## Outils sur le poste Windows
 
@@ -45,11 +45,13 @@ Ouvrir `C:\IQ_`. Les fichiers sont classes par categorie :
 | Garantie | Verifier-Garantie.cmd ouvre le portail officiel HP, Lenovo ou Dell. Saisir les dates confirmees : aucune date n est inventee depuis le SN. |
 | Personnalisation | Fond d ecran selectionne. |
 
-L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Sur un HP dont HP Image Assistant a ete reference, son executable s ouvre automatiquement a la fin pour les pilotes ; une mise a jour BIOS n est pas lancee automatiquement.
+L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Sur un HP dont HP Image Assistant a ete reference, l analyse puis l installation des SoftPaq compatibles se font automatiquement en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Le technicien lance le redemarrage quand les installations sont terminees. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
 
 ## Mises a jour et lenteur
 
-La recherche Windows Update s arrete apres environ 90 secondes si elle ne repond pas. Une recherche terminee sans resultat affiche Aucune mise a jour necessaire trouvee et passe a la suite. Une recherche interrompue affiche Non verifie / reporte et laisse Windows Update disponible dans Parametres. Les mises a jour effectivement trouvees peuvent prendre du temps a telecharger et installer, en arriere-plan. Un redemarrage requis est annonce, sans couper votre session.
+Windows Update et Microsoft Store ne sont plus lances par la preparation. Effectuer ces operations manuellement depuis Parametres > Windows Update et Microsoft Store > Bibliotheque. Le rapport les indique comme manuels. Cela ne desactive pas les services ni les politiques Windows : Windows peut continuer son propre fonctionnement automatique.
+
+Pour HP Image Assistant, le suivi affiche le traitement SoftPaq en cours puis son resultat. Un paquet incompatible, un BIOS protege ou une installation en echec restent a verifier dans les rapports HP. Le script Atelier ne lance pas de redemarrage. Si une execution est interrompue ou depasse son delai, verifier les processus avant toute reprise : aucun flash n est tue et aucune deuxieme passe n est lancee automatiquement.
 
 Internet est necessaire pour WinGet, les mises a jour et les portails de garantie. L installation d une application peut etre lente selon sa taille et son editeur ; consulter le nom de l etape et le journal, sans relancer simultanement le meme installateur.
 

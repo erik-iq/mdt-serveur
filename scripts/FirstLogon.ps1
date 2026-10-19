@@ -26,12 +26,9 @@ function Start-Maintenance {
     # Maintenance runs in SYSTEM; the open desktop remains available throughout.
     . (Join-Path $DataPath 'Updates.ps1')
     Disable-AtelierAutoLogon
-    $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    $toolsAction=New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Launch-Tools.ps1') + '"')
-    $toolsPrincipal=New-ScheduledTaskPrincipal -UserId $userSid -LogonType Interactive -RunLevel Highest
-    $toolsTriggers=@((New-ScheduledTaskTrigger -AtLogOn -User $userSid),(New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 14)))
-    Register-ScheduledTask -TaskName 'AtelierPXE-Tools' -Action $toolsAction -Trigger $toolsTriggers -Principal $toolsPrincipal -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew) -Force | Out-Null
-    Set-Progress 'running' 75 'Logiciels et bureau prepares. Les mises a jour vont commencer...'
+    # Old clients used an interactive task to open HPIA after maintenance.
+    Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
+    Set-Progress 'running' 75 'Logiciels et bureau prepares. Pilotes constructeur et rapport en arriere-plan ; mises a jour Windows / Store manuelles.'
     Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
 }

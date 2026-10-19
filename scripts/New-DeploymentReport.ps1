@@ -87,6 +87,20 @@ foreach ($pass in @($maintenance.windows_history)) {
     }
 }
 if ($maintenance.store.status -eq 'requested') { $warnings.Add('Microsoft Store : actualisation demandee, achevement non verifie.') }
+foreach ($manualUpdate in @(@{name='Windows Update';value=$maintenance.windows},@{name='Microsoft Store';value=$maintenance.store})) {
+    if ($manualUpdate.value.status -eq 'manual') { $steps.Add(@{name=$manualUpdate.name;status='manual';message=[string]$manualUpdate.value.message;timestamp=[string]$maintenance.timestamp}) }
+}
+$hp=Read-ReportJson (Join-Path $DataPath 'hpia-result.json')
+if ($hp) {
+    $steps.Add(@{name='HP Image Assistant / SoftPaq';status=[string]$hp.status;message=([string]$hp.message+' / Code '+[string]$hp.exit_code);timestamp=[string]$hp.timestamp})
+    foreach ($package in @($hp.packages)) {
+        if (-not $package) { continue }
+        $packageStatus=if ($package.code -in @(0,3010)) { 'completed' } else { 'needs_attention' }
+        $steps.Add(@{name='SoftPaq HP';status=$packageStatus;message=([string]$package.softpaq_id+' '+[string]$package.name+' / Code '+[string]$package.code+' / '+[string]$package.description);timestamp=[string]$hp.timestamp})
+    }
+    if ($hp.status -notin @('completed','skipped')) { $warnings.Add(('Mises a jour HP a verifier : '+[string]$hp.message)) }
+    if ($hp.reboot_required) { $warnings.Add('HP Image Assistant demande un redemarrage manuel.') }
+}
 if (-not $maintenance -or $maintenance.status -notin @('completed','needs_attention')) { $warnings.Add('Maintenance Windows incomplete ou en attente. Ce rapport peut etre regenere apres la fin.') }
 if ($maintenance.windows.status -eq 'deferred') { $warnings.Add(('Windows Update non verifie : ' + $maintenance.windows.message)) }
 if ($maintenance.reboot_required) { $warnings.Add('Redemarrage Windows necessaire ; aucune interruption automatique de votre session.') }
@@ -109,11 +123,11 @@ if ($warranty) {
     } else { $warnings.Add('Garantie constructeur non verifiee.') }
 }
 if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en echec ; consulter software-logs et les etapes du rapport.') }
-$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
+$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 $timingDirectory=Join-Path $DataPath 'timings'
 if (Test-Path $timingDirectory) {
-    $stageNames=@{image='Application de Windows';software='Logiciels';manufacturer_tools='Preparation des outils constructeur';windows_update='Windows Update';inventory='Inventaire';personalization='Personnalisation'}
+    $stageNames=@{image='Application de Windows';software='Logiciels';manufacturer_tools='Preparation des outils constructeur';hp_updates='Mises a jour HP';windows_update='Windows Update';inventory='Inventaire';personalization='Personnalisation'}
     foreach ($timingFile in @(Get-ChildItem -LiteralPath $timingDirectory -Filter '*.json' -File | Select-Object -First 200)) {
         $timing=Read-ReportJson $timingFile.FullName
         if ($timing -and $timing.status -ne 'running' -and $stageNames.ContainsKey([string]$timing.stage)) {
@@ -129,7 +143,7 @@ $lines=@('ATELIER PXE - Rapport de deploiement',('Poste : ' + $env:COMPUTERNAME 
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ($entry.Key + ' : ' + $entry.Value) }
 $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.3.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'

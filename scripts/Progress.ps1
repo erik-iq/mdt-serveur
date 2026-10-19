@@ -48,11 +48,11 @@ $timer.Add_Tick({
         $elapsed=(Get-Date)-$started
         $note.Text='Session : ' + $elapsed.ToString('hh\:mm\:ss') + ' | Bureau disponible ; preparation en arriere-plan.'
         if ($state.detail -and $state.status -eq 'running') {
-            if ($state.detail.percent -lt 0) { $bar.Style='Marquee';$note.Text += ' Recherche limitee a 90 secondes.' }
+            if ($state.detail.percent -lt 0) { $bar.Style='Marquee';$note.Text += ' Traitement en cours ; duree variable selon le telechargement et les pilotes.' }
             else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.detail.percent));$note.Text += ' Avancement de cette etape : ' + $state.detail.percent + ' %.' }
         } else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.progress)) }
         if ($state.message -ne $script:lastMessage) { $details.AppendText((Get-Date -Format 'HH:mm:ss') + ' ' + $state.message + "`r`n");$script:lastMessage=$state.message }
-        if ($state.status -eq 'completed') { $title.Text='Preparation terminee';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. HP Image Assistant va s ouvrir sur les HP equipes.'; $timer.Stop() }
+        if ($state.status -eq 'completed') { $title.Text='Preparation terminee';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. Windows Update et Microsoft Store : a lancer manuellement.'; $timer.Stop() }
         elseif ($state.status -in @('failed','needs_attention')) { $title.Text='Preparation a verifier'; $timer.Stop() }
     } catch { $message.Text='En attente de la prochaine etape...' }
 })

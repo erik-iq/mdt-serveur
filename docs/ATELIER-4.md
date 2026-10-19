@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.2` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.3` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.2`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.3`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -22,9 +22,21 @@ La region et les formats sont proposes en `fr-CH`. Cela ne change pas la langue 
 
 Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom dans **Parc machines**. La fiche regroupe identite materielle, licence, historique pagine, PDF, XML/CSV, tests, garantie connue et observations datees du technicien. Les observations sont conservees sur le serveur, independamment des rapports. Les tests et la garantie apparaissent apres utilisation de leurs outils et regeneration du rapport ; aucun resultat n est invente.
 
-Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation des outils constructeur, Windows Update et la collecte XML/CSV. Ces mesures apparaissent dans l historique de la fiche et les nouveaux rapports PDF. Le temps de preparation de HP Image Assistant ne mesure pas l installation manuelle des pilotes dans son interface. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
+Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation de l outil constructeur, les mises a jour HP et la collecte XML/CSV. Ces mesures apparaissent dans la fiche et les nouveaux rapports PDF. Les anciennes mesures Windows Update restent visibles dans l historique. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
+
+## Preparation HP et mises a jour manuelles IQ-4.3
+
+Le ZIP officiel extrait de HP Image Assistant doit deja etre enregistre comme outil portable HP, avec `HPImageAssistant.exe` comme point d entree. Le serveur reutilise cette reference hors bundles ; le client telecharge l outil apres Windows, verifie empreinte et signature HP, puis l execute dans la tache SYSTEM. Sur un autre constructeur, cette etape est ignoree. Sur un HP sans outil, le resultat est A verifier, sans faux succes.
+
+La commande HPIA utilise `/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive`, avec dossiers dedies `/ReportFolder` et `/SoftpaqDownloadFolder`. L analyse recherche les recommandations du modele et de la version Windows, puis les SoftPaq correspondants sont selectionnes et traites. All couvre pilotes, logiciels, BIOS et firmwares recommandes compatibles. Cela ne force pas un paquet incompatible, ni un BIOS protege par mot de passe. Les scripts Atelier ne demandent aucun redemarrage et n ajoutent pas de parametre de redemarrage. Le comportement interne de chaque SoftPaq reste celui de HP ; valider le parcours BIOS sur le modele avant usage en serie. Certains firmwares terminent leur installation au redemarrage manuel du technicien ; le flash peut ensuite declencher ses propres cycles.
+
+La progression affiche le traitement HP et sa duree reelle, sans inventer de pourcentage par paquet. Les codes retour HPIA et les resultats de remediation des rapports JSON/XML sont conserves. Les rapports natifs sont dans `C:\IQ_\Rapports\HPImageAssistant`, les telechargements dans `C:\ProgramData\AtelierPXE\HP-SoftPaqs`, et le resultat resumant l execution dans `C:\ProgramData\AtelierPXE\hpia-result.json`. Le PDF et la fiche du site recoivent les etats et erreurs SoftPaq disponibles.
+
+Une passe HP au maximum est lancee automatiquement. Un resultat termine est reutilise pour les reprises de rapport. Une execution interrompue ou depassant 45 minutes est signalee A verifier : aucun installateur ou flash n est tue, et aucune seconde installation HP n est lancee automatiquement. Verifier les processus et le rapport HP avant une intervention manuelle ; garder le poste alimente pendant un flash. Le code 256 signifie aucune recommandation ; un modele non pris en charge ou des SoftPaq en echec ne sont pas declares installes.
+
+Reference des parametres et limitations par version : [guide HP Image Assistant](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf). Les tests de cette revision simulent HPIA sous Linux et ne valident pas les flashs BIOS ou les paquets HP reels.
 
 ## Ce qui change
 
@@ -32,9 +44,10 @@ La fiche utilise la MAC d enregistrement comme identite du poste. Un changement 
 - WinPE cree automatiquement la demande du poste. Le choix de Windows Pro/Famille et la confirmation du disque restent sur le poste.
 - Le premier demarrage enregistre une tache de preparation puis rend la main a Windows. Les logiciels WinGet et les diagnostics tournent apres l ouverture du bureau. L animation Windows de premiere connexion est desactivee ; les operations natives obligatoires du premier demarrage doivent tout de meme se terminer.
 - La fenetre de suivi est reductible. Aucune console PowerShell visible n est necessaire.
-- Windows Update effectue une seule passe. La recherche asynchrone est limitee a 90 secondes : aucune mise a jour trouvee est annonce seulement si la recherche a reussi. Si le delai est depasse, une annulation de recherche est demandee et la verification est reportee avec un avertissement. Les telechargements et installations de mises a jour effectivement trouvees peuvent durer davantage ; le bureau reste disponible. Les politiques Windows Update/WSUS sont conservees.
-- Aucune relance Windows Update dans 15 minutes, aucune succession de cinq passes, aucun redemarrage automatique impose pendant le travail. Un redemarrage requis apparait dans le suivi et le rapport. Une relance de la tache une fois terminee ne reprend que la transmission du rapport.
-- Un seul inventaire technique final est collecte apres les logiciels et les mises a jour. Les reprises de transmission reutilisent les fichiers existants.
+- Windows Update et Microsoft Store ne sont plus recherches ni actualises par la preparation, meme si un ancien profil contient encore leurs options actives. Le rapport indique Manuel, jamais A jour sans verification. Les services et politiques natifs Windows restent en place ; le technicien lance ses mises a jour depuis Parametres et la bibliotheque Store.
+- HP Image Assistant analyse le HP, selectionne toutes les recommandations compatibles et installe les SoftPaq en arriere-plan. Le bureau reste disponible. L ancienne ouverture automatique de sa fenetre est retiree ; le raccourci manuel est conserve.
+- Aucun redemarrage demande par Atelier. Les codes de redemarrage HPIA et SoftPaq sont remontes dans le suivi et le rapport. Une fois les installations terminees, le technicien redemarre manuellement. Les relances de la tache finale servent uniquement a transmettre le rapport.
+- Un seul inventaire technique final est collecte apres les logiciels et les mises a jour HP. Les reprises de transmission reutilisent les fichiers existants.
 - Les sources des scripts et les textes de l interface sont en ASCII sans accents. Les donnees collectees restent en UTF-8 : les vrais noms du materiel et les valeurs d inventaire ne sont pas translitteres.
 
 ## Verification de l image et vitesse
@@ -98,7 +111,7 @@ Pour voir la selection avant un nettoyage manuel, fournir le vrai dossier d inst
 3. Retirer le demarrage PXE prioritaire apres application : demarrer sur le disque Windows.
 4. Verifier l arrivee au bureau et la progression reductible pendant WinGet.
 5. Verifier `C:\IQ_\Rapports\Rapport-Deploiement.pdf`, les categories IQ et les XML/CSV sur .250.
-6. Si Windows Update est reporte, consulter l avertissement et lancer les mises a jour depuis Parametres plus tard. Le poste n est pas declare a jour sans recherche reussie.
+6. Verifier le resultat HP Image Assistant, les SoftPaq et un eventuel redemarrage manuel. Windows Update et Microsoft Store doivent etre marques Manuel dans le rapport.
 
 Journaux Windows : `C:\ProgramData\AtelierPXE\first-logon.log`, `maintenance.log`, `progress.json`, `reporting.log`, `software-logs`. Journaux du serveur : `<data_dir>\logs\console.log`. Le demarrage rapide Windows reste desactive a chaque deploiement ; le Fast Boot du BIOS est un reglage distinct.
 

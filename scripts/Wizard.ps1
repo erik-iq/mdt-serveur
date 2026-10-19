@@ -224,7 +224,7 @@ function Show-Page {
             Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'Les logiciels sont prepares puis installes automatiquement dans Windows. La progression et les mises a jour seront affichees dans Windows. Les outils portables ne lancent aucune mise a jour du BIOS.' | Out-Null
+            Add-Text 'Logiciels et SoftPaq HP compatibles, BIOS compris, sont prepares en arriere-plan dans Windows. Windows Update et Microsoft Store restent manuels. Vous lancez le redemarrage.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
@@ -313,7 +313,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.2'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.3'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
