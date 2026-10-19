@@ -110,7 +110,6 @@ try {
     $hpWinGetTool=$null
     $clientPackages=@()
     if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
-    if (Test-AtelierManufacturer 'hp' $manufacturer) { $clientPackages+=@('hpia') }
     if ($clientPackages.Count) {
         $softwareTiming=Start-AtelierTiming $DataPath 'software'
         foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages $clientPackages -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {

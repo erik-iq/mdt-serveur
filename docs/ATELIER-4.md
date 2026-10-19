@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.4` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.5` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.4`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.5`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -26,11 +26,32 @@ Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGe
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
 
-## Installation HPIA par WinGet et clavier fixe IQ-4.4
+## Bundles et choix des logiciels IQ-4.5
+
+Dans Logiciels & bureau, la liste Bundle logiciels propose :
+
+| Bundle | Logiciels coches |
+| --- | --- |
+| Bundle HP | VLC, Adobe Reader, Google Chrome, AnyDesk, HP Image Assistant |
+| Bundle Lenovo | VLC, Adobe Reader, Google Chrome, AnyDesk, Lenovo System Update |
+
+Choisir un bundle remplit les cases et decoche l autre outil constructeur. Vous pouvez ensuite cocher ou decocher chaque logiciel : le choix devient Personnalise. Les memes raccourcis existent dans la creation d un profil sur le site. Ils n imposent pas un telechargement depuis un ancien bundle serveur ; seule la liste finale des cases cochees est transmise au poste.
+
+Sans bundle, les quatre logiciels usuels sont coches par defaut dans un nouveau profil. Les deux outils constructeur restent decoches, sauf selection deja enregistree dans le profil choisi. La detection HP ne rajoute plus HPIA automatiquement. Toutes les cases decochees signifie aucune installation WinGet ; la preparation termine quand meme les diagnostics et le rapport.
+
+HP Image Assistant coche : installation du paquet `HP.ImageAssistant`, verification de l executable, puis traitement des SoftPaq compatibles sur un HP. HPIA decoche : aucune installation HPIA ni aucun traitement SoftPaq automatique, meme si un outil ou un ancien resultat est deja present.
+
+Lenovo System Update coche : installation silencieuse du paquet `Lenovo.SystemUpdate` apres Windows, architecture x86 et scope machine d apres son manifeste officiel. Decoche : aucune installation Lenovo lancee. Cette revision installe l outil Lenovo ; elle n ajoute pas de commande automatique d installation des pilotes Lenovo. Vous pouvez ouvrir System Update depuis Windows. Le redemarrage reste manuel et Windows Update / Microsoft Store restent manuels.
+
+Reference Lenovo verifiee : [manifeste Lenovo.SystemUpdate](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/l/Lenovo/SystemUpdate/5.08.04.85/Lenovo.SystemUpdate.installer.yaml). Les prochains postes installent la version proposee par la source WinGet, sans figer cette version.
+
+Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.5.
+
+## Installation HPIA par WinGet et clavier fixe
 
 La revision IQ-4.3 dependait d un ZIP HPIA deja enregistre sur le serveur. En son absence, la preparation signalait A verifier mais ne pouvait pas installer HPIA. L absence de fenetre HPIA etait normale en mode silencieux ; elle ne prouvait pas a elle seule une absence d execution.
 
-Depuis IQ-4.4, un HP ajoute automatiquement `HP.ImageAssistant` aux installations WinGet du premier demarrage, meme si aucun des quatre logiciels usuels n est coche. Aucun ZIP ni bundle HP du serveur n est necessaire. Le paquet officiel extrait HPIA ; il ne lance pas lui-meme les mises a jour des pilotes. Atelier verifie l executable et sa signature HP, enregistre son empreinte puis lance l analyse et l installation des SoftPaq dans la finalisation SYSTEM. Sur un autre constructeur, HPIA n est pas installe.
+Depuis IQ-4.5, HPIA est ajoute aux installations WinGet uniquement si sa case est cochee. La selection de bundle HP coche cette case, mais vous pouvez la decocher avant installation. Aucun ZIP ni bundle HP du serveur n est necessaire. Le paquet officiel extrait HPIA ; il ne lance pas lui-meme les mises a jour des pilotes. Atelier verifie l executable et sa signature HP, enregistre son empreinte puis lance l analyse et l installation des SoftPaq dans la finalisation SYSTEM. Le technicien choisit le logiciel constructeur adapte. Le traitement SoftPaq de HPIA reste reserve aux HP.
 
 Le dossier demande a WinGet est `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`, protege en ecriture pour Administrateurs/SYSTEM. Le manifeste declare une architecture x64 et des arguments d extraction, sans scope : Atelier utilise `--location` et ne force pas `--scope machine` pour ce seul paquet. Si WinGet retourne un succes mais que l executable est absent ou sa signature invalide, le rapport indique l echec. La reprise d une installation deja verifiee controle de nouveau le fichier ; un executable disparu declenche sa reinstallation.
 

@@ -25,8 +25,15 @@ TIMEZONES = [
 ]
 REGIONS = [{'id': x, 'name': x} for x in ['fr-FR', 'fr-BE', 'fr-CH', 'en-US', 'en-GB', 'de-DE']]
 SOFTWARE_PACKAGES = [{'id': 'vlc', 'name': 'VLC'}, {'id': 'reader', 'name': 'Adobe Reader'},
-                     {'id': 'chrome', 'name': 'Google Chrome'}, {'id': 'anydesk', 'name': 'AnyDesk'}]
+                     {'id': 'chrome', 'name': 'Google Chrome'}, {'id': 'anydesk', 'name': 'AnyDesk'},
+                     {'id': 'hpia', 'name': 'HP Image Assistant'},
+                     {'id': 'lenovo_system_update', 'name': 'Lenovo System Update'}]
+SOFTWARE_PRESETS = [
+    {'id':'hp','name':'Bundle HP','packages':['vlc','reader','chrome','anydesk','hpia']},
+    {'id':'lenovo','name':'Bundle Lenovo','packages':['vlc','reader','chrome','anydesk','lenovo_system_update']},
+]
 OPTIONS = {'software_packages': SOFTWARE_PACKAGES, 'keyboards': KEYBOARDS, 'timezones': TIMEZONES, 'regions': REGIONS,
+           'software_presets': SOFTWARE_PRESETS,
            'themes': [{'id': 'unchanged', 'name': 'Conserver le theme Windows'},
                       {'id': 'light', 'name': 'Clair'}, {'id': 'dark', 'name': 'Sombre'}]}
 
@@ -50,7 +57,7 @@ class Personalization(BaseModel):
     bundle_ids: list[str] = Field(default_factory=list, max_length=20)
     central_inventory: bool = False
     software_mode: Literal['catalogue', 'winget'] = 'catalogue'
-    winget_packages: list[Literal['vlc', 'reader', 'chrome', 'anydesk']] = Field(default_factory=lambda: ['vlc', 'reader', 'chrome', 'anydesk'], max_length=4)
+    winget_packages: list[Literal['vlc', 'reader', 'chrome', 'anydesk', 'hpia', 'lenovo_system_update']] = Field(default_factory=lambda: ['vlc', 'reader', 'chrome', 'anydesk'], max_length=6)
     unattended: bool = False
     windows_update: bool = False
     store_update: bool = False

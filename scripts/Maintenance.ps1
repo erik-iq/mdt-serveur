@@ -52,11 +52,14 @@ try {
     # These legacy settings are deliberately ignored, even in an old payload.
     $state.windows=[pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update a lancer manuellement ; aucune recherche Atelier.'}
     $state.store=[pscustomobject]@{status='manual';completion_verified=$false;message='Microsoft Store a actualiser manuellement ; aucune recherche Atelier.'}
-    Save-Maintenance 'running' 80 'Mises a jour Windows et Microsoft Store manuelles. Preparation HP en arriere-plan...'
-    $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
-        param($Message)
-        $script:updateDetail=@{percent=-1}
-        Save-Maintenance 'running' 85 $Message
+    Save-Maintenance 'running' 80 'Logiciels selectionnes prepares. Windows Update et Microsoft Store restent manuels.'
+    $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coche : installation et SoftPaq non demandes.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
+    if ('hpia' -in @($payload.settings.winget_packages)) {
+        $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
+            param($Message)
+            $script:updateDetail=@{percent=-1}
+            Save-Maintenance 'running' 85 $Message
+        }
     }
     $script:updateDetail=$null
     $state | Add-Member NoteProperty hpia $hp -Force

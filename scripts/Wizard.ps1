@@ -21,6 +21,7 @@ $script:settings = $null
 $script:selectedProfile = $null
 $script:targetName = ''
 $script:controls = @{}
+$script:applyingSoftwarePreset=$false
 $script:operatorKeyboard = '100c:0000100c'
 $script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
@@ -44,7 +45,7 @@ $muted=Get-AtelierColor 'muted'
 
 function New-Text([string]$Text, [int]$Size = 10, [bool]$Bold = $false) {
     $label = New-Object Windows.Forms.Label
-    $label.Text = $Text; $label.AutoSize = $true; $label.BackColor=[Drawing.Color]::Transparent
+    $label.Text = $Text; $label.UseMnemonic=$false; $label.AutoSize = $true; $label.BackColor=[Drawing.Color]::Transparent
     $label.Font = New-AtelierFont -Size $Size -Bold $Bold
     $label.ForeColor = $ink; $label.Margin = New-Object Windows.Forms.Padding(0,4,0,5)
     return $label
@@ -196,8 +197,26 @@ function Show-Page {
         3 {
             if ($script:settings.software_mode -eq 'winget') {
                 Add-Text 'Installation silencieuse apres le demarrage Windows' 12 $true | Out-Null
+                $presetItems=@([pscustomobject]@{id='custom';name='Personnalise - choisir les cases'})+@($script:session.catalog.options.software_presets)
+                $presetChoice=Add-Choice 'software_preset' 'Bundle logiciels' $presetItems 'custom'
                 foreach ($package in @($script:session.catalog.options.software_packages)) { Add-Check ('winget-' + $package.id) $package.name ($package.id -in @($script:settings.winget_packages)) }
-                if ($script:manufacturer -match '(?i)^(HP|Hewlett[ -]Packard)(\b|\s)') { Add-Text 'HP Image Assistant : installe automatiquement avec WinGet, puis analyse et installation des SoftPaq HP.' | Out-Null }
+                $presetChoice.Add_SelectedIndexChanged({
+                    $id=Choice-Value 'software_preset'
+                    $preset=$script:session.catalog.options.software_presets | Where-Object { $_.id -eq $id } | Select-Object -First 1
+                    if (-not $preset) { return }
+                    $script:applyingSoftwarePreset=$true
+                    try {
+                        foreach ($package in @($script:session.catalog.options.software_packages)) {
+                            $script:controls[('winget-'+$package.id)].Checked=$package.id -in @($preset.packages)
+                        }
+                    } finally { $script:applyingSoftwarePreset=$false }
+                })
+                foreach ($package in @($script:session.catalog.options.software_packages)) {
+                    $script:controls[('winget-'+$package.id)].Add_CheckedChanged({
+                        if (-not $script:applyingSoftwarePreset) { $script:controls.software_preset.SelectedIndex=0 }
+                    })
+                }
+                Add-Text 'Coche = installation WinGet dans Windows. Decoche = aucune installation. Le bundle remplit les cases, puis vous pouvez les modifier.' | Out-Null
             } else {
             Add-Text 'Bundles' 12 $true | Out-Null
             foreach ($bundle in @($script:session.catalog.bundles)) { Add-Check ('bundle-' + $bundle.id) $bundle.name ($bundle.id -in @($script:settings.bundle_ids)) }
@@ -212,7 +231,7 @@ function Show-Page {
             Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'Logiciels et SoftPaq HP compatibles, BIOS compris, sont prepares en arriere-plan dans Windows. Windows Update et Microsoft Store restent manuels. Vous lancez le redemarrage.' | Out-Null
+            Add-Text 'HP Image Assistant coche : analyse et SoftPaq HP compatibles en arriere-plan. Lenovo System Update coche : installation de l outil. Windows Update et Microsoft Store restent manuels. Redemarrage manuel.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
@@ -301,7 +320,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.4'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.5'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea

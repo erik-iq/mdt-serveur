@@ -12,9 +12,9 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell required')
 
 
-def run_worker(tmp_path,hp_status='completed',package_restart=False,hp_restart=False):
+def run_worker(tmp_path,hp_status='completed',package_restart=False,hp_restart=False,packages=None):
     shutil.copy(ROOT/'scripts'/'Unattend.ps1',tmp_path/'Unattend.ps1')
-    (tmp_path/'personalization.json').write_text(json.dumps({'settings':{'windows_update':True,'store_update':True}}))
+    (tmp_path/'personalization.json').write_text(json.dumps({'settings':{'windows_update':True,'store_update':True,'winget_packages':['hpia'] if packages is None else packages}}))
     (tmp_path/'result.json').write_text(json.dumps({'status':'completed','restart_needed':package_restart}))
     (tmp_path/'Updates.ps1').write_text(r'''
 function Invoke-AtelierWindowsUpdates { Set-Content (Join-Path $DataPath 'forbidden-scan') 'Windows';throw 'Forbidden Windows scan' }
@@ -86,3 +86,12 @@ function Complete-AtelierReport {
     assert state['status']=='completed' and state['attempts']==1
     assert (tmp_path/'report-retried').exists()
     assert (tmp_path/'hp-calls').read_text().splitlines()==['run']
+
+
+@pytest.mark.parametrize('packages',[[],['vlc'],['lenovo_system_update']])
+def test_unchecked_hpia_never_runs_softpaqs_even_with_an_old_result(tmp_path,packages):
+    (tmp_path/'hpia-result.json').write_text('{"status":"completed","message":"old HP run"}')
+    state=run_worker(tmp_path,packages=packages)
+    assert state['status']=='completed'
+    assert state['hpia']['status']=='skipped' and 'non coche' in state['hpia']['message']
+    assert not (tmp_path/'hp-calls').exists()

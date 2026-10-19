@@ -51,10 +51,18 @@ def run():
                 page.locator('[data-page="profiles"]').click();page.get_by_role('button',name='+ Nouveau profil',exact=True).click()
                 page.get_by_label('Nom du profil').fill('Windows atelier 3')
                 page.get_by_label('Image Windows',exact=True).select_option(asset['id'])
+                expect(page.get_by_label('HP Image Assistant',exact=True)).not_to_be_checked()
+                expect(page.get_by_label('Lenovo System Update',exact=True)).not_to_be_checked()
+                page.get_by_role('button',name='Bundle HP',exact=True).click()
+                expect(page.get_by_label('HP Image Assistant',exact=True)).to_be_checked()
+                expect(page.get_by_label('Lenovo System Update',exact=True)).not_to_be_checked()
+                page.get_by_role('button',name='Bundle Lenovo',exact=True).click()
+                expect(page.get_by_label('HP Image Assistant',exact=True)).not_to_be_checked()
+                expect(page.get_by_label('Lenovo System Update',exact=True)).to_be_checked()
                 page.get_by_label('Adobe Reader',exact=True).uncheck();page.get_by_label('AnyDesk',exact=True).uncheck()
                 page.locator('#submit-resource').click();page.wait_for_selector('#form-dialog',state='hidden')
                 state=api('/state');profile=next(x for x in state['profiles'] if x['name']=='Windows atelier 3')
-                assert profile['settings']['winget_packages']==['vlc','chrome']
+                assert profile['settings']['winget_packages']==['vlc','chrome','lenovo_system_update']
                 session=api('/boot/discover',{'macs':['00:11:22:33:44:55'],'release':'ATELIER-4'});identifier=session['id'];token=session['agent_token']
                 api('/agent/'+identifier+'/configure',{'profile_id':profile['id'],'hostname':'PC-BROWSER3','disk_number':1,'settings':profile['settings']},token)
                 page.locator('[data-page="overview"]').click();page.evaluate('refresh()')

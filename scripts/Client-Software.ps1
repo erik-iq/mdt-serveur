@@ -48,6 +48,7 @@ function Install-AtelierClientSoftware {
     $sources=@(Get-Content (Join-Path $DataPath 'software-sources.json') -Encoding UTF8 -Raw | ConvertFrom-Json)
     # Client-only HP package; independent of the old server/bundle catalogue.
     $sources+=@([pscustomobject]@{key='hpia';name='HP Image Assistant';winget_id='HP.ImageAssistant';architecture='x64'})
+    $sources+=@([pscustomobject]@{key='lenovo_system_update';name='Lenovo System Update';winget_id='Lenovo.SystemUpdate';architecture='x86'})
     $results=New-Object 'Collections.Generic.List[object]'
     $statePath=Join-Path $DataPath 'winget-client-state.json'
     $saved=@{}

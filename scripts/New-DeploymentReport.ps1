@@ -90,7 +90,7 @@ if ($maintenance.store.status -eq 'requested') { $warnings.Add('Microsoft Store 
 foreach ($manualUpdate in @(@{name='Windows Update';value=$maintenance.windows},@{name='Microsoft Store';value=$maintenance.store})) {
     if ($manualUpdate.value.status -eq 'manual') { $steps.Add(@{name=$manualUpdate.name;status='manual';message=[string]$manualUpdate.value.message;timestamp=[string]$maintenance.timestamp}) }
 }
-$hp=Read-ReportJson (Join-Path $DataPath 'hpia-result.json')
+$hp=if ($maintenance.hpia) { $maintenance.hpia } else { Read-ReportJson (Join-Path $DataPath 'hpia-result.json') }
 if ($hp) {
     $steps.Add(@{name='HP Image Assistant / SoftPaq';status=[string]$hp.status;message=([string]$hp.message+' / Code '+[string]$hp.exit_code);timestamp=[string]$hp.timestamp})
     foreach ($package in @($hp.packages)) {
@@ -143,7 +143,7 @@ $lines=@('ATELIER PXE - Rapport de deploiement',('Poste : ' + $env:COMPUTERNAME 
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ($entry.Key + ' : ' + $entry.Value) }
 $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.4.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.5.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'
