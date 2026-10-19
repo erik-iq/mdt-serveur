@@ -100,7 +100,9 @@ function Get-AtelierInstalledHpia {
 function Install-AtelierClientSoftware {
     param([string]$DataPath,[string[]]$Packages,[scriptblock]$OnProgress)
     if (-not $Packages.Count) { return }
-    $sources=@(Get-Content (Join-Path $DataPath 'software-sources.json') -Encoding UTF8 -Raw | ConvertFrom-Json)
+    # Assign the root JSON array directly. In Windows PowerShell 5.1 @(...)
+    # boxes it as one item; member enumeration then mixes all package IDs.
+    $sources=Get-Content (Join-Path $DataPath 'software-sources.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     # Client-only HP package; independent of the old server/bundle catalogue.
     $sources+=@([pscustomobject]@{key='hpia';name='HP Image Assistant';winget_id='HP.ImageAssistant';architecture='x64'})
     $sources+=@([pscustomobject]@{key='lenovo_system_update';name='Lenovo System Update';winget_id='Lenovo.SystemUpdate';architecture='x86'})

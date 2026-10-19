@@ -38,7 +38,10 @@ try {
     if (-not $entry -or $entry.status -ne 'completed' -or -not $entry.tool) { throw ('Installation HPIA non verifiee : '+[string]$entry.reason) }
     $toolsPathJson=Join-Path $DataPath 'ready-tools.json'
     $tools=@()
-    if (Test-Path $toolsPathJson) { $tools=@(Get-Content $toolsPathJson -Encoding UTF8 -Raw | ConvertFrom-Json | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ine 'HPImageAssistant.exe' }) }
+    if (Test-Path $toolsPathJson) {
+        $registeredTools=Get-Content $toolsPathJson -Encoding UTF8 -Raw | ConvertFrom-Json
+        $tools=@($registeredTools | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ine 'HPImageAssistant.exe' })
+    }
     $tools+=@($entry.tool)
     Write-AtelierVerifiedUtf8File -Path $toolsPathJson -Content (ConvertTo-Json -InputObject $tools -Depth 6) -NoBackup | Out-Null
     $apps=@($customization.applications | Where-Object { $_ -and $_.id -ne 'hpia' -and $_.name -notmatch '(?i)^HP\s*Image\s*Assistant$' })

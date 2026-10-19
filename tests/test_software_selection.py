@@ -41,8 +41,9 @@ def test_api_keeps_exact_software_selection_in_profile_and_windows_plan(system,p
 
 
 @pytest.mark.skipif(not PWSH or os.name=='nt',reason='PowerShell and Linux executable fixture required')
-@pytest.mark.parametrize('packages',[[],['vlc'],COMMON+['hpia'],COMMON+['lenovo_system_update']])
-def test_client_installs_only_checked_packages_with_vendor_manifest_architecture(tmp_path,packages):
+@pytest.mark.parametrize('packages',[[],['vlc'],COMMON,COMMON+['hpia'],COMMON+['lenovo_system_update'],COMMON+['hpia','lenovo_system_update']])
+@pytest.mark.parametrize('powershell51',[False,True],ids=['modern-json','powershell51-json'])
+def test_client_installs_only_checked_packages_with_vendor_manifest_architecture(tmp_path,packages,powershell51):
     shutil.copy(ROOT/'scripts'/'software-sources.json',tmp_path/'software-sources.json')
     exe=tmp_path/'winget.exe'
     exe.write_text('''#!/usr/bin/env python3
@@ -71,17 +72,27 @@ $env:ProgramFiles='PROGRAM'
 function Get-AtelierClientWinGet {return 'EXE'}
 function Get-AuthenticodeSignature {param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=HP Inc.'}}}
 function icacls.exe {$global:LASTEXITCODE=0}
-function Get-ItemProperty {param($Path);if(Test-Path 'EXE.registry.json'){Get-Content 'EXE.registry.json' -Raw|ConvertFrom-Json}}
+function Get-ItemProperty {param($Path);if(Test-Path 'EXE.registry.json'){$records=Get-Content 'EXE.registry.json' -Raw|ConvertFrom-Json;foreach($record in $records){$record}}}
 $packages=ConvertFrom-Json 'PACKAGES'
 $results=@(Install-AtelierClientSoftware -DataPath 'DATA' -Packages @($packages) -OnProgress {param($Percent,$Message)})
 ConvertTo-Json -InputObject $results -Depth 6|Set-Content 'RESULT' -Encoding UTF8
 """.replace('PROGRAM',str(tmp_path/'Program Files')).replace('CLIENT',str(ROOT/'scripts'/'Client-Software.ps1'))
     .replace('FILES',str(ROOT/'scripts'/'Unattend.ps1')).replace('EXE',str(exe)).replace('PACKAGES',json.dumps(packages))
     .replace('DATA',str(tmp_path)).replace('RESULT',str(tmp_path/'result.json')),encoding='utf-8-sig')
+    if powershell51:
+        wrapper.write_text(r"""# Match Windows PowerShell 5.1's non-enumerated root JSON array.
+function ConvertFrom-Json {
+ [CmdletBinding()]param([Parameter(ValueFromPipeline=$true)][string]$InputObject)
+ process { Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $InputObject -NoEnumerate }
+}
+"""+wrapper.read_text(encoding='utf-8-sig'),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert run.returncode==0,run.stderr
     result=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))
     assert [r['id'] for r in result]==packages
+    names={p['key']:p['name'] for p in json.loads((ROOT/'scripts'/'software-sources.json').read_text())}
+    names.update(hpia='HP Image Assistant',lenovo_system_update='Lenovo System Update')
+    assert [r['name'] for r in result]==[names[p] for p in packages]
     assert all(r['status']=='completed' for r in result)
     calls=Path(str(exe)+'.calls')
     args=[json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []

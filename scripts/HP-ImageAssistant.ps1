@@ -68,7 +68,8 @@ function Invoke-AtelierHpia {
                 $result.status='skipped';$result.message='Autre constructeur : HP Image Assistant non applicable.'
             } else {
                 $readyPath=Join-Path $DataPath 'ready-tools.json'
-                $tools=if (Test-Path $readyPath) { @(Get-Content $readyPath -Encoding UTF8 -Raw | ConvertFrom-Json) } else { @() }
+                $tools=@()
+                if (Test-Path $readyPath) { $tools=Get-Content $readyPath -Encoding UTF8 -Raw | ConvertFrom-Json }
                 $tool=@($tools | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ieq 'HPImageAssistant.exe' } | Select-Object -First 1)
                 if (-not $tool.Count) { throw 'HP Image Assistant non installe ou non verifie par WinGet. Consulter C:\ProgramData\AtelierPXE\software-logs\hpia.log et result.json.' }
                 $tool=$tool[0]

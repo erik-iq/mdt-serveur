@@ -126,7 +126,8 @@ try {
     $checkpointPath=Join-Path $DataPath 'packages-state.json'
     $checkpoints=@{}
     if (Test-Path $checkpointPath) {
-        foreach ($entry in @(Get-Content $checkpointPath -Encoding UTF8 -Raw | ConvertFrom-Json)) { $checkpoints[$entry.id]=$entry }
+        $checkpointEntries=Get-Content $checkpointPath -Encoding UTF8 -Raw | ConvertFrom-Json
+        foreach ($entry in $checkpointEntries) { $checkpoints[$entry.id]=$entry }
     }
     $toolsTiming=Start-AtelierTiming $DataPath 'manufacturer_tools'
     $applicationsToPrepare=@($payload.applications | Where-Object { -not ($_.manufacturer -eq 'hp' -and ([IO.Path]::GetFileName([string]$_.entry_point) -ieq 'HPImageAssistant.exe')) })

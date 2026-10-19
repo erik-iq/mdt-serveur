@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.6` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.7` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.6`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.7`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -26,6 +26,18 @@ Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGe
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
 
+## Correction du catalogue Windows PowerShell 5.1 IQ-4.7
+
+Les fichiers du deploiement en echec ont confirme quatre erreurs `Argument WinGet non autorise.` avec le meme nom melange `VLC Adobe Acrobat Reader Google Chrome AnyDesk`. WinGet n avait pas lance les installateurs. Ce diagnostic est distinct des problemes de verification ou de reprise traites en IQ-4.6 ; cette revision ne corrigeait pas le chargement du catalogue.
+
+Windows PowerShell 5.1 transmet un tableau JSON racine comme un seul objet au pipeline. Entourer directement `Get-Content ... | ConvertFrom-Json` par `@(...)` ajoutait un niveau de tableau. Le filtre voyait alors les quatre logiciels comme une seule entree ; les noms et identifiants WinGet etaient melanges, puis refuses par le controle des arguments.
+
+Le catalogue est maintenant affecte directement a une variable avant ajout des deux outils constructeur et filtrage par logiciel. Chaque invocation WinGet recoit un seul identifiant. Les tableaux des outils HP et des anciens checkpoints utilisent la meme correction. La validation des arguments est conservee. Des tests reproduisent la non-enumeration des tableaux racines de PowerShell 5.1, l erreur precedente exacte, puis verifient les logiciels usuels, les bundles HP / Lenovo, les deux outils coches ensemble et l absence de selection. Les installateurs et le materiel sont simules ici ; le rendu et les installations reelles restent a valider sous Windows.
+
+Appliquer cette revision sur DEPLOY-01 avec `scripts/Upgrade-Atelier4.ps1`, qui reconstruit et importe WinPE. Utiliser ensuite l image nouvellement datee ; la fenetre annonce IQ-4.7. Aucune commande de reparation sur le PC deploye n est requise pour les prochains deploiements. Un PC deja termine avec les anciens scripts ne recoit pas retroactivement ce correctif.
+
+Sur une VM, choisir le bundle HP permet de tester l installation de HP Image Assistant via WinGet. L analyse des SoftPaq reste soumise au materiel reel reconnu par HPIA. Changer le fabricant affiche par l hyperviseur ne cree pas un modele HP pris en charge et ne transforme pas les pilotes ou le firmware virtuels en materiel HP. Aucun contournement des controles de modele et aucun flash de BIOS HP sur une VM ne sont ajoutes.
+
 ## Verification des logiciels et reprise IQ-4.6
 
 Un ancien resultat termine pouvait court-circuiter toutes les installations du premier demarrage. Un checkpoint WinGet termine etait aussi reutilise sans verifier la presence des logiciels habituels. Le code de sortie zero du lanceur ne garantissait pas leur presence. Ces chemins sont corriges ; les journaux du poste restent necessaires pour confirmer la cause exacte d un incident.
@@ -38,7 +50,7 @@ La preparation teste que WinGet execute vraiment `--version`, puis essaie l enre
 
 Pour un PC deja deploye, extraire la nouvelle archive puis executer `scripts/Repair-Software.ps1` en PowerShell administrateur sur ce PC. La reparation conserve la selection enregistree, sauvegarde les anciens fichiers dans `repair-backups/software-<identifiant>`, controle chaque logiciel et installe les manquants. Elle refuse une preparation ou un installateur encore actif. Elle met a jour le rapport et l inventaire ; les echecs restent visibles. Le resultat HP durable est conserve pour eviter de relancer automatiquement un flash deja traite. Aucun redemarrage n est demande par Atelier et aucune recherche Windows Update / Store n est ajoutee.
 
-Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.6. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
+Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.7. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
 
 ## Bundles et choix des logiciels IQ-4.5
 
@@ -59,7 +71,7 @@ Lenovo System Update coche : installation silencieuse du paquet `Lenovo.SystemUp
 
 Reference Lenovo verifiee : [manifeste Lenovo.SystemUpdate](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/l/Lenovo/SystemUpdate/5.08.04.85/Lenovo.SystemUpdate.installer.yaml). Les prochains postes installent la version proposee par la source WinGet, sans figer cette version.
 
-Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.6.
+Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.7.
 
 ## Installation HPIA par WinGet et clavier fixe
 
