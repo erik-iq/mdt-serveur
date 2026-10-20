@@ -275,7 +275,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         saved = json.loads(result.pop('settings_json'))
         result['settings'] = Personalization.model_validate(saved or defaults_for_locale(result['locale'])).model_dump()
         if internal:
-            result['settings'].update(user_locale='fr-CH', registered_owner='', organization='')
+            result['settings'].update(user_locale='fr-CH', keyboard='100c:0000100c', timezone='W. Europe Standard Time', registered_owner='', organization='')
             if not result['settings']['wallpaper_asset_id']:
                 for wallpaper in con.execute("SELECT * FROM assets WHERE kind='wallpaper' ORDER BY created_at DESC"):
                     if re.sub(r'[ _-]','',wallpaper['filename']).lower() in {'fondatelier.png','fonatelier.png'}:

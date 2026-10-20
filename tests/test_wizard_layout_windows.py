@@ -33,6 +33,8 @@ foreach ($node in $ast.EndBlock.Statements) {
  if ($node.Extent.Text.StartsWith('$script:back.Add_Click')) { break }
  if ($building) { Invoke-Expression $node.Extent.Text }
 }
+$closing=$ast.EndBlock.Statements | Where-Object { $_.Extent.Text.StartsWith('$form.Add_FormClosing') }
+Invoke-Expression $closing.Extent.Text
 try {
  $maximized=$form.WindowState -eq 'Maximized'
  $form.Show();$form.WindowState='Normal'
@@ -51,6 +53,12 @@ try {
  $headerFits=$script:description.Bottom -le $header.ClientSize.Height-$header.Padding.Bottom
  $rowsSeparate=$header.Bottom -le $script:body.Top
  $overflow=@($script:body.Controls | Where-Object { $_.Right -gt $script:body.ClientSize.Width }).Count
+ $script:running=$true
+ $raise=$form.GetType().GetMethod('OnFormClosing',[Reflection.BindingFlags]'Instance,NonPublic')
+ $userClose=New-Object Windows.Forms.FormClosingEventArgs([Windows.Forms.CloseReason]::UserClosing,$false)
+ $shutdown=New-Object Windows.Forms.FormClosingEventArgs([Windows.Forms.CloseReason]::WindowsShutDown,$false)
+ $raise.Invoke($form,@($userClose));$raise.Invoke($form,@($shutdown))
+ if (-not $userClose.Cancel -or $shutdown.Cancel) { throw 'Window close guard vetoed reboot or allowed an accidental close' }
  @{maximized=$maximized;header_fits=$headerFits;separate=$rowsSeparate;overflow=$overflow;progress=$script:progress.Value;same_log=($script:logs -eq $logControl);text=$script:logs.Text;logo_width=$headerLogo.Width;button_visible=($buttons.Bottom -le $main.ClientSize.Height)} | ConvertTo-Json -Compress
 } finally { $form.Dispose() }
 '''.replace('PROJECT',str(ROOT).replace("'","''")).replace('WIDTH',str(width)).replace('HEIGHT',str(height)))

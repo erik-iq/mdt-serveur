@@ -3,7 +3,7 @@ function New-AtelierUnattend {
     param([Parameter(Mandatory)][psobject]$Plan)
     $settings = $Plan.settings
     if (-not $settings) {
-        $settings = [pscustomobject]@{keyboard='040c:0000040c'; timezone='Romance Standard Time'; user_locale=$Plan.locale; registered_owner=''; organization=''}
+        $settings = [pscustomobject]@{keyboard='100c:0000100c'; timezone='W. Europe Standard Time'; user_locale='fr-CH'; registered_owner=''; organization=''}
     }
     $escape = { param($value) [Security.SecurityElement]::Escape([string]$value) }
     $hostname = & $escape $Plan.hostname
@@ -49,7 +49,7 @@ $prepare
  </settings>
  <settings pass="oobeSystem">
   <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-   <InputLocale>$keyboard</InputLocale><SystemLocale>$language</SystemLocale><UILanguage>$language</UILanguage><UserLocale>$region</UserLocale>
+   <InputLocale>$keyboard</InputLocale><SystemLocale>$region</SystemLocale><UILanguage>$language</UILanguage><UserLocale>$region</UserLocale>
   </component>
   <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
    $automatic

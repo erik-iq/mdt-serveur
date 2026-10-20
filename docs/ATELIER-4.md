@@ -8,6 +8,8 @@ L assistant WinPE s ouvre maximise et adapte les champs, les textes et le journa
 
 Apres application de l image, copie des scripts de preparation, ecriture et relecture du fichier de reponses et configuration du demarrage UEFI, l agent annonce l image preparee au serveur. Il libere ensuite ses fichiers et son verrou puis demande le redemarrage WinPE apres cinq secondes. Aucun redemarrage automatique ne suit un echec du deploiement. Un refus de wpeutil reste affiche dans le journal. Le statut image appliquee ne signifie pas que les logiciels Windows sont deja installes : ils continuent au premier demarrage.
 
+Le profil interne et l assistant proposent les formats et la langue systeme fr-CH, le clavier francais suisse QWERTZ 100c:0000100c et le fuseau Zurich (W. Europe Standard Time). La langue d interface reste celle du WIM francais, fr-FR : fr-CH designe ici les reglages suisses et non un pack d interface Windows distinct.
+
 Le fichier de reponses utilisait Administrateur comme Username AutoLogon. Microsoft exige le nom neutre anglais Administrator pour activer automatiquement le compte integre pendant Setup, meme pour une image francaise. La correction utilise Administrator dans le XML ; le compte reel reste identifie par son SID se terminant par -500 et configure sous le nom Administrateur. Son activation dans specialize est relue et verifiee. Les connexions automatiques sont arretees par Atelier apres le lancement de la maintenance. Aucun autre compte ni mot de passe de secours n est cree.
 
 Source : [Microsoft - AutoLogon Username, seul Administrator en anglais active automatiquement le compte](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-autologon-username).

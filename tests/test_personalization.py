@@ -40,6 +40,7 @@ def test_unattend_settings_escaping_and_first_logon_without_credentials(tmp_path
     assert document.find('.//u:InputLocale', NS).text == plan['settings']['keyboard']
     assert document.find('.//u:UILanguage', NS).text == 'fr-FR'
     assert document.find('.//u:UserLocale', NS).text == 'fr-CH'
+    assert document.find('.//u:SystemLocale', NS).text == 'fr-CH'
     registered = document.find('.//u:RegisteredOwner', NS)
     assert (registered.text if registered is not None else '') == owner
     assert 'C:\\ProgramData\\AtelierPXE\\Start-Preparation.ps1' in document.find('.//u:CommandLine', NS).text
@@ -82,3 +83,11 @@ def test_automatic_windows_builtin_account_and_oobe(tmp_path):
     assert document.find('.//u:SkipMachineOOBE',NS) is None
     assert document.find('.//u:SkipUserOOBE',NS) is None
     assert 'BypassNRO' not in xml
+
+
+def test_default_answer_file_is_french_interface_with_swiss_regional_settings(tmp_path):
+    xml=execute(tmp_path,"New-AtelierUnattend -Plan ([pscustomobject]@{hostname='PC-CH';locale='fr-FR'})")
+    doc=ET.fromstring(xml)
+    for name,value in {'UILanguage':'fr-FR','SystemLocale':'fr-CH','UserLocale':'fr-CH',
+                       'InputLocale':'100c:0000100c','TimeZone':'W. Europe Standard Time'}.items():
+        assert doc.find('.//u:'+name,NS).text==value

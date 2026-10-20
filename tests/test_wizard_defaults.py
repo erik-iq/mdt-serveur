@@ -23,6 +23,8 @@ def test_internal_defaults_choose_registered_atelier_wallpaper_and_swiss_formats
         assert wallpaper.status_code==201,wallpaper.text
         current=client.get('/api/state').json()['profiles'][0]
         assert current['settings']['user_locale']=='fr-CH'
+        assert current['settings']['keyboard']=='100c:0000100c'
+        assert current['settings']['timezone']=='W. Europe Standard Time'
         assert current['settings']['registered_owner']==current['settings']['organization']==''
         assert current['settings']['wallpaper_asset_id']==wallpaper.json()['id']
         assert current['name']=='Windows Pro \u00e9quipe'

@@ -116,6 +116,7 @@ function Set-Profile([string]$Id) {
     $script:settings = $profile.settings | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     $script:settings.user_locale='fr-CH'
     $script:settings.keyboard='100c:0000100c'
+    $script:settings.timezone='W. Europe Standard Time'
     $script:settings.registered_owner='';$script:settings.organization=''
     $defaultWallpaper=@($script:session.catalog.wallpapers | Where-Object { ($_.filename -replace '[ _-]','').ToLowerInvariant() -in @('fondatelier.png','fonatelier.png') } | Select-Object -First 1)
     if ($defaultWallpaper.Count) { $script:settings.wallpaper_asset_id=$defaultWallpaper[0].id }
@@ -484,7 +485,13 @@ $script:timer.Add_Tick({
         finally { $script:running=$false;$script:engine.Dispose();$script:next.Text='Fermer';$script:next.Enabled=$true }
     }
 })
-$form.Add_FormClosing({ param($sender,$eventArgs) if($script:running){$eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'} })
+$form.Add_FormClosing({
+    param($sender,$eventArgs)
+    # Keep the accidental-close guard without vetoing wpeutil's system shutdown.
+    if ($script:running -and $eventArgs.CloseReason -ne [Windows.Forms.CloseReason]::WindowsShutDown) {
+        $eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'
+    }
+})
 $script:startupFailure = $null
 $form.Add_Shown({
     try { $form.WindowState='Maximized';Show-Page; if ($Config.internal_mode) { try { Connect-Post } catch { $script:status.Text=$_.Exception.Message } } } catch {
