@@ -45,7 +45,7 @@ function New-AtelierWinPEExtractionProcess {
     return $process
 }
 function Invoke-AtelierWinPEHpExtraction {
-    param([string]$Package,[string]$Destination,[ValidateRange(1,600)][int]$TimeoutSeconds=600)
+    param([string]$Package,[string]$Destination,[ValidateRange(1,600)][int]$TimeoutSeconds=600,[switch]$Defer1168Validation)
     # Windows PowerShell 5.1 Start-Process can return a Process whose ExitCode
     # stays null after WaitForExit. Own the process from creation through exit.
     $process=New-AtelierWinPEExtractionProcess -Package $Package -Destination $Destination
@@ -58,7 +58,10 @@ function Invoke-AtelierWinPEHpExtraction {
         }
         $exitCode=$process.ExitCode
         if ($null -eq $exitCode) { throw 'Code de sortie de l extracteur WinPE HP indisponible. Extraction non validee.' }
-        if ($exitCode -ne 0) { throw ('Extraction WinPE HP en echec (code '+$exitCode+').') }
+        # sp173204 may return 1168 after extracting. This is not a generic
+        # success code: only the caller validating the fresh payload may defer it.
+        if ($exitCode -ne 0 -and -not ($Defer1168Validation -and $exitCode -eq 1168)) { throw ('Extraction WinPE HP en echec (code '+$exitCode+').') }
+        return $exitCode
     } finally { $process.Dispose() }
 }
 function Get-AtelierWinPEHpDrivers {
@@ -109,17 +112,23 @@ function Get-AtelierWinPEHpDrivers {
             $staging=Join-Path $cache ('extract-'+[guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $staging | Out-Null
             Write-Host 'Extraction silencieuse des pilotes WinPE ; aucune installation sur .250...'
-            Invoke-AtelierWinPEHpExtraction -Package $package -Destination $staging
+            $extractionExitCode=Invoke-AtelierWinPEHpExtraction -Package $package -Destination $staging -Defer1168Validation
             $files=@(Get-AtelierWinPEHpTree $staging)
             $infs=@(Get-AtelierWinPEHpNetworkInfs $staging)
-            if (-not $infs.Count -or -not @($files | Where-Object { $_.name -match '\.sys$' }).Count -or -not @($files | Where-Object { $_.name -match '\.cat$' }).Count) { throw 'Pack HP incomplet : INF reseau, SYS ou CAT absents.' }
+            $sysCount=@($files | Where-Object { $_.name -match '\.sys$' }).Count
+            $catCount=@($files | Where-Object { $_.name -match '\.cat$' }).Count
+            $complete=$infs.Count -gt 0 -and $sysCount -gt 0 -and $catCount -gt 0
+            $extractionLog=Join-Path $cache 'extraction-result.json'
+            @{softpaq='sp173204';exit_code=$extractionExitCode;files=$files.Count;network_infs=$infs.Count;sys_files=$sysCount;cat_files=$catCount;payload_present=$complete;utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content -LiteralPath $extractionLog -Encoding UTF8
+            if (-not $complete) { throw ('Pack HP incomplet apres extraction (code '+$extractionExitCode+') : INF reseau='+$infs.Count+', SYS='+$sysCount+', CAT='+$catCount+'. Diagnostic : '+$extractionLog) }
+            if ($extractionExitCode -eq 1168) { Write-Host 'Code HP 1168 : contenu reseau present ; verification des pilotes par DISM a suivre.' }
             if (Test-Path $drivers) {
                 Get-AtelierWinPEHpTree $drivers | Out-Null
                 Remove-Item -LiteralPath $drivers -Recurse -Force
             }
             Move-Item -LiteralPath $staging -Destination $drivers
             $staging=$null
-            @{source=$url;softpaq='sp173204';version='3.40';sha256=$hash;files=$files} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifest -Encoding UTF8
+            @{source=$url;softpaq='sp173204';version='3.40';sha256=$hash;files=$files;extraction_exit_code=$extractionExitCode} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifest -Encoding UTF8
         }
         $infs=@(Get-AtelierWinPEHpNetworkInfs $drivers)
         if (-not $infs.Count) { throw 'Aucun INF reseau dans le cache WinPE HP.' }

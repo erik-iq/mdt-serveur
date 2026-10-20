@@ -22,7 +22,8 @@ def execute(tmp_path,source,powershell=PWSH):
 
 
 @pytest.mark.parametrize('case',['cache','modified','missing','bad_signature','wrong_publisher',
-                                 'download_failure','extract_failure','empty_pack','timeout','locked','missing_code','start_failure'])
+                                 'download_failure','extract_failure','empty_pack','timeout','locked','missing_code','start_failure',
+                                 '1168_complete','1168_empty','1168_missing_cat','1168_no_network'])
 def test_cache_reuse_repair_and_failure_before_driver_injection(tmp_path,case):
     result=execute(tmp_path,r'''
 $ErrorActionPreference='Stop'
@@ -43,15 +44,17 @@ function New-AtelierWinPEExtractionProcess {
  param($Package,$Destination)
  $script:extractions++
  $folder=$Destination
- if ('CASE' -ne 'empty_pack') {
+ if ('CASE' -notin @('empty_pack','1168_empty')) {
   New-Item -ItemType Directory -Path (Join-Path $folder 'network') | Out-Null
   Set-Content (Join-Path $folder 'network/ethernet.inf') "[Version]`nClass=Net`nCatalogFile=ethernet.cat"
   Set-Content (Join-Path $folder 'network/ethernet.sys') 'driver fixture'
   Set-Content (Join-Path $folder 'network/ethernet.cat') 'catalog fixture'
   Set-Content (Join-Path $folder 'storage.inf') "[Version]`nClass=SCSIAdapter"
   Set-Content (Join-Path $folder 'wifi.inf') "[Version]`nClass=Net`n[Wireless.Ndi]`n*IfType=71"
+  if ('CASE' -eq '1168_missing_cat') { Remove-Item (Join-Path $folder 'network/ethernet.cat') }
+  if ('CASE' -eq '1168_no_network') { Remove-Item (Join-Path $folder 'network/ethernet.inf') }
  }
- $process=[pscustomobject]@{ExitCode=$(if ('CASE' -eq 'extract_failure'){7}elseif ('CASE' -eq 'missing_code'){$null}else{0})}
+ $process=[pscustomobject]@{ExitCode=$(if ('CASE' -like '1168_*'){1168}elseif ('CASE' -eq 'extract_failure'){7}elseif ('CASE' -eq 'missing_code'){$null}else{0})}
  $process | Add-Member ScriptMethod Start {return ('CASE' -ne 'start_failure')}
  $process | Add-Member ScriptMethod WaitForExit {param($Timeout) if ($Timeout -notin @(600000,5000)){throw 'Missing extraction timeout'};return ('CASE' -ne 'timeout')}
  $process | Add-Member ScriptMethod Kill {$script:killed++}
@@ -76,13 +79,15 @@ try {
  }
 } catch { $failed=$true;$message=$_.Exception.Message }
 finally { if ($held) { $held.Dispose() } }
-@{failed=$failed;message=$message;downloads=$script:downloads;extractions=$script:extractions;killed=$script:killed;disposed=$script:disposed;selected=$selected;manifest=(Test-Path (Join-Path $cache 'manifest.json'));partial=(Test-Path (Join-Path $cache 'sp173204.partial.exe'));staging=@(Get-ChildItem $cache -Directory -Filter 'extract-*').Count} | ConvertTo-Json -Compress
+$diagnostic=$null
+if (Test-Path (Join-Path $cache 'extraction-result.json')) { $diagnostic=Get-Content (Join-Path $cache 'extraction-result.json') -Raw | ConvertFrom-Json }
+@{failed=$failed;message=$message;downloads=$script:downloads;extractions=$script:extractions;killed=$script:killed;disposed=$script:disposed;selected=$selected;diagnostic=$diagnostic;manifest=(Test-Path (Join-Path $cache 'manifest.json'));partial=(Test-Path (Join-Path $cache 'sp173204.partial.exe'));staging=@(Get-ChildItem $cache -Directory -Filter 'extract-*').Count} | ConvertTo-Json -Depth 4 -Compress
 '''.replace('CASE',case))
-    success=case in {'cache','modified','missing'}
+    success=case in {'cache','modified','missing','1168_complete'}
     assert result['failed'] != success,result
     assert result['downloads']==(0 if case=='locked' else 1)
     assert result['extractions']==(2 if case in {'modified','missing'} else
-                                   1 if case in {'cache','extract_failure','empty_pack','timeout','missing_code','start_failure'} else 0)
+                                   1 if case in {'cache','extract_failure','empty_pack','timeout','missing_code','start_failure'} or case.startswith('1168_') else 0)
     assert result['disposed']==result['extractions']
     assert result['killed']==(1 if case=='timeout' else 0)
     assert result['manifest']==success
@@ -90,6 +95,32 @@ finally { if ($held) { $held.Dispose() } }
     assert not result['partial'] and not result['staging']
     if case=='missing_code':assert 'indisponible' in result['message']
     if case=='extract_failure':assert 'code 7' in result['message']
+    if case.startswith('1168_'):
+        assert result['diagnostic']['exit_code']==1168
+        assert result['diagnostic']['payload_present']==success
+        if not success:assert 'Pack HP incomplet' in result['message'] and 'extraction-result.json' in result['message']
+
+
+@pytest.mark.parametrize('defer',[False,True])
+def test_1168_is_only_deferred_for_the_caller_that_checks_the_payload(tmp_path,defer):
+    result=execute(tmp_path,r'''
+$ErrorActionPreference='Stop'
+. 'PROJECT/scripts/WinPE-HPDrivers.ps1'
+function New-AtelierWinPEExtractionProcess {
+ param($Package,$Destination)
+ $process=[pscustomobject]@{ExitCode=1168}
+ $process | Add-Member ScriptMethod Start {return $true}
+ $process | Add-Member ScriptMethod WaitForExit {param($Timeout) return $true}
+ $process | Add-Member ScriptMethod Dispose {}
+ return $process
+}
+$failed=$false;$code=$null
+try { $code=Invoke-AtelierWinPEHpExtraction -Package 'fixture' -Destination 'WORK' -Defer1168Validation:$DEFER }
+catch { $failed=$true }
+@{failed=$failed;code=$code} | ConvertTo-Json -Compress
+'''.replace('$DEFER','$true' if defer else '$false'))
+    assert result['failed']==(not defer)
+    assert result['code']==(1168 if defer else None)
 
 
 @pytest.mark.parametrize('case',['success','prepare_failure','driver_failure'])

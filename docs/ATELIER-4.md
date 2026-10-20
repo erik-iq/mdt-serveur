@@ -20,11 +20,19 @@ Sources : [pack WinPE officiel HP](https://ftp.hp.com/pub/caps-softpaq/cmit/HP_W
 
 ### Correctif extraction Windows PowerShell 5.1
 
-Le message Extraction WinPE HP en echec (code ) sans numero provenait d un code de sortie null apres Start-Process / WaitForExit. Le script classait cette valeur comme un echec alors que l extraction pouvait etre terminee. Le lancement utilise maintenant directement System.Diagnostics.Process, sans shell, avec attente limitee et recuperation du code avant fermeture du processus. Un code absent reste refuse avec un message explicite ; un vrai code non nul reste un echec. Les controles des fichiers INF / SYS / CAT restent obligatoires.
+Le message Extraction WinPE HP en echec (code ) sans numero provenait d un code de sortie null apres Start-Process / WaitForExit. Le script classait cette valeur comme un echec alors que l extraction pouvait etre terminee. Le lancement utilise maintenant directement System.Diagnostics.Process, sans shell, avec attente limitee et recuperation du code avant fermeture du processus. Un code absent reste refuse avec un message explicite ; les codes inattendus restent des echecs. Les controles des fichiers INF / SYS / CAT restent obligatoires.
 
 Sur une console deja mise a jour vers IQ-5.1, remplacer seulement scripts\WinPE-HPDrivers.ps1 puis relancer Build-WinPE.ps1 depuis le dossier installe, avec le cache D:\AtelierPXE\Drivers\WinPE-Official. Le SoftPaq signe deja telecharge est reutilise. Importer le nouveau WinPE dans WDS avant de nettoyer les anciens. Aucun changement du serveur web ni de Windows sur les postes n est necessaire pour cette reprise.
 
 Les tests incluent un vrai processus a sortie immediate, un code 7 et un depassement du delai, ainsi que les simulations de cache et de code absent. Sous Windows, le test de processus utilise explicitement Windows PowerShell 5.1 et un extracteur de test compile ; ce test ne remplace pas l execution du vrai SoftPaq HP sur .250.
+
+### Retour HP 1168 apres extraction
+
+Le pack sp173204 peut retourner 1168 apres avoir extrait ses fichiers. Ce comportement est rapporte dans [le code publie du module communautaire HPWinPEDrivers](https://www.powershellgallery.com/packages/HPWinPEDrivers/1.0.0/Content/Private%5CExpand-HPSoftPaq.ps1) pour ce meme pack et cette meme ligne de commande. Cela ne constitue pas une definition generale de succes pour le code Windows 1168.
+
+Pour ce pack signe uniquement, Atelier laisse le code 1168 passer a la verification du contenu du nouveau dossier temporaire vide au depart. Il exige des INF reseau selectionnables, des SYS et des CAT. Une extraction vide ou incomplete reste un echec ; aucun manifeste valide n est publie. Les comptes de fichiers et le code sont conserves dans D:\AtelierPXE\Drivers\WinPE-Official\HP-sp173204\extraction-result.json, meme si le dossier temporaire est nettoye. Le controle DISM des pilotes reste obligatoire avant sauvegarde et import de l image.
+
+Un contenu present autorise la mise en cache et l essai d integration ; il ne prouve pas que tous les pilotes sont applicables au PC. Un refus DISM interrompt toujours la construction. Les tests reproduisent 1168 avec contenu complet, dossier vide, catalogue absent et aucun INF reseau ; ils n executent pas le vrai SoftPaq HP dans cet environnement.
 
 ## Diagnostic du bouton Connexion IQ-5.0.1
 
