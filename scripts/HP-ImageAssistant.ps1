@@ -6,8 +6,14 @@ function Get-AtelierHpiaOutcome {
         256 { return @{status='completed';reboot_required=$false;message='Analyse HP terminee sans recommandation compatible.'} }
         257 { return @{status='needs_attention';reboot_required=$false;message='Aucune recommandation HP selectionnee ; verifier le rapport HPIA.'} }
         3010 { return @{status='completed';reboot_required=$true;message='Traitement HP termine ; redemarrage manuel necessaire.'} }
+        3011 { return @{status='needs_attention';reboot_required=$false;message='Un SoftPaq HP exige une installation manuelle et a ete ignore par HPIA.'} }
         3020 { return @{status='needs_attention';reboot_required=$false;message='Au moins un paquet HP a echoue ; consulter les rapports HPIA.'} }
         4096 { return @{status='needs_attention';reboot_required=$false;message='Ce modele ou cette version de Windows ne sont pas pris en charge par HPIA.'} }
+        4097 { return @{status='needs_attention';reboot_required=$false;message='Parametres HPIA invalides ; consulter le journal HP.'} }
+        4098 { return @{status='needs_attention';reboot_required=$false;message='HPIA ne peut pas acceder a Internet ; verifier le reseau et le proxy du compte SYSTEM.'} }
+        4102 { return @{status='needs_attention';reboot_required=$false;message='Connexion HP refusee : TLS 1.2 ou superieur est necessaire.'} }
+        4103 { return @{status='needs_attention';reboot_required=$false;message='Requete vers les serveurs HP incomplete ; verifier le reseau et le proxy.'} }
+        4104 { return @{status='needs_attention';reboot_required=$false;message='Version Windows sans reference HP dediee : HPIA utilise une reference generique. Verifier les resultats et le besoin de redemarrage.'} }
         default { return @{status='needs_attention';reboot_required=$false;message=('Traitement HP non confirme (code '+$ExitCode+'). Consulter les rapports HPIA.')} }
     }
 }

@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.8` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.8.1` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.8`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.8.1`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -25,6 +25,30 @@ Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom da
 Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation de l outil constructeur, les mises a jour HP et la collecte XML/CSV. Ces mesures apparaissent dans la fiche et les nouveaux rapports PDF. Les anciennes mesures Windows Update restent visibles dans l historique. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
+
+## Stabilisation HP / AnyDesk IQ-4.8.1
+
+Le signalement du poste concerne bien WinPE IQ-4.8. Les journaux de ce nouveau deploiement ne sont pas encore disponibles ici : les defauts ci-dessous sont confirmes dans le code et le manifeste, mais leur role exact sur ce poste reste a confirmer avec Diagnostics-Deploiement.zip depuis Dossier inventaire.
+
+Le manifeste WinGet HP.ImageAssistant 5.3.6 declare `/s /f C:\SWSetup\HPImageAssistant` dans ses arguments silencieux, puis un autre `/f` avec `--location`. IQ remplace maintenant la chaine d extraction par une seule valeur fixe `/s /e /f "<dossier approuve>"`, transmise comme un argument natif unique. Le transport WinGet et ses controles de telechargement sont conserves ; aucune URL ou commande libre ne vient du site. Aucun succes sans executable signe HP dans `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`.
+
+HPIA est portable : il n ajoute pas lui-meme d entree aux applications installees ou de raccourci. Si sa case est cochee et son executable verifie, `C:\IQ_\Constructeur\HP-ImageAssistant.cmd` permet de l ouvrir manuellement avec elevation. Ce lanceur survit a la suppression du cache de preparation. La presence de l outil et le resultat de l analyse / installation des SoftPaq restent deux resultats distincts.
+
+AnyDesk est controle par son executable signe AnyDesk Software GmbH (ou philandro Software GmbH) et une entree de desinstallation ou un service Windows dont le chemin correspond a l executable. L absence du champ Publisher/InstallLocation ne suffit plus a rejeter le produit officiel. Les chemins x86/x64, DisplayIcon et UninstallString sont traites ; aucune commande du registre n est executee. Un fichier portable seul, un registre seul ou une signature invalide ne suffisent pas. Le journal precise les preuves disponibles et l etat de signature.
+
+Apres chaque installation, quatre controles espaces de 500 ms au maximum attendent un enregistrement Windows tardif. Un code WinGet non nul est conserve mais ne declare plus absent un produit dont la presence est verifiee. Aucun installateur concurrent n est ajoute. Les codes HP reseau/TLS, reference Windows generique et paquet non automatisable ont des messages explicites ; 257 reste A verifier.
+
+Le correctif s applique aux prochains deploiements avec le nouveau WinPE IQ-4.8.1. Il ne met pas a jour a distance les scripts d un poste deja termine. Windows Update / Store restent manuels et Atelier ne commande aucun redemarrage. Les tests ici simulent les API Windows et les installateurs : la validation de production exige encore un deploiement sous Windows PowerShell 5.1 sur HP reel, puis Lenovo et VM. Sur le site, recuperer le rapport et Diagnostics-Deploiement.zip pour constater chaque presence, le resultat HP, les archives et le nettoyage apres redemarrage manuel si necessaire.
+
+### Evolution HP recommandee, non activee par ce correctif
+
+CMSL est une bibliotheque PowerShell HP : elle peut recuperer des SoftPaq et maintenir un depot par plateforme / version de Windows. Sur .250, un depot local et des packs INF par plateforme eviteraient de telecharger les memes pilotes sur chaque PC. Les pilotes reseau / stockage pour WinPE doivent rester separes des packs Windows complets. Le code actuel ne comporte pas encore ce depot CMSL ni l injection automatique des packs par plateforme : ce sont des evolutions distinctes.
+
+Dans ce projet, adapter ce mecanisme au deploiement DISM existant, plutot que copier les reglages MDT Out-of-Box Drivers ou CustomSettings.ini de la piece jointe. Garder HPIA dans Windows pour completer les SoftPaq compatibles, depuis Internet ou, apres integration/test, le depot CMSL en mode hors ligne. Les outils ConfigMgr / Intune de HP ne sont pas necessaires pour cette architecture.
+
+La piece jointe donne la bonne direction, mais sa commande Category:Drivers,Software,Firmware omet le BIOS et sa proposition de redemarrage automatique ne correspond pas a la procedure de cet atelier. Les paquets non automatisables ne doivent pas etre annonces installes. La version de Windows doit figurer dans les references HP ; afficher A verifier si HPIA emploie une reference generique.
+
+Sources officielles : [CMSL](https://developers.hp.com/hp-client-management/doc/client-management-script-library), [extraction HPIA](https://developers.hp.com/hp-client-management/doc/install-hpimageassistant), [packs par plateforme](https://developers.hp.com/hp-client-management/doc/new-hpdriverpack), [depots](https://developers.hp.com/hp-client-management/doc/initialize-hprepository), [guide HPIA](https://ftp.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf), [CLI AnyDesk](https://support.anydesk.com/docs/command-line-interface-for-windows).
 
 ## Suppression du dossier de travail IQ-4.8
 
@@ -62,7 +86,7 @@ La preparation teste que WinGet execute vraiment `--version`, puis essaie l enre
 
 Pour un PC deja deploye, extraire la nouvelle archive puis executer `scripts/Repair-Software.ps1` en PowerShell administrateur sur ce PC. La reparation conserve la selection enregistree, sauvegarde les anciens fichiers dans `repair-backups/software-<identifiant>`, controle chaque logiciel et installe les manquants. Elle refuse une preparation ou un installateur encore actif. Elle met a jour le rapport et l inventaire ; les echecs restent visibles. Le resultat HP durable est conserve pour eviter de relancer automatiquement un flash deja traite. Aucun redemarrage n est demande par Atelier et aucune recherche Windows Update / Store n est ajoutee.
 
-Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.8. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
+Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.8.1. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
 
 ## Bundles et choix des logiciels IQ-4.5
 
@@ -83,7 +107,7 @@ Lenovo System Update coche : installation silencieuse du paquet `Lenovo.SystemUp
 
 Reference Lenovo verifiee : [manifeste Lenovo.SystemUpdate](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/l/Lenovo/SystemUpdate/5.08.04.85/Lenovo.SystemUpdate.installer.yaml). Les prochains postes installent la version proposee par la source WinGet, sans figer cette version.
 
-Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.8.
+Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.8.1.
 
 ## Installation HPIA par WinGet et clavier fixe
 
@@ -143,6 +167,7 @@ WinPE controle encore le fichier et sa taille, l index, l architecture x64, l ed
 | `C:\IQ_\Inventaire` | Export-Inventaire.cmd pour regenerer et transmettre XML/CSV |
 | `C:\IQ_\Garantie` | Outil de verification et dates confirmees sur le portail constructeur |
 | `C:\IQ_\Personnalisation` | Fond d ecran |
+| `C:\IQ_\Constructeur` | Lanceur HP-ImageAssistant.cmd si selectionne et verifie |
 
 Les XML/CSV sont sur `.250` dans `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMENT`. Dans Activite de deploiement, cliquer **Dossier inventaire** pour copier le chemin serveur ou telecharger les deux fichiers. Le PDF est egalement disponible sur la ligne du poste. Les anciens resultats connus sont deplaces dans leur categorie lors de la preparation du dossier ; les fichiers inconnus sont conserves. L organisation des machines deja deployees ne change pas sans execution des nouveaux scripts.
 

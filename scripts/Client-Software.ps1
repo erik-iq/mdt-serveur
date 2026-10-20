@@ -16,26 +16,25 @@ function Get-AtelierClientWinGet {
     return $null
 }
 function Get-AtelierInstalledClientSoftware {
-    param([string]$Key)
+    param([string]$Key,[string]$DiagnosticLog)
+    if ($Key -eq 'anydesk') { return Get-AtelierInstalledAnyDesk -DiagnosticLog $DiagnosticLog }
     if ($Key -eq 'hpia') {
-        try { return @{version='';tool=(Get-AtelierInstalledHpia)} } catch { return $null }
+        try { $tool=Get-AtelierInstalledHpia;return @{version=[string]$tool.version;tool=$tool} } catch { return $null }
     }
     # A successful launcher or an old checkpoint is not proof of installation.
     $rules=@{
         vlc=@{name='^VLC( media player)?$';publisher='VideoLAN';files=@('vlc.exe')}
         reader=@{name='^Adobe (Acrobat|Reader)';publisher='Adobe';files=@('AcroRd32.exe','Acrobat.exe','Reader\AcroRd32.exe','Acrobat\Acrobat.exe')}
         chrome=@{name='^Google Chrome$';publisher='Google';files=@('chrome.exe','Application\chrome.exe')}
-        anydesk=@{name='^AnyDesk';publisher='AnyDesk|philandro';files=@('AnyDesk.exe')}
         lenovo_system_update=@{name='^(Lenovo )?System Update';publisher='Lenovo';files=@('tvsu.exe')}
     }
     $rule=$rules[$Key]
     if (-not $rule) { return $null }
-    $roots=@($env:ProgramFiles,${env:ProgramFiles(x86)}) | Where-Object { $_ } | Select-Object -Unique
+    $roots=@($env:ProgramFiles,${env:ProgramFiles(x86)},$env:ProgramW6432) | Where-Object { $_ } | Select-Object -Unique
     $relative=@{
         vlc=@('VideoLAN\VLC\vlc.exe')
         reader=@('Adobe\Acrobat DC\Acrobat\Acrobat.exe','Adobe\Acrobat Reader DC\Reader\AcroRd32.exe')
         chrome=@('Google\Chrome\Application\chrome.exe')
-        anydesk=@('AnyDesk\AnyDesk.exe')
         lenovo_system_update=@('Lenovo\System Update\tvsu.exe')
     }
     $registry=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
@@ -51,6 +50,47 @@ function Get-AtelierInstalledClientSoftware {
                 return @{version=[string]$entry.DisplayVersion;verification=@{method='registry_and_executable';display_name=[string]$entry.DisplayName;path=$path;timestamp=[DateTime]::UtcNow.ToString('o')}}
             }
         }
+    }
+    return $null
+}
+function Get-AtelierExecutableCommandPath {
+    param([string]$CommandLine)
+    $value=[Environment]::ExpandEnvironmentVariables($CommandLine).Trim()
+    if ($value -match '^"([^"]+\.exe)"(?:\s|,|$)') { return $Matches[1] }
+    if ($value -match '^(.+?\.exe)(?:\s|,|$)') { return $Matches[1] }
+    return ''
+}
+function Get-AtelierInstalledAnyDesk {
+    param([string]$DiagnosticLog)
+    # Some official installations omit Publisher/InstallLocation. Require a
+    # signed AnyDesk binary AND a matching machine registration or service.
+    $registry=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
+    $entries=@(Get-ItemProperty -Path $registry -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^AnyDesk\b' })
+    $service=$null
+    try { $service=Get-CimInstance Win32_Service -Filter "Name='AnyDesk'" -OperationTimeoutSec 5 -ErrorAction Stop | Select-Object -First 1 } catch { }
+    $servicePath=Get-AtelierExecutableCommandPath ([string]$service.PathName)
+    $candidates=@()
+    foreach ($root in @($env:ProgramFiles,${env:ProgramFiles(x86)},$env:ProgramW6432) | Where-Object { $_ } | Select-Object -Unique) { $candidates+=@(Join-Path $root 'AnyDesk\AnyDesk.exe') }
+    foreach ($entry in $entries) {
+        $location=[Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).Trim().Trim('"')
+        if ($location) { $candidates+=@($(if ($location -match '\.exe$') { $location } else { Join-Path $location 'AnyDesk.exe' })) }
+        $candidates+=@(Get-AtelierExecutableCommandPath ([string]$entry.DisplayIcon))
+        $candidates+=@(Get-AtelierExecutableCommandPath ([string]$entry.UninstallString))
+    }
+    if ($servicePath) { $candidates+=@($servicePath) }
+    if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Controle AnyDesk : entrees de desinstallation='+$entries.Count+' ; service avec chemin='+[bool]$servicePath) -Encoding UTF8 }
+    foreach ($path in @($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+        if ([IO.Path]::GetFileName($path) -ine 'AnyDesk.exe' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        try {
+            $signature=Get-AuthenticodeSignature -LiteralPath $path -ErrorAction Stop
+            if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Executable AnyDesk='+$path+' ; signature='+$signature.Status+' ; editeur='+$signature.SignerCertificate.Subject) -Encoding UTF8 }
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(?:^|,\s*)(?:CN|O)=(?:AnyDesk Software GmbH|philandro Software GmbH)(?:,|$)') { continue }
+            $serviceMatches=$servicePath -and [IO.Path]::GetFullPath($path).Equals([IO.Path]::GetFullPath($servicePath),[StringComparison]::OrdinalIgnoreCase)
+            if (-not $entries.Count -and -not $serviceMatches) { continue }
+            $version=[Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion
+            if (-not $version -and $entries.Count) { $version=[string]$entries[0].DisplayVersion }
+            return @{version=[string]$version;verification=@{method=$(if ($serviceMatches) { 'signed_executable_and_service' } else { 'signed_executable_and_registry' });display_name='AnyDesk';path=$path;publisher=[string]$signature.SignerCertificate.Subject;timestamp=[DateTime]::UtcNow.ToString('o')}}
+        } catch { }
     }
     return $null
 }
@@ -72,6 +112,13 @@ function Invoke-AtelierClientInstall {
         $hpLocation=if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant' } else { '' }
         if ($i -gt 0 -and $Arguments[$i-1] -eq '--location' -and $hpLocation -and $argument -eq $hpLocation -and $argument -notmatch '["\r\n]') {
             $encoded.Add('"'+$argument+'"');continue
+        }
+        $hpOverride='/s /e /f "'+$hpLocation+'"'
+        if ($i -gt 0 -and $Arguments[$i-1] -eq '--override' -and $hpLocation -notmatch '["\r\n]' -and $argument -eq $hpOverride -and
+            $Arguments[0] -eq 'install' -and @($Arguments | Where-Object { $_ -eq 'HP.ImageAssistant' }).Count -eq 1) {
+            # Escape the inner quotes for the native Windows argv parser. Only
+            # this fixed HP extraction command may bypass manifest switches.
+            $encoded.Add('"'+($argument -replace '(\\*)"','$1$1\"' -replace '(\\+)$','$1$1')+'"');continue
         }
         throw 'Argument WinGet non autorise.'
     }
@@ -95,7 +142,20 @@ function Get-AtelierInstalledHpia {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'WinGet termine mais HPImageAssistant.exe est absent du dossier attendu. Consulter software-logs\hpia.log.' }
     $signature=Get-AuthenticodeSignature -LiteralPath $path
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature de l executable HP Image Assistant invalide.' }
-    return @{name='HP Image Assistant';path=$path;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
+    return @{name='HP Image Assistant';path=$path;version=[string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
+}
+function New-AtelierHpiaLauncher {
+    param([string]$ToolsPath)
+    Get-AtelierInstalledHpia | Out-Null
+    $directory=Join-Path $ToolsPath 'Constructeur'
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    # Fixed command, no reporting credentials and no dependency on the
+    # disposable ProgramData payload. Opening HPIA manually requests elevation.
+    $launcher=@'
+@echo off
+powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath (Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant\HPImageAssistant.exe') -Verb RunAs"
+'@
+    [IO.File]::WriteAllText((Join-Path $directory 'HP-ImageAssistant.cmd'),$launcher,[Text.Encoding]::ASCII)
 }
 function Install-AtelierClientSoftware {
     param([string]$DataPath,[string[]]$Packages,[scriptblock]$OnProgress)
@@ -151,19 +211,32 @@ function Install-AtelierClientSoftware {
             # Arguments come exclusively from the shipped catalogue; no command is accepted from the web.
             $arguments=@('install','--id',$source.winget_id,'--exact','--source','winget','--silent','--architecture',$source.architecture,'--accept-source-agreements','--accept-package-agreements','--disable-interactivity')
             if ($key -eq 'hpia') {
-                # The official manifest supports --location and extracts HPIA.
-                # It declares no scope: do not force a machine-scope match.
+                # Manifest 5.3.6 embeds /f C:\SWSetup\HPImageAssistant in
+                # Silent. --location alone adds another /f. Replace the entire
+                # switch string so extraction has one deterministic destination.
                 $location=Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant'
                 New-Item -ItemType Directory -Path $location -Force | Out-Null
                 & icacls.exe $location /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
                 if ($LASTEXITCODE -ne 0) { throw 'Impossible de proteger le dossier HP Image Assistant.' }
-                $arguments+=@('--location',$location)
+                $arguments+=@('--location',$location,'--override',('/s /e /f "'+$location+'"'))
             } else { $arguments+=@('--scope','machine') }
             $code=Invoke-AtelierClientInstall -Executable $winget -Arguments $arguments -LogPath $log
-            if ($null -eq $code -or $code -notin @(0,3010,1641)) { throw ('WinGet : code ' + $code + '. Voir ' + $log) }
-            $installed=Get-AtelierInstalledClientSoftware $key
-            if (-not $installed) { throw ('WinGet termine mais installation non verifiee : '+$source.name+'. Registre / executable absent. Voir '+$log) }
-            $entry=@{id=$key;name=[string]$source.name;version=$installed.version;status='completed';exit_code=$code;reason='Installation silencieuse WinGet verifiee dans Windows'}
+            # A launcher can finish before registration becomes visible. Wait
+            # briefly, without starting a competing installer or a long scan.
+            $installed=$null
+            for ($attempt=0;$attempt -lt 4;$attempt++) {
+                if ($attempt) { Start-Sleep -Milliseconds 500 }
+                $installed=Get-AtelierInstalledClientSoftware $key -DiagnosticLog $log
+                if ($installed) { break }
+            }
+            Add-Content -LiteralPath $log -Value ('Controle final : WinGet='+$code+' ; presence verifiee='+[bool]$installed) -Encoding UTF8
+            if (-not $installed) {
+                if ($key -eq 'hpia') { Get-AtelierInstalledHpia | Out-Null }
+                throw ('Installation non verifiee : '+$source.name+' ; WinGet='+$code+'. Executable, signature ou enregistrement Windows non confirme. Voir '+$log)
+            }
+            $reason=if ($key -eq 'hpia') { 'Outil HP extrait et signature verifiee ; le resultat des SoftPaq est indique separement' } else { 'Installation silencieuse WinGet verifiee dans Windows' }
+            if ($code -notin @(0,3010,1641)) { $reason+=' ; presence confirmee malgre le code WinGet '+$code }
+            $entry=@{id=$key;name=[string]$source.name;version=$installed.version;status='completed';exit_code=$code;reason=$reason}
             if ($installed.tool) { $entry.tool=$installed.tool } else { $entry.verification=$installed.verification }
             $saved[$key]=$entry;$results.Add($entry)
             Write-AtelierVerifiedUtf8File -Path $statePath -Content (ConvertTo-Json -InputObject @($saved.Values) -Depth 6) -NoBackup | Out-Null

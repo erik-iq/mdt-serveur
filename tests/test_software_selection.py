@@ -70,7 +70,7 @@ $env:ProgramFiles='PROGRAM'
 . 'CLIENT'
 . 'FILES'
 function Get-AtelierClientWinGet {return 'EXE'}
-function Get-AuthenticodeSignature {param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=HP Inc.'}}}
+function Get-AuthenticodeSignature {param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject=$(if($LiteralPath -match 'AnyDesk'){ 'CN=AnyDesk Software GmbH, O=AnyDesk Software GmbH' }else{ 'CN=HP Inc.' })}}}
 function icacls.exe {$global:LASTEXITCODE=0}
 function Get-ItemProperty {param($Path);if(Test-Path 'EXE.registry.json'){$records=Get-Content 'EXE.registry.json' -Raw|ConvertFrom-Json;foreach($record in $records){$record}}}
 $packages=ConvertFrom-Json 'PACKAGES'

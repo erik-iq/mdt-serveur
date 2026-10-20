@@ -30,6 +30,11 @@ param()
 '@
 Set-Content -LiteralPath (Join-Path $OutputDirectory 'Rapports\Generer-Rapport.ps1') -Value $reportLauncher -Encoding UTF8
 $payload=Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+if ('hpia' -in @($payload.settings.winget_packages)) {
+    . (Join-Path $DataPath 'Client-Software.ps1')
+    $hpTool=Get-AtelierInstalledClientSoftware 'hpia'
+    if ($hpTool) { New-AtelierHpiaLauncher -ToolsPath $OutputDirectory }
+}
 if ($payload.settings.central_inventory) {
     $centralLauncher=@'
 param()
@@ -95,6 +100,7 @@ $diagnostics | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDirectory
     'Inventaire : outil Export-Inventaire.cmd pour actualiser les XML/CSV.',
     'Garantie : verification des dates sur le site officiel du constructeur.',
     'Personnalisation : fond d ecran selectionne.', '',
+    'Constructeur : HP-ImageAssistant.cmd si HPIA a ete coche et verifie.',
     'Les dates de garantie restent non verifiees tant que l operateur ne les a pas confirmees.',
     'Aucune cle produit, cle BitLocker ou TPM n est exportee.',
     $(if($payload.settings.central_inventory){'XML/CSV sur le serveur .250 : ouvrir Dossier inventaire dans Atelier. Cache prive dans ProgramData\AtelierPXE\Inventory.'}else{'XML/CSV dans Inventaire.'})

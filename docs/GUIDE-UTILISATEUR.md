@@ -44,6 +44,7 @@ Ouvrir `C:\IQ_`. Les fichiers sont classes par categorie :
 | Inventaire | Export-Inventaire.cmd actualise XML/CSV et les transmet au serveur. |
 | Garantie | Verifier-Garantie.cmd ouvre le portail officiel HP, Lenovo ou Dell. Saisir les dates confirmees : aucune date n est inventee depuis le SN. |
 | Personnalisation | Fond d ecran selectionne. |
+| Constructeur | HP-ImageAssistant.cmd ouvre l outil portable verifie en administrateur si sa case a ete cochee. |
 
 L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Si HP Image Assistant est coche, WinGet l installe et le verifie apres le demarrage Windows, puis l analyse et l installation des SoftPaq compatibles se font en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Le technicien lance le redemarrage quand les installations sont terminees. Lenovo System Update est installe uniquement si sa case est cochee ; son outil de mise a jour reste accessible dans Windows. HPIA se trouve dans `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
 
@@ -93,3 +94,11 @@ La revision IQ-4.7 corrige l erreur `Argument WinGet non autorise.` due a la lec
 Le dossier cache ProgramData/AtelierPXE est temporaire. Apres confirmation du rapport, des XML/CSV et des journaux sur le serveur, il est supprime automatiquement. Une coupure reseau ou un installateur encore actif reporte ce nettoyage ; aucun redemarrage n est force. Si un redemarrage est necessaire, le technicien le lance et le nettoyage reprend au demarrage suivant.
 
 Les journaux sont telechargeables sur le site, dans Dossier inventaire, fichier Diagnostics-Deploiement.zip. Le dossier IQ_ et les logiciels installes restent sur le PC. Apres nettoyage, les raccourcis Rapports / Inventaire ouvrent les archives du serveur. Les nouveaux tests materiels ou garanties realises ensuite restent enregistres localement dans IQ_ ; ils ne sont pas renvoyes automatiquement sans le dossier de preparation.
+
+## Controle HP / AnyDesk IQ-4.8.1
+
+Le nouveau WinPE doit annoncer IQ-4.8.1. HPIA est un outil portable : ne pas chercher obligatoirement une application dans Parametres. Le lancer au besoin depuis Constructeur/HP-ImageAssistant.cmd dans IQ_. La preparation verifie son fichier signe dans Program Files avant de declarer sa presence. Le resultat des SoftPaq est indique separement dans le rapport.
+
+AnyDesk officiel est reconnu par sa signature et son enregistrement Windows ou son service, meme si certaines informations de desinstallation manquent. Un fichier simplement telecharge ne suffit pas. Les erreurs de signature restent visibles. Pour un diagnostic sans commande sur le PC, ouvrir son activite sur le site puis Dossier inventaire et telecharger Diagnostics-Deploiement.zip. Les journaux ne sont disponibles sur .250 qu apres transmission reussie.
+
+Pour valider le correctif, effectuer un deploiement de laboratoire avec Bundle HP puis verifier les applications, le lanceur HP, le resultat des SoftPaq dans le PDF et les XML/CSV/journaux sur .250. Redemarrer manuellement si le suivi le demande. Le cache prive est supprime seulement apres confirmation des archives et fin des installations. Un test en VM ne valide pas les pilotes ni le BIOS d un vrai HP.
