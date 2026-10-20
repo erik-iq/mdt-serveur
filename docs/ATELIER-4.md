@@ -2,6 +2,20 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## IQ-5.3.2 : HPIA 4104 et rapports sans installation
+
+Le rapport du HP 840 G5 sous Windows 11 26H2 indiquait Analyze Action List, LastOperation EndAnalyze, un code global 4104 et onze recommandations avec Remediation vide. Le journal du passage Installation ne contenait pas de resultat d installation des SoftPaq. Atelier traitait a tort ces recommandations comme des tentatives dont le resultat etait inconnu, puis remplacait le diagnostic 4104 par un avertissement generique sur les paquets.
+
+La commande d installation utilise maintenant /IgnoreGenericOsError, l option officielle HP qui laisse remonter le code global normal au lieu de la priorite 4104 : par exemple 3010 pour un redemarrage necessaire ou 3020 pour une installation en echec. /Action:Install, /Silent et les controles HP restent actifs ; aucun /Force n est ajoute. Cette option ne garantit pas la compatibilite de tous les SoftPaq avec une version Windows non couverte par une reference dediee.
+
+Les recommandations sans Remediation ne sont plus presentees comme des installations tentees. Si des recommandations sont presentes mais qu aucun resultat d installation n est obtenu, Atelier garde le statut A verifier avec un message explicite. Les vrais codes par SoftPaq, les paquets non automatisables et les redemarrages BIOS restent pris en compte. Les colonnes Nom / Categorie et la valeur Faux des CSV HP francais sont reconnues. Si une reference generique a ete utilisee, cet avertissement reste visible meme quand les codes d installation sont bons.
+
+Le rapport montrait aussi un depot .250 non utilise avec une demande serveur en echec. Le client masquait parfois le motif du serveur derriere Agent CMSL indisponible. Il conserve maintenant ce motif avant de basculer sur Internet. La cause exacte de la synchronisation CMSL reste a verifier dans D:\AtelierPXE\data\hp-repository\worker.log ; le ZIP du poste ne contient pas ce journal serveur.
+
+Sources HP : [notes HPIA, code 4104 et IgnoreGenericOsError](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/HPIA.html), [guide HPIA](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf).
+
+Appliquer la mise a jour sur .250 puis utiliser le nouveau WinPE IQ-5.3.2 pour les prochains deploiements. Une mise a jour serveur ne relance pas les pilotes sur un poste dont la preparation est deja terminee. Les tests utilisent une reproduction du rapport fourni avec uniquement les metadonnees publiques des SoftPaq ; aucun numero de serie ou identifiant de deploiement n est inclus. L installation reelle avec HPIA reste a valider sur le HP.
+
 ## IQ-5.3.1 : reprendre apres Image appliquee
 
 Le serveur conserve la protection contre un nouveau demarrage PXE apres application de l image lorsque la preparation Windows n est pas terminee. Ce cas renvoyait seulement HTTP 409 et bloquait aussi une reinstallation volontaire apres un premier demarrage Windows en echec.

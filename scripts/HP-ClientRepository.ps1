@@ -105,8 +105,13 @@ function Get-AtelierHpRepository {
                 break
             }
             & $OnProgress ('Depot HP '+$platform+' : '+$response.message+'. Attente courte avant utilisation directe de HP.') | Out-Null
+            if ($response.status -in @('failed','unavailable')) {
+                $reason=[string]$response.message
+                if (-not $reason) { $reason='Synchronisation serveur non disponible.' }
+                throw ('Depot HP serveur : '+$reason.Substring(0,[math]::Min(700,$reason.Length))+' Utilisation directe des serveurs HP.')
+            }
             if ($response.PSObject.Properties['worker_available'] -and -not $response.worker_available) { throw 'Agent CMSL indisponible ; demande conservee sur .250 et utilisation directe de HP.' }
-            if ($response.status -in @('failed','unavailable') -or $clock.Elapsed.TotalSeconds -ge $WaitSeconds) { throw 'Depot non pret ; synchronisation conservee sur .250 et installation directe depuis HP.' }
+            if ($clock.Elapsed.TotalSeconds -ge $WaitSeconds) { throw 'Depot non pret ; synchronisation conservee sur .250 et installation directe depuis HP.' }
             Start-Sleep -Milliseconds 5000
         } while ($true)
         $path=Join-Path $DataPath 'hp-repository.zip'

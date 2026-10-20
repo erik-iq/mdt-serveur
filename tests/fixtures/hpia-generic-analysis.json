@@ -1,0 +1,66 @@
+{
+  "HPIA": {
+    "HPIAOperation": "Analyze Action List",
+    "ExitCode": "4104",
+    "LastOperation": "EndAnalyze",
+    "LastOperationStatus": "Success",
+    "LastOperationStatusDesc": "Comparison/Analysis completed",
+    "Recommendations": [
+      {
+        "Name": "HP Collaboration Keyboard Software",
+        "SoftPaqID": "sp110344",
+        "Remediation": {}
+      },
+      {
+        "Name": "HP Hotkey Support",
+        "SoftPaqID": "sp98968",
+        "Remediation": {}
+      },
+      {
+        "Name": "HP Notifications",
+        "SoftPaqID": "sp143471",
+        "Remediation": {}
+      },
+      {
+        "Name": "HP Hotkey Support - UWP",
+        "SoftPaqID": "sp158514",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel WLAN Driver",
+        "SoftPaqID": "sp145593",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Dynamic Platform and Thermal Framework Driver",
+        "SoftPaqID": "sp149507",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Serial IO Driver",
+        "SoftPaqID": "sp96954",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Video Driver and Control Panel",
+        "SoftPaqID": "sp155151",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Bluetooth Driver",
+        "SoftPaqID": "sp141045",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Chipset Installation Utility",
+        "SoftPaqID": "sp148947",
+        "Remediation": {}
+      },
+      {
+        "Name": "Intel Thunderbolt 3 Secure Connect",
+        "SoftPaqID": "sp150742",
+        "Remediation": {}
+      }
+    ]
+  }
+}

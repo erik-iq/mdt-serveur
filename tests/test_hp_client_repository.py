@@ -15,7 +15,7 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH or os.name=='nt',reason='PowerShell and Linux executable fixture required')
 
 
-@pytest.mark.parametrize('case',['cached','pending','failed_sync','bad_archive','manual_package','package_restart','install_failure','analysis_network_failure','no_updates','agent_unavailable','cached_worker_offline'])
+@pytest.mark.parametrize('case',['cached','pending','failed_sync','failed_worker_offline','bad_archive','manual_package','package_restart','install_failure','analysis_network_failure','no_updates','agent_unavailable','cached_worker_offline'])
 def test_each_hp_is_analyzed_before_cached_or_online_install_and_no_install_is_retried(tmp_path,case):
     data=tmp_path/'data';data.mkdir();identifier=str(uuid.uuid4());snapshot_id=str(uuid.uuid4())
     for name in ['HP-ImageAssistant.ps1','HP-ClientRepository.ps1','HP-Repository.ps1','Unattend.ps1']:
@@ -46,9 +46,9 @@ if '/Action:List' in args:
  if 'CASE'=='analysis_network_failure':sys.exit(12)
  report={'HPIA':{'Recommendations':([] if 'CASE'=='no_updates' else [{'SoftPaqID':'SP12345','Name':'Network driver'}]),'InstalledSoftware':[{'SoftPaqID':'SP77777'}]}}
 else:
- assert '/Action:Install' in args and '/AutoReport' in args
+ assert '/Action:Install' in args and '/AutoReport' in args and '/IgnoreGenericOsError' in args
  offline=[a for a in args if a.startswith('/OfflineMode:')]
- expected='CASE' not in {'pending','failed_sync','bad_archive','agent_unavailable','no_updates'}
+ expected='CASE' not in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates'}
  assert bool(offline)==expected,(args,expected)
  if offline:
   cache=pathlib.Path(offline[0].split(':',1)[1]);assert (cache/'sp12345.exe').is_file()
@@ -80,8 +80,8 @@ function Invoke-RestMethod {
  $request=[Text.Encoding]::UTF8.GetString($Body)|ConvertFrom-Json
  if($request.platform -ne '8AB8' -or $request.os -ne 'win11' -or $request.os_version -ne '25H2'){throw 'Wrong repository key'}
  if('CASE' -notin @('analysis_network_failure','no_updates') -and (@($request.required_softpaqs).Count -ne 1 -or $request.required_softpaqs[0] -ne 'SP12345')){throw 'Installed or obsolete packages requested'}
- $status=if('CASE' -in @('pending','agent_unavailable')){'queued'}elseif('CASE' -eq 'failed_sync'){'failed'}else{'ready'}
- @{status=$status;worker_available=$(if('CASE' -in @('agent_unavailable','cached_worker_offline')){$false}else{$true});message='CMSL fixture';platform='8AB8';os='win11';os_version='25H2';snapshot=@{id='SNAPSHOT';url='/api/windows/ID/hp-repository/SNAPSHOT.zip';size=SIZE;sha256='HASH'}}
+ $status=if('CASE' -in @('pending','agent_unavailable')){'queued'}elseif('CASE' -in @('failed_sync','failed_worker_offline')){'failed'}else{'ready'}
+ @{status=$status;worker_available=$(if('CASE' -in @('agent_unavailable','cached_worker_offline','failed_worker_offline')){$false}else{$true});message='CMSL fixture';platform='8AB8';os='win11';os_version='25H2';snapshot=@{id='SNAPSHOT';url='/api/windows/ID/hp-repository/SNAPSHOT.zip';size=SIZE;sha256='HASH'}}
 }
 . 'DATA/HP-ImageAssistant.ps1'
 if('CASE' -eq 'no_updates') {
@@ -103,15 +103,17 @@ $second=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'ROOT/IQ_'
     result=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stderr+result.stdout
     outcome=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))['first']
-    expected_online=case in {'pending','failed_sync','bad_archive','agent_unavailable','no_updates'}
+    expected_online=case in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates'}
     assert outcome['source']==('online' if expected_online else 'depot_250'),outcome
     assert outcome['status']==('needs_attention' if case in {'manual_package','install_failure'} else 'completed'),outcome
     assert outcome['reboot_required']==(case=='package_restart')
     calls=[json.loads(line) for line in Path(str(tool)+'.calls').read_text().splitlines()]
     assert len(calls)==(1 if case=='no_updates' else 2) and '/Action:List' in calls[0]
     if case!='no_updates':assert '/Action:Install' in calls[1]
-    assert (data/'downloaded').exists() == (case not in {'pending','failed_sync','agent_unavailable','no_updates'})
+    assert (data/'downloaded').exists() == (case not in {'pending','failed_sync','failed_worker_offline','agent_unavailable','no_updates'})
     assert not (tmp_path/'escape.exe').exists()
+    if case=='failed_worker_offline':
+        assert 'CMSL fixture' in outcome['repository']['message'] and 'Agent CMSL indisponible' not in outcome['repository']['message']
     if case=='manual_package':
         assert any(p.get('manual') for p in outcome['packages'])
         assert list((tmp_path/'IQ_').rglob('SoftPaqReport.csv'))

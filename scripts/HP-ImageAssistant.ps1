@@ -29,6 +29,9 @@ function Read-AtelierHpiaPackages {
             $report=Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
             foreach ($item in @($report.HPIA.Recommendations)) {
                 if (-not $item) { continue }
+                # The analysis report also contains Recommendations, but an empty
+                # Remediation is not an installation attempt or a package failure.
+                if (-not $item.Remediation -or -not @($item.Remediation.PSObject.Properties).Count) { continue }
                 $code=if ([string]$item.Remediation.ReturnCode -match '^-?\d+$') { [int]$item.Remediation.ReturnCode } else { $null }
                 $description=[string]$item.Remediation.ReturnDescription
                 if (-not $description) { $description='Etat HP : '+[string]$item.Remediation.Status }
@@ -161,11 +164,13 @@ function Read-AtelierHpiaAutoReport {
             $id=@($fields['softpaqid'],$fields['softpaqnumber'],$fields['softpaq']) | Where-Object { $_ -match '^(?i)(SP)?[0-9]{4,8}$' } | Select-Object -First 1
             if (-not $id) { continue };$id='SP'+($id -replace '^(?i)SP','')
             $codeText=@($fields['returncode'],$fields['softpaqreturncode']) | Where-Object { $_ -match '^-?[0-9]+$' } | Select-Object -First 1
-            $manual=$fields['autoinstallable'] -match '^(?i)(false|no|0)$'
+            $manual=$fields['autoinstallable'] -match '^(?i)(false|no|0|faux|non)$'
             if (-not $manual -and $null -eq $codeText) { continue }
             $code=if ($codeText) { [int]$codeText } else { $null }
             $description=if ($manual) { 'SoftPaq non automatisable : intervention manuelle necessaire.' } else { 'Resultat du CSV HP AutoReport.' }
-            [pscustomobject]@{category=([string]$fields['category']);softpaq_id=$id.ToUpperInvariant();name=([string]$fields['name']);code=$code;manual=$manual;description=$description}
+            $name=if($fields['name']){$fields['name']}else{$fields['nom']}
+            $category=if($fields['category']){$fields['category']}elseif($fields['categorie']){$fields['categorie']}else{$fields['catgorie']}
+            [pscustomobject]@{category=([string]$category);softpaq_id=$id.ToUpperInvariant();name=([string]$name);code=$code;manual=$manual;description=$description}
         }
     } catch { }
 }
@@ -260,7 +265,10 @@ function Invoke-AtelierHpia {
                     $result.exit_code=256;$result.status='completed';$result.phase='termine';$result.packages=@()
                     $result.message='Analyse HP terminee : aucune mise a jour recommandee. Aucune copie du depot ni installation inutile.'
                 } else {
-                    $arguments='/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /AutoReport /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'"'
+                    # HP documents this switch to expose the actual installation
+                    # return code instead of letting generic-reference code 4104
+                    # hide e.g. 3010 (reboot) or 3020 (installation failure).
+                    $arguments='/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /AutoReport /IgnoreGenericOsError /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'"'
                     if ($repository -and $repository.status -eq 'offline') { $arguments+=' /OfflineMode:"'+$repository.path+'"' }
                     # HPIA manages its supported packages. Never force unsupported firmware.
                     $sourceText=if ($result.source -eq 'depot_250') { 'depot local .250' } else { 'serveurs HP par Internet' }
@@ -277,8 +285,17 @@ function Invoke-AtelierHpia {
                         if ($package.manual -or -not @($result.packages | Where-Object { $_.softpaq_id -eq $package.softpaq_id }).Count) { $result.packages+=@($package) }
                     }
                     if (@($result.packages | Where-Object { $_.code -in @(3010,1641) }).Count) { $result.reboot_required=$true }
-                    if (@($result.packages | Where-Object { $_.code -notin @(0,3010,1641) }).Count) {
+                    if (@($result.packages | Where-Object { $null -ne $_.code -and $_.code -notin @(0,3010,1641) }).Count) {
                         $result.status='needs_attention';$result.message='Un ou plusieurs SoftPaq HP ont un resultat a verifier ; consulter les rapports HPIA.'
+                    } elseif ($result.status -eq 'completed' -and @($result.packages | Where-Object { $null -eq $_.code -or $_.manual }).Count) {
+                        $result.status='needs_attention';$result.message='Resultats d installation HP incomplets ou intervention manuelle requise ; aucun succes suppose pour un resultat absent.'
+                    } elseif ($result.status -eq 'completed' -and -not $result.packages.Count -and @(Get-AtelierHpiaRecommendedSoftpaqs $reports).Count) {
+                        $result.status='needs_attention';$result.message='Recommandations HP presentes, mais aucun resultat d installation confirme. Consulter le journal HPIA.'
+                    }
+                    $result.generic_os_reference=$result.analysis_exit_code -eq 4104 -or $result.exit_code -eq 4104
+                    if ($result.generic_os_reference -and $result.exit_code -ne 4104) {
+                        $result.message+=' Reference HP generique : cette version de Windows ne dispose pas d une reference HP dediee. Compatibilite a verifier.'
+                        if ($result.status -eq 'completed') { $result.status='needs_attention' }
                     }
                     $biosRestart=@($result.packages | Where-Object { $_.code -in @(3010,1641) -and ($_.category -match '^(?i)BIOS$' -or $_.name -match '(?i)\bBIOS\b') }).Count -gt 0
                     if ($allowResume -and $biosRestart) {
