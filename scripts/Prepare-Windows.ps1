@@ -22,6 +22,7 @@ $empty = New-Object Security.SecureString
 try { Set-LocalUser -SID $administrator[0].SID -Password $empty -PasswordNeverExpires $true }
 finally { $empty.Dispose() }
 Enable-LocalUser -SID $administrator[0].SID
+if (-not (Get-LocalUser -SID $administrator[0].SID).Enabled) { throw 'Activation du compte administrateur integre non verifiee.' }
 # Keep UAC and administrator approval mode, including compatibility with Store apps.
 $policies = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
 New-ItemProperty $policies -Name EnableLUA -Value 1 -PropertyType DWord -Force | Out-Null

@@ -73,7 +73,7 @@ def test_automatic_windows_builtin_account_and_oobe(tmp_path):
         'unattended':True,'keyboard':'040c:0000040c','timezone':'Romance Standard Time','user_locale':'fr-FR'}}))
     xml = execute(tmp_path, "$plan=Get-Content -LiteralPath '"+str(fixture).replace("'","''")+"' -Raw | ConvertFrom-Json\nNew-AtelierUnattend -Plan $plan")
     document=ET.fromstring(xml)
-    assert document.find('.//u:AutoLogon/u:Username',NS).text == 'Administrateur'
+    assert document.find('.//u:AutoLogon/u:Username',NS).text == 'Administrator'
     assert document.find('.//u:AutoLogon/u:Password/u:Value',NS).text is None
     assert document.find('.//u:AdministratorPassword/u:Value',NS).text is None
     assert document.find('.//u:AutoLogon/u:Enabled',NS).text == 'true'

@@ -2,7 +2,23 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
-## Reseau WinPE IQ-5.2 : un seul pilote Intel I219
+## IQ-5.3 : assistant adaptable, redemarrage et compte Administrateur
+
+L assistant WinPE s ouvre maximise et adapte les champs, les textes et le journal a la taille de sa fenetre. Le bandeau utilise la hauteur necessaire au titre et a sa description, sans ligne fixe qui coupe le texte. Le logo reste petit en haut a droite. Le menu lateral disparait lorsque l ecran manque de place ; les pages longues restent defilantes. Redimensionner ne recree pas les champs et ne remet pas a zero les choix ni la progression.
+
+Apres application de l image, copie des scripts de preparation, ecriture et relecture du fichier de reponses et configuration du demarrage UEFI, l agent annonce l image preparee au serveur. Il libere ensuite ses fichiers et son verrou puis demande le redemarrage WinPE apres cinq secondes. Aucun redemarrage automatique ne suit un echec du deploiement. Un refus de wpeutil reste affiche dans le journal. Le statut image appliquee ne signifie pas que les logiciels Windows sont deja installes : ils continuent au premier demarrage.
+
+Le fichier de reponses utilisait Administrateur comme Username AutoLogon. Microsoft exige le nom neutre anglais Administrator pour activer automatiquement le compte integre pendant Setup, meme pour une image francaise. La correction utilise Administrator dans le XML ; le compte reel reste identifie par son SID se terminant par -500 et configure sous le nom Administrateur. Son activation dans specialize est relue et verifiee. Les connexions automatiques sont arretees par Atelier apres le lancement de la maintenance. Aucun autre compte ni mot de passe de secours n est cree.
+
+Source : [Microsoft - AutoLogon Username, seul Administrator en anglais active automatiquement le compte](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-autologon-username).
+
+La mise a jour sur .250 reconstruit et importe WinPE avant de nettoyer les anciennes images Atelier. Le nettoyage reconnait aussi l ancien cache Drivers\WinPE-Official\HP-sp173204 et son extracteur WinPE-HPDrivers.ps1 remplace par Intel. Les fichiers locaux modifies, chemins lies, caches encore ouverts, donnees actives et depot HPIA/CMSL sont conserves. Les trois dernieres sauvegardes restent disponibles. Les anciennes procedures de reprise de l extracteur HP ont ete retirees de cette documentation.
+
+Executer Upgrade-Atelier4.ps1 sur .250 et redemarrer sur le nouveau WinPE IQ-5.3. La mise a jour du serveur ne modifie pas une installation Windows deja terminee ni une session WinPE deja ouverte.
+
+Les tests executent le generateur XML, la configuration du compte avec comptes simules, les gardes du redemarrage et le nettoyage dans des dossiers temporaires. La syntaxe PowerShell est controlee. Les controles WinForms de tailles et de redimensionnement exigent Windows et sont ignores dans l environnement Linux ; le rendu physique, OOBE et le redemarrage reel restent a valider sur un poste de test.
+
+## Reseau WinPE : un seul pilote Intel I219
 
 Sur le HP EliteBook 840 G5, la connexion fonctionne avec la docking mais pas avec le port integre. Les deux interfaces utilisent des pilotes differents. Le demarrage PXE utilise le reseau du firmware UEFI ; une fois WinPE charge, Windows doit disposer de son propre pilote. Une absence totale d interface dans ipconfig /all ne correspond pas a un refus du bouton Connexion. Le numero de serie reste l identifiant du PC, meme si le dock change.
 
@@ -14,47 +30,11 @@ Les pilotes deja inclus par Microsoft dans l ADK sont conserves pour les autres 
 
 Au lancement, si aucune IPv4 utilisable n est presente et si le PCI correspond a 15D7 / 15D8, Atelier tente une seule fois drvload sur le fichier effectivement injecte, verifie par son empreinte, puis relance l initialisation reseau. Chaque commande a un delai de 15 secondes maximum. Une docking deja connectee n est pas reinitialisee. L assistant reste accessible en cas d echec ; Logs\network-recovery.json conserve les codes des commandes dans WinPE.
 
-Appliquer la revision sur .250 avec Upgrade-Atelier4.ps1, puis redemarrer le HP sur le nouveau WinPE IQ-5.2 pour tester le port integre. Une session WinPE deja ouverte ne recoit pas les nouveaux pilotes. La docking peut etre utilisee entre-temps. L installation des logiciels et HPIA dans Windows n est pas modifiee par cette correction.
+Appliquer la revision sur .250 avec Upgrade-Atelier4.ps1, puis redemarrer le HP sur le nouveau WinPE IQ-5.3 pour tester le port integre. Une session WinPE deja ouverte ne recoit pas les nouveaux pilotes. La docking peut etre utilisee entre-temps. L installation des logiciels et HPIA dans Windows n est pas modifiee par cette correction.
 
 Les tests executent l extraction de ZIP de test, la selection materielle / version de WinPE, les controles de cache, les refus d archive et l orchestration de la construction et du demarrage. Les operations ADK / DISM / WDS sont simulees. Le telechargement du vrai ZIP Intel est bloque par la politique reseau de l environnement de developpement ; sa structure reelle et le port du HP physique restent a valider sur .250. La construction refuse de substituer un autre pilote si aucun INF conforme n est trouve.
 
 Sources : [telechargement officiel Intel et SHA-256](https://www.intel.com/content/www/us/en/download/727998/intel-network-adapter-driver-for-microsoft-windows-11.html), [README Intel 31.2.2](https://downloadmirror.intel.com/923981/readme.txt), [notes HP listant le 840 G5 et la famille I219](https://ftp.hp.com/pub/softpaq/sp98501-99000/sp98585.html).
-
-## Historique IQ-5.1 : pack HP remplace en IQ-5.2
-
-Les sections IQ-5.1 ci-dessous decrivent l ancienne implementation. Ne pas appliquer leurs reprises de script a IQ-5.2.
-
-## Pilotes reseau WinPE IQ-5.1
-
-Un PC qui affiche ConnectFailure / NetworkUnreachable et aucune interface dans ipconfig /all, meme apres wpeutil InitializeNetwork, ne dispose pas d une interface reseau utilisable dans WinPE. Le fonctionnement sur un autre PC ne garantit pas la prise en charge de sa carte : les controles SN et l API sont communs, les pilotes peuvent differer. L absence d interface oriente vers un pilote absent ou incompatible, ou une interface desactivee ; elle ne donne pas l identifiant materiel exact du controleur.
-
-Build-WinPE.ps1 telecharge maintenant automatiquement le pack officiel HP Client Windows PE 10/11 x64 3.40 (sp173204, 22 juin 2026). Les notes HP listent notamment les pilotes Intel I219LM/V et plusieurs pilotes Ethernet de docks. La version est fixee pour permettre des reconstructions reproductibles. Aucun fichier de l ancien MDT n est recherche ni importe.
-
-Le SoftPaq est conserve une seule fois sur .250, normalement dans D:\AtelierPXE\Drivers\WinPE-Official\HP-sp173204. Les reconstructions suivantes reutilisent ce cache. Le script exige une signature Authenticode valide de HP avant extraction ; le cache extrait est controle par SHA-256 et reconstruit si un fichier manque ou change. L extraction utilise /s /e /f sans installation sur le serveur. Un verrou empeche deux extractions simultanees.
-
-Seuls les INF de classe Net du pack sont injectes par DISM, avec leur arborescence de fichiers d origine conservee dans le cache ; les pilotes de stockage et chipset du pack ne sont pas ajoutes a WinPE. Les INF explicitement Wi-Fi seuls (IfType 71 sans Ethernet IfType 6) sont ignores. Les pilotes existants de l ADK sont conserves. Windows choisit les pilotes applicables selon le materiel : le WinPE reste commun aux differentes marques. Cette selection Net ne rend pas le Wi-Fi utilisable dans WinPE et ne garantit pas la prise en charge de tout adaptateur tiers. Un dossier supplementaire -DriversPath reste pris en charge.
-
-La premiere construction necessite Internet vers ftp.ext.hp.com ; un echec de telechargement, signature, extraction ou integration interrompt la construction. Aucun ForceUnsigned n est utilise. L ancien WinPE Atelier est nettoye seulement apres import reussi de son remplacement dans WDS. Le fichier atelier-winpe.json du nouveau dossier conserve la revision, le SoftPaq, sa source et son empreinte.
-
-Sur .250, appliquer la revision avec Upgrade-Atelier4.ps1, puis redemarrer le PC sur le nouveau WinPE date qui annonce IQ-5.1. Une mise a jour du serveur ne modifie pas une session WinPE deja ouverte. Les tests couvrent cache, fichiers modifies/manquants, signature refusee, telechargement/extraction en echec et integration DISM interrompue, avec operations constructeur et Windows simulees. L extraction du vrai SoftPaq et la reconnaissance du HP physique restent a valider sous Windows.
-
-Sources : [pack WinPE officiel HP](https://ftp.hp.com/pub/caps-softpaq/cmit/HP_WinPE_DriverPack.html), [notes et pilotes inclus](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/softpaq/WinPE11.html).
-
-### Correctif extraction Windows PowerShell 5.1
-
-Le message Extraction WinPE HP en echec (code ) sans numero provenait d un code de sortie null apres Start-Process / WaitForExit. Le script classait cette valeur comme un echec alors que l extraction pouvait etre terminee. Le lancement utilise maintenant directement System.Diagnostics.Process, sans shell, avec attente limitee et recuperation du code avant fermeture du processus. Un code absent reste refuse avec un message explicite ; les codes inattendus restent des echecs. Les controles des fichiers INF / SYS / CAT restent obligatoires.
-
-Sur une console deja mise a jour vers IQ-5.1, remplacer seulement scripts\WinPE-HPDrivers.ps1 puis relancer Build-WinPE.ps1 depuis le dossier installe, avec le cache D:\AtelierPXE\Drivers\WinPE-Official. Le SoftPaq signe deja telecharge est reutilise. Importer le nouveau WinPE dans WDS avant de nettoyer les anciens. Aucun changement du serveur web ni de Windows sur les postes n est necessaire pour cette reprise.
-
-Les tests incluent un vrai processus a sortie immediate, un code 7 et un depassement du delai, ainsi que les simulations de cache et de code absent. Sous Windows, le test de processus utilise explicitement Windows PowerShell 5.1 et un extracteur de test compile ; ce test ne remplace pas l execution du vrai SoftPaq HP sur .250.
-
-### Retour HP 1168 apres extraction
-
-Le pack sp173204 peut retourner 1168 apres avoir extrait ses fichiers. Ce comportement est rapporte dans [le code publie du module communautaire HPWinPEDrivers](https://www.powershellgallery.com/packages/HPWinPEDrivers/1.0.0/Content/Private%5CExpand-HPSoftPaq.ps1) pour ce meme pack et cette meme ligne de commande. Cela ne constitue pas une definition generale de succes pour le code Windows 1168.
-
-Pour ce pack signe uniquement, Atelier laisse le code 1168 passer a la verification du contenu du nouveau dossier temporaire vide au depart. Il exige des INF reseau selectionnables, des SYS et des CAT. Une extraction vide ou incomplete reste un echec ; aucun manifeste valide n est publie. Les comptes de fichiers et le code sont conserves dans D:\AtelierPXE\Drivers\WinPE-Official\HP-sp173204\extraction-result.json, meme si le dossier temporaire est nettoye. Le controle DISM des pilotes reste obligatoire avant sauvegarde et import de l image.
-
-Un contenu present autorise la mise en cache et l essai d integration ; il ne prouve pas que tous les pilotes sont applicables au PC. Un refus DISM interrompt toujours la construction. Les tests reproduisent 1168 avec contenu complet, dossier vide, catalogue absent et aucun INF reseau ; ils n executent pas le vrai SoftPaq HP dans cet environnement.
 
 ## Diagnostic du bouton Connexion IQ-5.0.1
 

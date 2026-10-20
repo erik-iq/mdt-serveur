@@ -22,6 +22,7 @@ $script:selectedProfile = $null
 $script:targetName = ''
 $script:controls = @{}
 $script:applyingSoftwarePreset=$false
+$script:resizing=$false
 $script:operatorKeyboard = '100c:0000100c'
 $script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
@@ -151,6 +152,50 @@ function Selected-Applications {
     foreach ($bundle in @($script:session.catalog.bundles | Where-Object { $_.id -in @($script:settings.bundle_ids) })) { $ids += @($bundle.application_ids) }
     return @($script:session.catalog.applications | Where-Object { $_.id -in $ids -and (Test-AtelierManufacturer $_.manufacturer $script:manufacturer) })
 }
+function Update-WizardLayout {
+    if ($script:resizing -or -not $script:body) { return }
+    $script:resizing=$true
+    $script:body.SuspendLayout()
+    try {
+        # Preserve field values and deployment controls; never recreate a page on resize.
+        $scale=1.0
+        if ($form.PSObject.Properties['DeviceDpi']) { $scale=[math]::Max(1.0,$form.DeviceDpi/96.0) }
+        $compact=$form.ClientSize.Width -lt 940*$scale -or $form.ClientSize.Height -lt 600*$scale
+        $sidebar.Visible=-not $compact
+        $layout.ColumnStyles[0].Width=$(if($compact){0}else{190*$scale})
+        $padding=[int]($(if($compact){12}else{24})*$scale)
+        $main.Padding=New-Object Windows.Forms.Padding($padding,[int](12*$scale),$padding,[int](12*$scale))
+        $layout.PerformLayout()
+        $textWidth=[math]::Max(80,$header.ClientSize.Width-$header.Padding.Horizontal-$header.ColumnStyles[1].Width-12*$scale)
+        $script:title.MaximumSize=New-Object Drawing.Size($textWidth,0)
+        $script:description.MaximumSize=New-Object Drawing.Size($textWidth,0)
+        $script:status.MaximumSize=New-Object Drawing.Size(([math]::Max(80,$main.ClientSize.Width-$main.Padding.Horizontal-6)),0)
+        $header.PerformLayout();$main.PerformLayout()
+        $buttonWidth=[int][math]::Max(80,[math]::Min(150*$scale,($buttons.ClientSize.Width-20*$scale)/2))
+        foreach ($button in @($script:next,$script:back)) {
+            $button.Width=$buttonWidth;$button.Height=[int](40*$scale)
+        }
+        $main.RowStyles[3].Height=[int](44*$scale)
+        # Reserve the scrollbar width to avoid horizontal overflow when it appears.
+        $width=[math]::Max(80,$script:body.ClientSize.Width-$script:body.Padding.Horizontal-[Windows.Forms.SystemInformation]::VerticalScrollBarWidth)
+        foreach ($control in $script:body.Controls) {
+            $available=[math]::Max(60,$width-$control.Margin.Horizontal)
+            if ($control -is [Windows.Forms.Label]) { $control.MaximumSize=New-Object Drawing.Size($available,0) }
+            else { $control.Width=$available }
+        }
+        if ($script:page -eq 5 -and $script:logs -and -not $script:logs.IsDisposed) {
+            $otherHeight=$script:body.Padding.Vertical
+            foreach ($control in $script:body.Controls) {
+                if ($control -ne $script:logs) { $otherHeight+=$control.GetPreferredSize((New-Object Drawing.Size($width,0))).Height+$control.Margin.Vertical }
+            }
+            $script:logs.Height=[math]::Max(100,$script:body.ClientSize.Height-$otherHeight-$script:logs.Margin.Vertical-8)
+        }
+    } finally {
+        $script:body.ResumeLayout($true)
+        $header.Invalidate()
+        $script:resizing=$false
+    }
+}
 function Show-Page {
     $script:body.SuspendLayout()
     foreach ($control in @($script:body.Controls)) { $control.Dispose() }
@@ -272,6 +317,7 @@ function Show-Page {
         }
     }
     $script:body.ResumeLayout()
+    Update-WizardLayout
 }
 function Connect-Post {
     $script:connectionStage='Identification du poste'
@@ -332,16 +378,19 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.2'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.3'
 $form.Font=New-AtelierFont -Size 10
-$form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
+$form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'Dpi'
+$form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96)
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.ClientSize = New-Object Drawing.Size(([math]::Min(980,$bounds.Width-30)),([math]::Min(690,$bounds.Height-50)))
-$form.MinimumSize = New-Object Drawing.Size(760,560)
+$form.MinimumSize = New-Object Drawing.Size(([math]::Min(640,$bounds.Width)),([math]::Min(480,$bounds.Height)))
+$form.WindowState='Maximized'
 $layout = New-Object Windows.Forms.TableLayoutPanel
 $layout.Dock = 'Fill'; $layout.ColumnCount = 2; $layout.RowCount = 1
 $layout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Absolute,190))) | Out-Null
 $layout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
+$layout.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
 $form.Controls.Add($layout)
 $sidebar = New-Object Windows.Forms.FlowLayoutPanel
 $sidebar.Dock = 'Fill'; $sidebar.FlowDirection = 'TopDown'; $sidebar.WrapContents = $false
@@ -353,28 +402,27 @@ foreach ($name in $script:steps) { $item=New-Text $name 10; $item.Margin=New-Obj
 $layout.Controls.Add($sidebar,0,0)
 $main = New-Object Windows.Forms.TableLayoutPanel
 $main.Dock = 'Fill'; $main.RowCount = 4; $main.ColumnCount = 1; $main.Padding = New-Object Windows.Forms.Padding(24,20,24,14)
-$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,105))) | Out-Null
+$main.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
+$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
-$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,32))) | Out-Null
+$main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $main.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute,44))) | Out-Null
 $layout.Controls.Add($main,1,0)
 $header = New-Object Windows.Forms.TableLayoutPanel
 Set-AtelierGradient $header
-$header.Dock='Fill';$header.ColumnCount=2;$header.RowCount=1
+$header.Dock='Top';$header.ColumnCount=2;$header.RowCount=2
+$header.AutoSize=$true;$header.AutoSizeMode='GrowAndShrink'
+$header.Padding=New-Object Windows.Forms.Padding(8,8,4,8)
+$header.Margin=New-Object Windows.Forms.Padding(0,0,0,12)
+$header.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::AutoSize))) | Out-Null
+$header.RowStyles.Add((New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent,100))) | Out-Null
 $header.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Absolute,48))) | Out-Null
-$headerText=New-Object Windows.Forms.FlowLayoutPanel
-$headerText.Padding=New-Object Windows.Forms.Padding(8,3,0,0)
-$headerText.Dock='Fill';$headerText.FlowDirection='TopDown';$headerText.WrapContents=$false;$headerText.BackColor=[Drawing.Color]::Transparent
-$script:title = New-Text 'Connexion' 21 $true; $headerText.Controls.Add($script:title)
-$script:description = New-Text '' 9; $script:description.ForeColor=$muted; $headerText.Controls.Add($script:description)
-$headerText.Add_SizeChanged({
-    $script:title.MaximumSize=New-Object Drawing.Size(([math]::Max(100,$this.ClientSize.Width-12)),0)
-    $script:description.MaximumSize=New-Object Drawing.Size(([math]::Max(100,$this.ClientSize.Width-12)),0)
-})
-$header.Controls.Add($headerText,0,0)
-$headerLogo=New-AtelierLogo;$headerLogo.Margin=New-Object Windows.Forms.Padding(4,10,4,0)
+$script:title = New-Text 'Connexion' 21 $true;$script:title.Anchor='Top,Left,Right';$header.Controls.Add($script:title,0,0)
+$script:description = New-Text '' 9;$script:description.Anchor='Top,Left,Right';$script:description.ForeColor=$muted;$header.Controls.Add($script:description,0,1)
+$headerLogo=New-AtelierLogo;$headerLogo.Margin=New-Object Windows.Forms.Padding(4,2,4,0)
 $header.Controls.Add($headerLogo,1,0)
+$header.SetRowSpan($headerLogo,2)
 $main.Controls.Add($header,0,0)
 $script:body = New-Object Windows.Forms.FlowLayoutPanel
 $script:body.BackColor=Get-AtelierColor 'surface'
@@ -382,11 +430,14 @@ $script:body.Padding=New-Object Windows.Forms.Padding(12,8,0,8)
 $script:body.Dock='Fill';$script:body.FlowDirection='TopDown';$script:body.WrapContents=$false;$script:body.AutoScroll=$true
 $main.Controls.Add($script:body,0,1)
 $script:status = New-Text 'Ethernet / UEFI x64 / installation supervisee' 9
-$script:status.Dock='Fill';$script:status.AutoSize=$false;$main.Controls.Add($script:status,0,2)
+$script:status.Dock='Top';$main.Controls.Add($script:status,0,2)
 $buttons = New-Object Windows.Forms.FlowLayoutPanel
-$buttons.Dock='Fill';$buttons.FlowDirection='RightToLeft'
+$buttons.Dock='Fill';$buttons.FlowDirection='RightToLeft';$buttons.WrapContents=$false
 $script:next=New-Button 'Connexion' $true;$script:back=New-Button 'Retour'
 $buttons.Controls.Add($script:next);$buttons.Controls.Add($script:back);$main.Controls.Add($buttons,0,3)
+$form.Add_ClientSizeChanged({ Update-WizardLayout })
+$script:body.Add_ClientSizeChanged({ Update-WizardLayout })
+$header.Add_ClientSizeChanged({ Update-WizardLayout })
 $script:back.Add_Click({ try { Save-Page; $script:page--; Show-Page } catch { $script:status.Text=$_.Exception.Message } })
 $script:next.Add_Click({
     try {
@@ -413,6 +464,7 @@ $script:timer.Add_Tick({
         if ($message -match '^ATELIER\|(\d+)\|(.*)$') {
             $script:progress.Value=[math]::Min(100,[int]$Matches[1]);$script:stage.Text=$Matches[2]
             $script:logs.AppendText($Matches[2] + "`r`n")
+            Update-WizardLayout
         }
     }
     if ($script:invocation.IsCompleted) {
@@ -424,9 +476,9 @@ $script:timer.Add_Tick({
                 $script:stage.Text='Installation interrompue : consulter le journal.'
                 foreach($errorRecord in $script:engine.Streams.Error){$script:logs.AppendText($errorRecord.ToString() + "`r`n")}
             } else {
-                $script:stage.Text='Image appliquee. Premier demarrage Windows a verifier.'
+                $script:stage.Text='Image appliquee. Redemarrage vers Windows demande.'
                 $script:progress.Value=100
-                $script:logs.AppendText("Eteignez WinPE avec wpeutil shutdown, puis demarrez Windows depuis le disque. Verifiez ensuite C:\ProgramData\AtelierPXE\result.json.`r`n")
+                $script:logs.AppendText("Windows terminera sa configuration, puis les logiciels seront installes en arriere-plan.`r`n")
             }
         } catch { $script:stage.Text='Echec du deploiement.';$script:logs.AppendText($_.Exception.Message) }
         finally { $script:running=$false;$script:engine.Dispose();$script:next.Text='Fermer';$script:next.Enabled=$true }
@@ -435,7 +487,7 @@ $script:timer.Add_Tick({
 $form.Add_FormClosing({ param($sender,$eventArgs) if($script:running){$eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'} })
 $script:startupFailure = $null
 $form.Add_Shown({
-    try { Show-Page; if ($Config.internal_mode) { try { Connect-Post } catch { $script:status.Text=$_.Exception.Message } } } catch {
+    try { $form.WindowState='Maximized';Show-Page; if ($Config.internal_mode) { try { Connect-Post } catch { $script:status.Text=$_.Exception.Message } } } catch {
         # Return startup errors to Launch.ps1 instead of leaving a blank form.
         $script:startupFailure = $_
         $form.Close()

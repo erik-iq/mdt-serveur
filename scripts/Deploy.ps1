@@ -16,6 +16,7 @@ $ServerUrl = $ServerUrl.TrimEnd('/')
 $endpoint = "$ServerUrl/api/agent/$DeploymentId"
 $lastProgress = 0
 $started = $false
+$staged = $false
 $imageLock = $null
 . (Join-Path $PSScriptRoot 'Timings.ps1')
 $timingPath=Join-Path $env:TEMP ('AtelierTiming-'+[guid]::NewGuid().ToString('N'))
@@ -187,8 +188,9 @@ exit
     Assert-Active
     Assert-AtelierUnattendFile -Path $answer.path -ExpectedHash $answer.sha256
     Assert-AtelierUnattendFile -Path $answerBackup.path -ExpectedHash $answerBackup.sha256
-    Send-Event 'staged' 100 'Image appliquee. Les logiciels seront telecharges et installes silencieusement apres le demarrage Windows.'
-    Write-Host 'Installation preparee. Verifiez le journal, puis redemarrez avec wpeutil reboot. Le premier demarrage Windows reste a controler.' -ForegroundColor Green
+    Send-Event 'staged' 100 'Image appliquee. Redemarrage automatique vers Windows ; installation des logiciels au premier demarrage.'
+    $staged = $true
+    Write-Host 'Image et demarrage prepares. Redemarrage automatique dans 5 secondes.' -ForegroundColor Green
 } catch {
     $failure = $_
     if ($imageTiming) {
@@ -207,3 +209,5 @@ exit
     $headers.Clear()
     $Token = $null
 }
+# All answer files are verified and handles released before the reboot request.
+Restart-AtelierStagedWindows -Staged $staged

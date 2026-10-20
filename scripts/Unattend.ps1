@@ -29,10 +29,12 @@ function New-AtelierUnattend {
 '@
     $automatic = ''
     if ($settings.unattended) {
+        # Setup only recognizes the English neutral name to enable RID 500,
+        # even when the installed Windows language is French.
         $automatic = @"
    <OOBE><HideEULAPage>true</HideEULAPage><HideOEMRegistrationScreen>true</HideOEMRegistrationScreen><HideOnlineAccountScreens>true</HideOnlineAccountScreens><HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE><ProtectYourPC>1</ProtectYourPC></OOBE>
    <UserAccounts><AdministratorPassword><Value></Value><PlainText>true</PlainText></AdministratorPassword></UserAccounts>
-   <AutoLogon><Password><Value></Value><PlainText>true</PlainText></Password><Domain>$hostname</Domain><Enabled>true</Enabled><LogonCount>1</LogonCount><Username>Administrateur</Username></AutoLogon>
+   <AutoLogon><Password><Value></Value><PlainText>true</PlainText></Password><Domain>$hostname</Domain><Enabled>true</Enabled><LogonCount>1</LogonCount><Username>Administrator</Username></AutoLogon>
 "@
     }
     $xml = @"

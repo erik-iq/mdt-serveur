@@ -13,7 +13,7 @@
 <li>Dans Logiciels &amp; bureau, choisir Bundle HP (VLC, Adobe Reader, Chrome, AnyDesk et HP Image Assistant) ou Bundle Lenovo (les quatre logiciels usuels et Lenovo System Update). Ajuster ensuite les cases si necessaire. Seuls les logiciels coches seront installes silencieusement dans Windows ; HPIA decoche ne lance pas de SoftPaq. Le fond <code>Fond Atelier.png</code> est propose s il est enregistre sur le serveur ; le theme et le fond restent modifiables. Proprietaire et organisation ne sont plus demandes.</li>
 <li>Lire le recapitulatif, choisir le bon disque en verifiant sa taille et son numero de serie. <strong>Installer Windows</strong> efface ce disque.</li>
 <li>Attendre la fin de l application de l image. Redemarrer sur le disque local Windows, avec le demarrage reseau retire de la priorite.</li>
-<li>Windows termine ses operations natives puis ouvre le compte de preparation Administrateur. L installation des logiciels et la preparation continuent en arriere-plan. La fenetre IQ Atelier peut etre reduite pour travailler.</li>
+<li>Une fois l image et le demarrage verifies, WinPE redemarre automatiquement apres cinq secondes. En cas d echec, le journal reste accessible. Windows termine ses operations natives puis ouvre le compte de preparation Administrateur. L installation des logiciels et la preparation continuent en arriere-plan. La fenetre IQ Atelier peut etre reduite pour travailler.</li>
 <li>Consulter le resultat final. Un avertissement signifie qu un point reste a verifier : logiciel en echec, mise a jour reportee ou redemarrage requis. Le suivi ne prouve pas qu un test manuel a ete effectue.</li>
 </ol>
 <p>Le compte de preparation utilise le mode automatique deja configure dans l atelier. Avant remise au client, configurer le compte final et sa securite selon votre procedure. L ouverture automatique est desactivee a la fin de la preparation.</p>
@@ -45,7 +45,7 @@
 <h2>En cas de probleme</h2>
 <ul>
 <li>PXE absent : verifier UEFI, Ethernet, pilotes WinPE et qu un seul serveur PXE repond.</li>
-<li>Connexion WinPE impossible avec NetworkUnreachable et aucune interface dans ipconfig /all : la reconstruction IQ-5.2 ajoute un seul pilote Intel I219 cible pour le port integre du HP 840 G5. Une docking qui fonctionne utilise une autre carte reseau. Demarrer le PC sur la nouvelle image datee. Le fonctionnement sur un Dell ou une VM ne garantit pas que les pilotes du HP soient deja presents.</li>
+<li>Connexion WinPE impossible avec NetworkUnreachable et aucune interface dans ipconfig /all : la reconstruction IQ-5.3 ajoute un seul pilote Intel I219 cible pour le port integre du HP 840 G5. Une docking qui fonctionne utilise une autre carte reseau. Demarrer le PC sur la nouvelle image datee. Le fonctionnement sur un Dell ou une VM ne garantit pas que les pilotes du HP soient deja presents.</li>
 <li>Mauvaise edition : choisir un autre profil correspondant a la licence, ou faire synchroniser les profils depuis le WIM par l administrateur.</li>
 <li>Echec avant partitionnement : lire le journal dans WinPE et dans l activite du site. Le disque ne doit pas etre efface tant que les controles ne sont pas passes.</li>
 <li>Logiciel en echec : consulter <code>C:\ProgramData\AtelierPXE\software-logs</code> et le PDF. Le reste de la preparation peut continuer.</li>

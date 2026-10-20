@@ -140,3 +140,12 @@ function Assert-AtelierMachineIdentity {
         if (-not $Plan.mac -or $Plan.mac -notin $network.macs) { throw 'Ancienne autorisation MAC incompatible. Utiliser une fiche par numero de serie. Aucun disque efface.' }
     }
 }
+function Restart-AtelierStagedWindows {
+    param([bool]$Staged)
+    if (-not $Staged) { return }
+    if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Redemarrage automatique autorise uniquement dans WinPE.' }
+    Write-Information -MessageData 'ATELIER|100|Redemarrage vers Windows dans 5 secondes...' -InformationAction Continue
+    Start-Sleep -Seconds 5
+    & wpeutil.exe reboot
+    if ($LASTEXITCODE -ne 0) { throw ('Image preparee, mais redemarrage WinPE en echec (code '+$LASTEXITCODE+'). Utiliser le menu pour redemarrer.') }
+}
