@@ -3,6 +3,7 @@
 import ctypes
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -54,6 +55,12 @@ def test_adk_batch_paths_environment_and_failure_codes(tmp_path, environment_exi
         'exit /b 0\r\n'
     ).encode('ascii'))
 
+    source = tmp_path / 'source'
+    shutil.copytree(BUILD_SCRIPT.parent, source)
+    inf = tmp_path / 'official-network-fixture.inf'
+    inf.write_text('[Version]\nClass=Net')
+    (source / 'WinPE-HPDrivers.ps1').write_text(
+        "function Get-AtelierWinPEHpDrivers { param($CacheRoot) return [pscustomobject]@{network_infs=@(" + ps_quote(inf) + ");softpaq='fixture'} }", encoding='ascii')
     wrapper = tmp_path / 'invoke-build.ps1'
     wrapper.write_text(f"""
 $ErrorActionPreference = 'Stop'
@@ -63,6 +70,7 @@ function Mount-WindowsImage {{
     Set-Content -LiteralPath {ps_quote(mounted)} -Value 'mounted'
 }}
 function Add-WindowsPackage {{ param($Path, $PackagePath) }}
+function Add-WindowsDriver {{ [CmdletBinding()]param($Path,$Driver) if ($Driver -ne {ps_quote(inf)}) {{ throw 'Unexpected driver' }} }}
 function Start-Process {{
     [CmdletBinding()]
     param($FilePath,$ArgumentList,[switch]$NoNewWindow,[switch]$Wait,[switch]$PassThru)
@@ -73,7 +81,7 @@ function Start-Process {{
     Microsoft.PowerShell.Management\\Start-Process @PSBoundParameters
 }}
 function Dismount-WindowsImage {{ param($Path, [switch]$Save, [switch]$Discard) }}
-& {ps_quote(BUILD_SCRIPT)} -ServerUrl 'https://192.168.99.250' -OutputPath {ps_quote(output)}
+& {ps_quote(source / 'Build-WinPE.ps1')} -ServerUrl 'https://192.168.99.250' -OutputPath {ps_quote(output)}
 """, encoding='utf-8-sig')
     child_environment = os.environ.copy()
     child_environment['ProgramFiles(x86)'] = str(program_files)

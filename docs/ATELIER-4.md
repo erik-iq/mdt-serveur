@@ -2,6 +2,22 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## Pilotes reseau WinPE IQ-5.1
+
+Un PC qui affiche ConnectFailure / NetworkUnreachable et aucune interface dans ipconfig /all, meme apres wpeutil InitializeNetwork, ne dispose pas d une interface reseau utilisable dans WinPE. Le fonctionnement sur un autre PC ne garantit pas la prise en charge de sa carte : les controles SN et l API sont communs, les pilotes peuvent differer. L absence d interface oriente vers un pilote absent ou incompatible, ou une interface desactivee ; elle ne donne pas l identifiant materiel exact du controleur.
+
+Build-WinPE.ps1 telecharge maintenant automatiquement le pack officiel HP Client Windows PE 10/11 x64 3.40 (sp173204, 22 juin 2026). Les notes HP listent notamment les pilotes Intel I219LM/V et plusieurs pilotes Ethernet de docks. La version est fixee pour permettre des reconstructions reproductibles. Aucun fichier de l ancien MDT n est recherche ni importe.
+
+Le SoftPaq est conserve une seule fois sur .250, normalement dans D:\AtelierPXE\Drivers\WinPE-Official\HP-sp173204. Les reconstructions suivantes reutilisent ce cache. Le script exige une signature Authenticode valide de HP avant extraction ; le cache extrait est controle par SHA-256 et reconstruit si un fichier manque ou change. L extraction utilise /s /e /f sans installation sur le serveur. Un verrou empeche deux extractions simultanees.
+
+Seuls les INF de classe Net du pack sont injectes par DISM, avec leur arborescence de fichiers d origine conservee dans le cache ; les pilotes de stockage et chipset du pack ne sont pas ajoutes a WinPE. Les INF explicitement Wi-Fi seuls (IfType 71 sans Ethernet IfType 6) sont ignores. Les pilotes existants de l ADK sont conserves. Windows choisit les pilotes applicables selon le materiel : le WinPE reste commun aux differentes marques. Cette selection Net ne rend pas le Wi-Fi utilisable dans WinPE et ne garantit pas la prise en charge de tout adaptateur tiers. Un dossier supplementaire -DriversPath reste pris en charge.
+
+La premiere construction necessite Internet vers ftp.ext.hp.com ; un echec de telechargement, signature, extraction ou integration interrompt la construction. Aucun ForceUnsigned n est utilise. L ancien WinPE Atelier est nettoye seulement apres import reussi de son remplacement dans WDS. Le fichier atelier-winpe.json du nouveau dossier conserve la revision, le SoftPaq, sa source et son empreinte.
+
+Sur .250, appliquer la revision avec Upgrade-Atelier4.ps1, puis redemarrer le PC sur le nouveau WinPE date qui annonce IQ-5.1. Une mise a jour du serveur ne modifie pas une session WinPE deja ouverte. Les tests couvrent cache, fichiers modifies/manquants, signature refusee, telechargement/extraction en echec et integration DISM interrompue, avec operations constructeur et Windows simulees. L extraction du vrai SoftPaq et la reconnaissance du HP physique restent a valider sous Windows.
+
+Sources : [pack WinPE officiel HP](https://ftp.hp.com/pub/caps-softpaq/cmit/HP_WinPE_DriverPack.html), [notes et pilotes inclus](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/softpaq/WinPE11.html).
+
 ## Diagnostic du bouton Connexion IQ-5.0.1
 
 Cette correction concerne toutes les marques. Elle ne change ni les pilotes ni la configuration reseau. Le bouton distingue la connexion a l API Atelier, la recuperation des acces au partage, l ouverture du partage des images et le chargement des profils. Une erreur pendant la connexion ouvre une boite de dialogue complete, avec l etape, l adresse du serveur, le code HTTP / transport disponible et le message Windows. Elle ne reste plus tronquee dans la bande d etat de 32 pixels.

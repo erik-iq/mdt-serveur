@@ -23,7 +23,7 @@ $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $output=Join-Path $OutputRoot ('WinPE-Atelier4-' + $stamp)
 $imageName='Atelier PXE - ATELIER-4 - ' + $stamp
-$parameters=@{ServerUrl=$config.base_url;OutputPath=$output;TrustedRootCertificate=$TrustedRootCertificate;WdsImageName=$imageName;ImportIntoWds=$true}
+$parameters=@{ServerUrl=$config.base_url;OutputPath=$output;TrustedRootCertificate=$TrustedRootCertificate;WdsImageName=$imageName;ImportIntoWds=$true;DriverCacheRoot=(Join-Path $OutputRoot 'Drivers\WinPE-Official')}
 if ($DriversPath) { $parameters.DriversPath=$DriversPath }
 & (Join-Path $InstallPath 'scripts\Build-WinPE.ps1') @parameters
 # Only prune when a successfully built replacement has been imported and is visible.

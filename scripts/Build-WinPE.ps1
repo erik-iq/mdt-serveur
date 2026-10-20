@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)][string]$ServerUrl,
     [string]$OutputPath = 'C:\AtelierPXE\WinPE',
     [string]$DriversPath,
+    [string]$DriverCacheRoot = 'C:\AtelierPXE\Drivers\WinPE-Official',
     [string]$TrustedRootCertificate,
     [string]$WdsImageName = 'Atelier PXE - Assistant Windows x64',
     [switch]$ImportIntoWds,
@@ -27,6 +28,9 @@ foreach ($script in @('Deploy.ps1','Launch.ps1','Wizard.ps1','Unattend.ps1','Fir
     if (-not (Test-Path (Join-Path $PSScriptRoot $script))) { throw "Mettez a jour tous les fichiers du projet avant la construction : $script absent." }
 }
 if ($OutputPath -match '["\r\n&|<>^%!]' -or $adk -match '["\r\n&|<>^%!]') { throw 'Chemin incompatible avec cmd.exe.' }
+if ($DriversPath -and -not (Test-Path $DriversPath -PathType Container)) { throw 'Dossier des pilotes WinPE supplementaires absent.' }
+. (Join-Path $PSScriptRoot 'WinPE-HPDrivers.ps1')
+$hpDrivers=Get-AtelierWinPEHpDrivers -CacheRoot $DriverCacheRoot
 # Pass the complete command line directly to cmd.exe: Windows PowerShell 5.1's
 # native argument handling otherwise removes quotes around ADK paths with spaces.
 # Both batch files must run in the same process to retain the ADK environment.
@@ -44,7 +48,13 @@ try {
         $language = Join-Path $oc "en-us\${package}_en-us.cab"
         if (Test-Path $language) { Add-WindowsPackage -Path $mount -PackagePath $language | Out-Null }
     }
-    if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse | Out-Null }
+    # Keep the OEM INF/CAT/SYS layout intact. Only network-class INFs are added,
+    # so the boot WIM does not acquire the entire storage/chipset toolset.
+    foreach ($inf in $hpDrivers.network_infs) {
+        Write-Host ('Integration reseau WinPE : '+[IO.Path]::GetFileName($inf))
+        Add-WindowsDriver -Path $mount -Driver $inf -ErrorAction Stop | Out-Null
+    }
+    if ($DriversPath) { Add-WindowsDriver -Path $mount -Driver $DriversPath -Recurse -ErrorAction Stop | Out-Null }
     $keyboardArguments='/Image:"{0}" /Set-InputLocale:100c:0000100c' -f $mount
     $keyboardProcess=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\dism.exe') -ArgumentList $keyboardArguments -NoNewWindow -Wait -PassThru
     if ($keyboardProcess.ExitCode -ne 0) { throw ('Impossible de preparer le clavier francais suisse dans WinPE (code '+$keyboardProcess.ExitCode+').') }
@@ -70,7 +80,7 @@ try {
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
-    @{release='ATELIER-4';server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
+    @{release='ATELIER-4';ui_revision='IQ-5.1';hp_network_drivers=$hpDrivers;server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
 } finally {
     if ($mounted) { Dismount-WindowsImage -Path $mount -Discard | Out-Null }
 }
