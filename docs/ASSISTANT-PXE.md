@@ -1,3 +1,5 @@
+> IQ-5.0 : le PC est identifie par son numero de serie BIOS, meme sur un dock. Les instructions MAC ci-dessous concernent l ancien parcours. Pour les deploiements actuels, suivre [GUIDE-UTILISATEUR.md](GUIDE-UTILISATEUR.md) et [ATELIER-4.md](ATELIER-4.md).
+
 > Pour le nouveau parcours sans jeton/code, avec compte automatique, nom BIOS, mises à jour et dossier IQ_, suivre [MODE-INTERNE.md](MODE-INTERNE.md). Ce guide conserve le parcours authentifié.
 
 # Assistant PXE 0.2 — reprise sur DEPLOY-01

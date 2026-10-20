@@ -9,7 +9,8 @@ $OutputDirectory=Get-AtelierIQDirectory $toolsRoot 'Rapports'
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
 $payloadPath=Join-Path $DataPath 'personalization.json'
 $payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
-if ($payload.deployment.hp_repository) { $inventory['Revision preparation']='IQ-4.9' }
+if ($payload.deployment.serial_number) { $inventory['Revision preparation']='IQ-5.0';$inventory['Numero de serie WinPE']=[string]$payload.deployment.serial_number }
+elseif ($payload.deployment.hp_repository) { $inventory['Revision preparation']='IQ-4.9' }
 $centralInventory=$payload.settings.central_inventory -or $payload.deployment.cleanup_after_reporting
 $inventoryDirectory=if ($centralInventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'

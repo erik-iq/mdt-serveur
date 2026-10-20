@@ -2,15 +2,31 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## Identification par numero de serie IQ-5.0
+
+Les nouveaux WinPE identifient le PC par son numero de serie SMBIOS, lu dans Win32_BIOS puis, si necessaire, Win32_ComputerSystemProduct. La valeur est normalisee en majuscules, sans espaces superflus. Un SN absent, generique ou invalide est refuse ; aucun identifiant MAC ou nom invente ne le remplace dans le nouvel assistant. Le nom Windows propose reste les quatre derniers chiffres du SN, a completer comme auparavant.
+
+La MAC est seulement une observation reseau. Une liste de MAC vide ne bloque plus la connexion au serveur : l assistant envoie le SN et tente directement HTTPS. Les observations reseau sont relues au clic Connexion, avec des lectures WMI et .NET complementaires. Un inventaire WMI incomplet ne prouve pas une panne reseau. Cette revision n ajoute aucun pilote reseau.
+
+Le meme SN retrouve la meme fiche, meme avec un autre dock ou aucune MAC visible. Deux SN differents peuvent partager la MAC d un dock sans partager leur autorisation ni leur historique. Le plan inclut le SN attendu et l agent relit le SN materiel avant de reserver le deploiement puis de nouveau avant l effacement. Les controles du disque, de l UEFI et de l image restent actifs. Le SN est un controle de cible et de suivi, pas une preuve cryptographique ; il doit etre reel et unique sur les PC de l atelier.
+
+Le site affiche le SN dans Parc machines, Activite et la fiche ordinateur. L enregistrement manuel demande le SN ; la MAC est facultative. Les nouvelles preparations indiquent IQ-5.0 et le SN WinPE dans leur rapport. Le fonctionnement HP/CMSL, les logiciels et la reprise BIOS restent ceux de la revision precedente.
+
+La migration SQLite conserve les IDs des machines, deploiements, rapports, fichiers et notes. L ancienne contrainte MAC unique est conservee dans une colonne technique privee, tandis que la MAC observee peut desormais etre partagee. La migration du schema et le rapprochement initial sont transactionnels. Un SN historique est repris automatiquement seulement s il identifie une seule fiche sans historique melange. Une ancienne fiche de dock contenant plusieurs SN reste intacte ; les prochains deploiements utilisent une nouvelle fiche par PC. Plusieurs anciennes fiches portant le meme SN exigent un rapprochement manuel ; aucune fusion destructive n est faite.
+
+Les anciens clients MAC restent compatibles avec leurs fiches sans SN. Ils ne peuvent pas prendre une fiche deja identifiee par SN en reutilisant la MAC du dock. Pour supprimer le blocage Aucune MAC detectee, mettre le serveur a jour et reconstruire WinPE avec Upgrade-Atelier4.ps1 ; le titre de l assistant et /health doivent annoncer IQ-5.0. L image WDS garde le nom de famille ATELIER-4 suivi de sa date de construction.
+
+Les tests couvrent le meme PC avec plusieurs docks, plusieurs PC sur un dock, une liste de MAC vide, les SN generiques, les codes reserves a un autre PC, la rotation des jetons, les controles avant effacement et la migration d une ancienne base a deux reprises. Les tests de laboratoire n executent aucun effacement reel ni aucun deploiement Windows physique.
+
 ## Correctif graphique IQ-4.1
 
 Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE et le suivi Windows. Le site lui donne aussi des dimensions HTML : une feuille de style absente ou ancienne ne peut plus afficher le PNG a sa taille d origine.
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.9` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-5.0` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.9`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-5.0`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -24,13 +40,13 @@ Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom da
 
 Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation de l outil constructeur, les mises a jour HP et la collecte XML/CSV. Ces mesures apparaissent dans la fiche et les nouveaux rapports PDF. Les anciennes mesures Windows Update restent visibles dans l historique. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
 
-La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
+Depuis IQ-5.0, la fiche utilise le numero de serie comme identite du poste. La MAC observee est informative ; les anciennes fiches sont conservees selon les regles de migration ci-dessus.
 
 ## Depot HP et execution silencieuse IQ-4.9
 
 La case HP Image Assistant reste l unique declencheur sur le poste. Sans cette case, aucune installation HPIA, aucune demande de depot ni execution SoftPaq. Les autres logiciels et Lenovo System Update gardent leurs selections WinGet.
 
-Sur .250, `Upgrade-Atelier4.ps1` met la console a jour, appelle `Enable-HPRepository.ps1`, puis reconstruit et importe le nouveau WinPE. Le titre de l assistant et `/health` doivent annoncer IQ-4.9. Aucun script manuel n est necessaire sur les prochains postes deployes. Les postes deja termines ne recoivent pas retroactivement ces fichiers.
+Sur .250, `Upgrade-Atelier4.ps1` met la console a jour, appelle `Enable-HPRepository.ps1`, puis reconstruit et importe le nouveau WinPE. Le titre de l assistant et `/health` doivent annoncer IQ-5.0. Aucun script manuel n est necessaire sur les prochains postes deployes. Les postes deja termines ne recoivent pas retroactivement ces fichiers.
 
 ### Correctif d installation CMSL pour PowerShellGet ancien
 
@@ -239,7 +255,7 @@ Pour comprendre une absence de HPIA : consulter `C:\ProgramData\AtelierPXE\hpia-
 
 Le SHA-256 complet du WIM reste calcule lors de son enregistrement sur le serveur. Le serveur refuse un fichier dont la taille ou la date ont change. WinPE ne relit plus la totalite du WIM pour recalculer son SHA-256 avant chaque installation : cela evite un parcours reseau de plusieurs gigaoctets avant DISM.
 
-WinPE controle encore le fichier et sa taille, l index, l architecture x64, l edition, la langue, la MAC, l UEFI et le disque cible. Un verrou de lecture empeche la modification du WIM durant son utilisation. DISM conserve `/CheckIntegrity /Verify` pendant l application.
+WinPE controle encore le fichier et sa taille, l index, l architecture x64, l edition, la langue, le numero de serie, l UEFI et le disque cible. Un verrou de lecture empeche la modification du WIM durant son utilisation. DISM conserve `/CheckIntegrity /Verify` pendant l application.
 
 **Limite :** ces controles ne prouvent plus a chaque deploiement que tous les octets correspondent a l empreinte enregistree. Une image alteree conservant sa taille/date pourrait passer le controle initial ; DISM ne remplace pas une comparaison cryptographique complete. Conserver les droits d ecriture du partage limites aux administrateurs et reenregistrer une image apres tout remplacement. Le gain depend de la taille du WIM, du disque et du reseau.
 

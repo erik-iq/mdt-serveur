@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
+from app.identity import public_machine
+
 from fastapi import Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -123,5 +125,5 @@ def computer_routes(api,db,admin,windows_agent,now):
             latest=con.execute('''SELECT r.deployment_id,r.report_json FROM computer_reports r JOIN deployments d ON r.deployment_id=d.id WHERE d.machine_id=? ORDER BY d.created_at DESC,d.id LIMIT 1''',(identifier,)).fetchone()
             snapshot=json.loads(latest['report_json']) if latest else None
             notes=[dict(r) for r in con.execute('SELECT id,text,author,created_at FROM machine_notes WHERE machine_id=? ORDER BY id DESC',(identifier,))]
-            return {'machine':dict(machine),'deployments':history,'total':total,'offset':offset,'limit':limit,'has_more':offset+len(history)<total,
+            return {'machine':public_machine(machine),'deployments':history,'total':total,'offset':offset,'limit':limit,'has_more':offset+len(history)<total,
                     'latest_report':snapshot,'latest_report_deployment_id':latest['deployment_id'] if latest else None,'notes':notes}

@@ -1,3 +1,5 @@
+> IQ-5.0 : le PC est identifie par son numero de serie BIOS, meme sur un dock. Les instructions MAC ci-dessous concernent l ancien parcours. Pour les deploiements actuels, suivre [GUIDE-UTILISATEUR.md](GUIDE-UTILISATEUR.md) et [ATELIER-4.md](ATELIER-4.md).
+
 # Installation neuve — Windows Server 2025
 
 Serveur prévu : **DEPLOY-01 / 192.168.99.250**, hébergé sur Hyper-V `192.168.99.253`. Masque confirmé : `255.255.255.0` ; passerelle et DHCP : routeur `192.168.99.1`. Le premier essai utilise le même LAN pour serveur et client. Pour la console déjà installée, suivre [la mise à jour 0.2 et le parcours physique HP](ASSISTANT-PXE.md). Ce guide couvre une installation neuve.

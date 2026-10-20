@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.customization import ApplicationInput, BootConnection, BootDiscovery, BundleInput, OPTIONS, Personalization, WizardSelection, defaults_for_locale
 from app.windows_secrets import read_share_credentials
@@ -26,6 +26,7 @@ from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
 from app.hp_repository import HpRepository
+from app.identity import normalize_serial, migrate_identity, public_machine, insert_machine, match_machine
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -50,18 +51,31 @@ def file_hash(path):
 
 class MachineInput(BaseModel):
     hostname: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9-]{0,14}$")
-    mac: str
+    mac: str = ''
+    serial_number: str = Field(default='', max_length=80)
     description: str = Field(default="", max_length=240)
 
     @field_validator("mac")
     @classmethod
     def validate_mac(cls, value):
+        if not value:return value
         value = value.replace("-", ":").upper()
         if not re.fullmatch(r"[0-9A-F]{2}(:[0-9A-F]{2}){5}", value):
             raise ValueError("Adresse MAC invalide")
         if int(value[:2], 16) & 1 or value == "00:00:00:00:00:00":
             raise ValueError("Une adresse MAC unicast est necessaire")
         return value
+
+
+    @field_validator('serial_number')
+    @classmethod
+    def serial(cls,value):
+        return normalize_serial(value) if value else ''
+
+    @model_validator(mode='after')
+    def identity_present(self):
+        if not self.serial_number and not self.mac:raise ValueError('Numero de serie requis')
+        return self
 
 
 class AssetInput(BaseModel):
@@ -191,6 +205,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             for name, definition in columns.items():
                 if name not in present:
                     con.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
+        migrate_identity(con)
         con.execute('CREATE UNIQUE INDEX IF NOT EXISTS boot_code_unique ON deployments(boot_code_hash) WHERE boot_code_hash IS NOT NULL')
 
     api = FastAPI(title="Atelier PXE", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
@@ -343,7 +358,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         selected, profile, machine, resolved = job_selection(con, job)
         asset = asset_snapshot(con, profile['asset_id'], 'windows')
         return {'id': job['id'], 'status': job['status'], 'hostname': selected['hostname'],
-                'inventory_hostname': machine['hostname'], 'mac': machine['mac'], 'disk_number': job['disk_number'],
+                'inventory_hostname': machine['hostname'], 'serial_number': machine['serial_number'], 'mac': machine['mac'], 'disk_number': job['disk_number'],
                 'profile_id': profile['id'], 'profile_name': profile['name'], 'windows_version': profile['windows_version'],
                 'edition': profile['edition'], 'image_index': profile['image_index'], 'locale': profile['locale'],
                 'image_filename': asset['filename'], 'image_size': asset['size'], 'image_sha256': asset['sha256'],
@@ -367,7 +382,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.9"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.0"}
 
     @api.get('/api/session')
     def session_options():
@@ -378,10 +393,11 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         with db() as con:
             result = {name: [dict(r) for r in con.execute(f"SELECT * FROM {name} ORDER BY created_at DESC")]
                       for name in ("machines", "assets", "applications")}
+            result['machines']=[public_machine(m) for m in result['machines']]
             result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
             result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
-                d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,p.name AS profile_name,
+                d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,m.serial_number,p.name AS profile_name,
                 d.windows_status,d.windows_progress,d.windows_message,d.windows_updated_at,
                 EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report,
                 EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory
@@ -412,10 +428,12 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         identifier = str(uuid.uuid4())
         try:
             with db(write=True) as con:
-                con.execute("INSERT INTO machines VALUES (?,?,?,?,?)", (identifier, body.hostname, body.mac, body.description, now()))
-                return row(con, "machines", identifier)
+                if not body.serial_number and con.execute('SELECT 1 FROM machines WHERE mac=?',(body.mac,)).fetchone():
+                    raise HTTPException(409,'Cette MAC est deja connue ; utiliser le numero de serie du poste')
+                insert_machine(con,identifier,body.hostname,body.mac,body.description,now(),body.serial_number)
+                return public_machine(row(con, "machines", identifier))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Le nom ou l adresse MAC existe deja")
+            raise HTTPException(409, "Le nom ou le numero de serie existe deja")
 
     @api.post("/api/assets", status_code=201, dependencies=[Depends(admin)])
     def add_asset(body: AssetInput, request: Request):
@@ -576,31 +594,34 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         except ValueError as exc:
             raise HTTPException(422, 'Adresse MAC unicast invalide') from exc
         with db(write=True) as con:
-            records = [dict(r) for r in con.execute("""SELECT d.*,m.mac AS matched_mac FROM deployments d
-                JOIN machines m ON m.id=d.machine_id WHERE d.status IN ('queued','running')""") if r['matched_mac'] in macs]
+            try:machine=match_machine(con,body.serial_number,macs)
+            except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+            if machine and macs:
+                con.execute('UPDATE machines SET mac=? WHERE id=?',(macs[0],machine['id']))
+                machine['mac']=macs[0]
+            records=[dict(r) for r in con.execute("SELECT * FROM deployments WHERE machine_id=? AND status IN ('queued','running')",(machine['id'],))] if machine else []
             if len(records) > 1 or any(r['status'] == 'running' for r in records):
                 raise HTTPException(409, 'Un deploiement est deja actif ou plusieurs postes correspondent')
             valid = [r for r in records if (enrollment or r['wizard_enabled']) and (enrollment or (r['boot_code_expires'] or '') > now())]
             if not valid and enrollment:
                 if records:
                     raise HTTPException(409, 'Annuler la demande manuelle existante avant une arrivee automatique')
-                machines = [dict(r) for r in con.execute('SELECT * FROM machines') if r['mac'] in macs]
-                if len(machines) > 1:
-                    raise HTTPException(409, 'Plusieurs machines connues correspondent aux MAC du poste')
-                if machines:
-                    machine = machines[0]
+                known=bool(machine)
+                if machine:
                     latest = con.execute('SELECT * FROM deployments WHERE machine_id=? ORDER BY created_at DESC LIMIT 1', (machine['id'],)).fetchone()
                     if latest and latest['status'] == 'staged' and latest['windows_status'] not in {'completed', 'failed', 'needs_attention'}:
                         raise HTTPException(409, 'Windows est deja prepare : demarrer sur le disque local pour terminer')
                 else:
-                    machine = {'id': str(uuid.uuid4()), 'hostname': 'PC-' + macs[0].replace(':', ''), 'mac': macs[0]}
+                    identifier=str(uuid.uuid4())
+                    hostname=('PC-'+uuid.uuid4().hex[:12].upper()) if body.serial_number else ('PC-'+macs[0].replace(':',''))
+                    machine={'id':identifier,'hostname':hostname,'mac':macs[0] if macs else '', 'serial_number':body.serial_number or None}
                 profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
                 if not profiles:
                     raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les editions sur le serveur')
                 profile = profiles[0]
                 catalog = catalogue(con, profile['id'], True)
-                if not machines:
-                    con.execute('INSERT INTO machines VALUES (?,?,?,?,?)', (machine['id'], machine['hostname'], machine['mac'], 'Arrivee automatique WinPE', now()))
+                if not known:
+                    insert_machine(con,machine['id'],machine['hostname'],machine['mac'],'Arrivee automatique WinPE',now(),body.serial_number)
                 identifier, timestamp = str(uuid.uuid4()), now()
                 selection = {'profile_id': profile['id'], 'hostname': machine['hostname'], 'settings': profile['settings']}
                 con.execute("""INSERT INTO deployments(id,machine_id,profile_id,disk_number,token_hash,status,progress,created_at,updated_at,wizard_enabled,catalog_json,selection_json,boot_code_expires)
@@ -610,7 +631,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 event(con, identifier, 'queued', 0, 'Poste detecte automatiquement ; attente du choix Windows et de la confirmation locale du disque')
                 valid = [row(con, 'deployments', identifier)]
             if len(valid) != 1:
-                raise HTTPException(409, 'Creer une autorisation pour cette MAC ou activer l arrivee automatique WinPE')
+                raise HTTPException(409, 'Creer une autorisation pour ce numero de serie ou activer l arrivee automatique WinPE')
             job, new_token = valid[0], secrets.token_urlsafe(32)
             if enrollment:
                 refreshed = catalogue(con, job['profile_id'], True)
@@ -640,8 +661,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             job = dict(record)
             machine = row(con, 'machines', job['machine_id'])
             macs = {value.replace('-', ':').upper() for value in body.macs}
-            if machine['mac'] not in macs:
+            serial=machine['serial_number']
+            if (serial and serial!=body.serial_number) or (not serial and (body.serial_number or machine['mac'] not in macs)):
                 raise HTTPException(403, 'Ce code est reserve a un autre poste')
+            if serial and macs:con.execute('UPDATE machines SET mac=? WHERE id=?',(sorted(macs)[0],machine['id']))
             new_token = secrets.token_urlsafe(32)
             con.execute('UPDATE deployments SET token_hash=?,updated_at=? WHERE id=?', (digest(new_token), now(), job['id']))
             return {'id': job['id'], 'agent_token': new_token, 'plan': plan_data(con, job), 'catalog': json.loads(job['catalog_json'])}

@@ -167,7 +167,7 @@ class Inventories:
                 record=con.execute('SELECT report_json FROM computer_reports WHERE deployment_id=?',(identifier,)).fetchone()
                 snapshot=json.loads(record['report_json']) if record else {}
                 selected=json.loads(job['selection_json'])
-                requires_hp=snapshot.get('inventory',{}).get('Revision preparation')=='IQ-4.9' and 'hpia' in selected.get('settings',{}).get('winget_packages',[])
+                requires_hp=snapshot.get('inventory',{}).get('Revision preparation') in {'IQ-4.9','IQ-5.0'} and 'hpia' in selected.get('settings',{}).get('winget_packages',[])
                 if requires_hp and not proof.get('hp_reports'):raise HTTPException(409,'Rapports HP pas encore confirmes')
                 for kind in ('xml','csv','diagnostics')+(('hp_reports',) if proof.get('hp_reports') else ()):
                     record=con.execute('SELECT * FROM inventory_files WHERE deployment_id=? AND kind=?',(identifier,kind)).fetchone()

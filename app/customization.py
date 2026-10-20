@@ -2,7 +2,10 @@
 from typing import Literal
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+from app.identity import normalize_serial, normalize_mac
 
 
 KEYBOARDS = [
@@ -138,11 +141,30 @@ class WizardSelection(BaseModel):
     disk_number: int | None = Field(default=None, ge=0, le=32)
 
 
-class BootConnection(BaseModel):
+class BootIdentity(BaseModel):
+    serial_number: str = Field(default='', max_length=80)
+    macs: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator('serial_number')
+    @classmethod
+    def serial(cls,value):
+        return normalize_serial(value) if value else ''
+
+    @field_validator('macs')
+    @classmethod
+    def addresses(cls,values):
+        return list(dict.fromkeys(normalize_mac(value) for value in values))
+
+    @model_validator(mode='after')
+    def identity_present(self):
+        if not self.serial_number and not self.macs:
+            raise ValueError('Numero de serie requis ; MAC seulement pour les anciens clients')
+        return self
+
+
+class BootConnection(BootIdentity):
     code: str = Field(min_length=16, max_length=24)
-    macs: list[str] = Field(min_length=1, max_length=16)
 
 
-class BootDiscovery(BaseModel):
+class BootDiscovery(BootIdentity):
     release: str = Field(default='', max_length=40)
-    macs: list[str] = Field(min_length=1, max_length=16)

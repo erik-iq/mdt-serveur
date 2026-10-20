@@ -29,11 +29,12 @@ def hp_archive(extra=None):
     return stream.getvalue()
 
 
-def test_hp_report_archive_is_private_and_required_for_new_hp_cleanup(system):
+@pytest.mark.parametrize('revision',['IQ-4.9','IQ-5.0'])
+def test_hp_report_archive_is_private_and_required_for_new_hp_cleanup(system,revision):
     client,data,job,headers=setup_reporter(system);route='/api/windows/'+job['id']
     with sqlite3.connect(data/'deployment.sqlite3') as con:
         con.execute('UPDATE deployments SET selection_json=? WHERE id=?',(json.dumps({'hostname':'PC-LAB-01','settings':{'winget_packages':['hpia']}}),job['id']))
-    body=snapshot();body['inventory']['Revision preparation']='IQ-4.9'
+    body=snapshot();body['inventory']['Revision preparation']=revision
     report=client.post(route+'/report',headers=headers,json=body).json()
     proof={'report':report['sha256']}
     for kind,payload in {'xml':b'<InventaireOrdinateur ordinateur="PC-LAB-01"/>','csv':b'Ordinateur;Categorie;Propriete;Valeur\nPC-LAB-01;CPU;Name;Fixture\n','diagnostics':diagnostics_archive()}.items():

@@ -23,6 +23,7 @@ $mutex = $null
 $ownsMutex = $false
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
 . (Join-Path $PSScriptRoot 'Partitions.ps1')
+. (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
 
 function Send-Event([string]$Status, [int]$Percent, [string]$Message) {
     $body = @{status=$Status; progress=$Percent; message=$Message} | ConvertTo-Json -Compress
@@ -49,8 +50,7 @@ try {
     if (-not $ownsMutex) { throw 'Un autre agent est deja actif sur ce poste.' }
     $plan = Invoke-RestMethod -Uri "$endpoint/plan" -Headers $headers
     if ($plan.status -ne 'queued') { throw 'Ce deploiement a deja ete commence ; creez une nouvelle autorisation apres diagnostic.' }
-    $macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-', ':').ToUpperInvariant() })
-    if ($plan.mac -notin $macs) { throw 'L''adresse MAC du poste ne correspond pas a la machine autorisee.' }
+    Assert-AtelierMachineIdentity $plan
     Run-Checked 'wpeutil.exe' @('UpdateBootInfo')
     $firmware = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name PEFirmwareType).PEFirmwareType
     if ($firmware -ne 2) { throw 'Le deploiement necessite un demarrage UEFI (BIOS legacy non pris en charge).' }
@@ -97,13 +97,14 @@ try {
     $unattend = New-AtelierUnattend -Plan $plan
     Assert-AtelierUnattendContent -Content $unattend
     Write-Host "IMAGE : $($edition.ImageName)"
-    Write-Host "CIBLE : $($plan.hostname) / $($plan.mac)"
+    Write-Host "CIBLE : $($plan.hostname) / SN $($plan.serial_number)"
     Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / serie $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
     Write-Host 'Toutes les partitions de ce disque seront supprimees.' -ForegroundColor Red
     $expected = "EFFACER $($plan.hostname) DISQUE $($disk.Number)"
     $confirmation = if ($StartFromWizard -and $plan.internal_mode) { $expected } elseif ($LocalConfirmation) { $LocalConfirmation } else { Read-Host "Tapez exactement : $expected" }
     if ($confirmation -cne $expected) { throw 'Confirmation locale refusee ; aucun disque efface.' }
     Assert-Active
+    Assert-AtelierMachineIdentity $plan
     # Hold the source open for read and disallow writes/deletion during apply.
     try {
         Send-Event 'running' 20 'Image verifiee ; creation des partitions UEFI/GPT'
@@ -154,7 +155,7 @@ exit
     if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'reporting.json') -Content $reporting | Out-Null
-    $personalization = @{tools=$plan.tools;settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{id=$plan.id;cleanup_after_reporting=$true;hp_repository=$true;allow_bios_restart=$true;previous_payload_name=$(if($previousPayload){Split-Path $previousPayload -Leaf}else{''});profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
+    $personalization = @{tools=$plan.tools;settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{id=$plan.id;serial_number=$plan.serial_number;cleanup_after_reporting=$true;hp_repository=$true;allow_bios_restart=$true;previous_payload_name=$(if($previousPayload){Split-Path $previousPayload -Leaf}else{''});profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active

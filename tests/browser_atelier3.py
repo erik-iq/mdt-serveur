@@ -65,15 +65,15 @@ def run():
                 page.locator('#submit-resource').click();page.wait_for_selector('#form-dialog',state='hidden')
                 state=api('/state');profile=next(x for x in state['profiles'] if x['name']=='Windows atelier 3')
                 assert profile['settings']['winget_packages']==['vlc','chrome','lenovo_system_update']
-                session=api('/boot/discover',{'macs':['00:11:22:33:44:55'],'release':'ATELIER-4'});identifier=session['id'];token=session['agent_token']
+                session=api('/boot/discover',{'serial_number':'HP-BROWSER3-0001','macs':[],'release':'ATELIER-4'});identifier=session['id'];token=session['agent_token']
                 api('/agent/'+identifier+'/configure',{'profile_id':profile['id'],'hostname':'PC-BROWSER3','disk_number':1,'settings':profile['settings']},token)
                 page.locator('[data-page="overview"]').click();page.evaluate('refresh()')
-                row=page.locator('[data-job="'+identifier+'"]');expect(row).to_contain_text('PC-BROWSER3')
+                row=page.locator('[data-job="'+identifier+'"]');expect(row).to_contain_text('PC-BROWSER3');expect(row).to_contain_text('SN : HP-BROWSER3-0001')
                 row.locator('[data-inventory]').click();expect(page.locator('#inventory-files')).to_contain_text('En attente')
                 page.locator('[data-close="inventory-dialog"]').click()
                 reporter=api('/agent/'+identifier+'/claim',{},token)['report_token']
                 hp_profile=api('/profiles',{'name':'HP cache lab','asset_id':asset['id'],'settings':{'software_mode':'winget','winget_packages':['hpia']}})
-                hp_session=api('/boot/discover',{'macs':['00:11:22:33:44:66'],'release':'ATELIER-4'})
+                hp_session=api('/boot/discover',{'serial_number':'HP-BROWSER3-0002','macs':['00:11:22:33:44:55'],'release':'ATELIER-4'})
                 api('/agent/'+hp_session['id']+'/configure',{'profile_id':hp_profile['id'],'hostname':'HP-BROWSER','disk_number':0,'settings':hp_profile['settings']},hp_session['agent_token'])
                 hp_token=api('/agent/'+hp_session['id']+'/claim',{},hp_session['agent_token'])['report_token']
                 api('/windows/'+hp_session['id']+'/hp-repository',{'platform':'8AB8','os':'win11','os_version':'25H2','required_softpaqs':['SP12345']},hp_token)

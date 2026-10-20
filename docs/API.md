@@ -9,18 +9,18 @@ Après activation explicite du [mode interne](MODE-INTERNE.md), les routes admin
 | GET `/health` | Disponibilité de l’API et de SQLite, sans readiness PXE |
 | GET `/api/session` | Mode de connexion de la console et préparation automatique, sans secret |
 | GET `/api/state` | Machines, fichiers, profils/settings, applications, bundles, options de personnalisation et 100 derniers déploiements, sans secrets |
-| POST `/api/machines` | `{hostname, mac, description}` |
+| POST `/api/machines` | `{hostname, serial_number, mac?, description} ; MAC seule encore acceptee pour les anciens clients` |
 | POST `/api/assets` | `{filename, kind}` pour un fichier local déjà présent ; calcule SHA-256 |
 | POST `/api/profiles` | `{name, asset_id, image_index, locale, windows_version, edition, settings}` ; settings facultatifs pour compatibilité 0.1 |
 | POST `/api/applications` | `{name, version, asset_id, arguments, entry_point, install_mode, manufacturer}` ; fichier application EXE/MSI/ZIP |
 | POST `/api/bundles` | `{name, description, application_ids}` ; IDs existants, sans doublons |
 | POST `/api/deployments` | `{machine_id, profile_id, disk_number, confirmation, wizard_enabled}` ; renvoie jeton et éventuel code PXE une seule fois |
-| POST `/api/boot/connect` | `{code, macs}` ; code PXE secret et MAC du poste autorisé, renvoie catalogue figé, plan et nouveau jeton agent |
+| POST `/api/boot/connect` | `{code, serial_number, macs?}` ; code PXE secret et SN du poste autorisé, renvoie catalogue figé, plan et nouveau jeton agent |
 | POST `/api/boot/discover` | Mode interne : `{macs}`, retrouve une seule autorisation interactive en attente, non expirée, puis renouvelle le jeton agent |
 | GET `/api/agent/{id}/share-credentials` | Mode interne HTTPS : jeton agent valide requis ; connexion temporaire au partage de lecture géré, jamais incluse dans le plan ou le catalogue |
 | GET `/api/deployments/{id}/events` | Journal ordonné, sans jetons |
 | POST `/api/deployments/{id}/cancel` | Révoque immédiatement le jeton et demande l’arrêt aux points de contrôle |
-| GET `/api/agent/{id}/plan` | Plan, identité MAC, disque, hash, index/locale, settings et fichiers des logiciels/fond d’écran sélectionnés |
+| GET `/api/agent/{id}/plan` | Plan, identite SN (MAC informative), disque, hash, index/locale, settings et fichiers des logiciels/fond d’écran sélectionnés |
 | POST `/api/agent/{id}/configure` | `{profile_id, hostname, settings}` ; agent scoped, job queued avec wizard_enabled, sélection limitée au catalogue autorisé |
 | POST `/api/agent/{id}/claim` | Réservation atomique ; une seule réservation autorisée |
 | GET `/api/agent/{id}/image` | Téléchargement WIM authentifié ; le parcours WDS utilise la même image via SMB |
@@ -30,13 +30,13 @@ Après activation explicite du [mode interne](MODE-INTERNE.md), les routes admin
 
 États : `queued → running → staged / failed`, ou `queued / running → cancelled`. `staged` ne signifie pas que Windows a démarré. Un nouveau job peut être créé après un état terminal, avec une nouvelle autorisation d’effacement. Les jetons sont aléatoires et seul leur hash est conservé ; tout état terminal révoque leur utilisation. Une opération encore `queued/running` n’a pas d’expiration temporelle dans cette version : annuler les opérations abandonnées.
 
-Transactions SQLite et index unique garantissent un seul job actif par machine. L’agent dispose aussi d’un mutex local pour empêcher deux processus sur le même poste. La MAC est un contrôle d’erreur, pas une attestation cryptographique : segmenter le réseau et protéger les jetons.
+Transactions SQLite et index unique garantissent un seul job actif par machine. L’agent dispose aussi d’un mutex local pour empêcher deux processus sur le même poste. Le SN (ou la MAC pour les anciens clients) est un controle de cible, pas une attestation cryptographique : segmenter le réseau et protéger les jetons.
 
 ## Assistant interactif
 
-`wizard_enabled` vaut **false par défaut dans l’API** pour préserver les anciens clients ; le formulaire console le coche par défaut. Quand il est activé, l’autorisation inclut un instantané de tous les profils, applications, bundles et fonds d’écran présents. De nouveaux éléments enregistrés ensuite ne sont pas utilisables par ce job. Les modifications sont acceptées uniquement avant `claim` ; le numéro du disque et la MAC restent fixés par l’administrateur.
+`wizard_enabled` vaut **false par défaut dans l’API** pour préserver les anciens clients ; le formulaire console le coche par défaut. Quand il est activé, l’autorisation inclut un instantané de tous les profils, applications, bundles et fonds d’écran présents. De nouveaux éléments enregistrés ensuite ne sont pas utilisables par ce job. Les modifications sont acceptées uniquement avant `claim` ; le numero de serie identifie le poste ; le disque doit etre confirme dans WinPE.
 
-Le code utilise 20 caractères aléatoires d’un alphabet de 32 caractères (100 bits), affichés par groupes de quatre. Seul son SHA-256 est stocké. Il expire après deux heures ; le job doit néanmoins être annulé s’il est abandonné. `boot/connect` exige le code et la MAC, puis renouvelle le jeton agent, invalidant le précédent. Une reconnexion reste possible avant la réservation ; `claim` désactive définitivement le code. Les états terminaux empêchent toute reconnexion. Ne pas journaliser les corps de ces requêtes au proxy.
+Le code utilise 20 caractères aléatoires d’un alphabet de 32 caractères (100 bits), affichés par groupes de quatre. Seul son SHA-256 est stocké. Il expire après deux heures ; le job doit néanmoins être annulé s’il est abandonné. `boot/connect` exige le code et le SN du poste (MAC pour une ancienne fiche sans SN), puis renouvelle le jeton agent, invalidant le précédent. Une reconnexion reste possible avant la réservation ; `claim` désactive définitivement le code. Les états terminaux empêchent toute reconnexion. Ne pas journaliser les corps de ces requêtes au proxy.
 
 `settings` comprend `keyboard`, `timezone`, `user_locale`, `registered_owner`, `organization`, `theme`, `wallpaper_asset_id`, `application_ids`, `bundle_ids`. Les claviers/fuseaux proposés sont retournés dans les options ; le thème vaut `unchanged`, `light` ou `dark`. Les applications ont un constructeur cible `all`, `hp` ou `lenovo`. Le filtrage matériel est réalisé dans WinPE puis revérifié au premier démarrage. Les IDs issus de bundles et de sélections directes sont dédupliqués.
 
@@ -93,3 +93,9 @@ Le client valide aussi les recus, les fichiers locaux et l arret des installateu
 - `POST /api/windows/{id}/cleanup-ready` accepte une preuve `hp_reports` supplementaire. Elle est obligatoire si le rapport annonce IQ-4.9 et la selection contient HPIA. Les anciens clients gardent leur protocole de confirmation a quatre empreintes.
 
 Le transport de rapports reste borne avant l analyse et les fichiers HP sont servis uniquement en archive a telecharger. Le serveur n execute pas le HTML ou XML natif et ne decompresse aucun SoftPaq. Les snapshots sont conserves par trois versions et leurs locations temporaires de deux heures protegent les descripteurs emis aux postes.
+
+## Identite des postes IQ-5.0
+
+`POST /api/boot/discover` accepte `{release:"ATELIER-4", serial_number:"SN-DU-PC", macs:[]}`. Le SN BIOS normalise est la cle de rapprochement ; une MAC n est pas obligatoire et peut etre partagee entre plusieurs SN. Le meme SN retourne la meme fiche, meme apres changement de dock. Le plan expose `serial_number`. Les SN absents/generiques sont refuses par le nouvel assistant. Le SN n est pas un secret ni une attestation cryptographique ; les jetons restent necessaires pour agir sur un deploiement.
+
+`POST /api/boot/connect` exige le SN d une fiche liee au SN, meme si une MAC correspond. Les codes, delais et rotations de jetons sont conserves. Le champ MAC reste un controle pour les anciennes fiches sans SN seulement ; une ancienne requete MAC ne prend jamais une fiche liee a un SN. Le site demande un SN pour l enregistrement manuel. Les IDs et historiques SQLite restent conserves pendant la migration ; aucune ancienne fiche partagee n est fusionnee sans preuve.

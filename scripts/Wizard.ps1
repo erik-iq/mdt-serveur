@@ -30,11 +30,12 @@ $script:serialNumber = ''
 $script:proposedName = ''
 $script:namingMessage = ''
 try {
-    $script:serialNumber=[string](Get-CimInstance Win32_BIOS).SerialNumber
+    $script:serialNumber=Get-AtelierHardwareSerial
     $script:proposedName=Get-AtelierSerialSuffix -SerialNumber $script:serialNumber
     $script:namingMessage='Quatre derniers chiffres du numero de serie. Completer le nom avant installation.'
 } catch { $script:namingMessage=$_.Exception.Message }
-$script:macs = @(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress } | ForEach-Object { $_.MACAddress.Replace('-',':').ToUpperInvariant() } | Select-Object -Unique)
+$script:network=Get-AtelierWinPENetwork
+$script:macs=@($script:network.macs)
 $script:root = $Config.server_url.TrimEnd('/')
 $script:share = if ($Config.image_share) { $Config.image_share } else { '\\' + ([Uri]$script:root).Host + '\AtelierImages' }
 . (Join-Path $PSScriptRoot 'Theme.ps1')
@@ -105,7 +106,17 @@ function Send-Json([string]$Path, [psobject]$Body, [bool]$Authenticated = $true)
     $headers = @{}
     if ($Authenticated) { $headers.Authorization = 'Bearer ' + $script:session.agent_token }
     $json = $Body | ConvertTo-Json -Depth 14 -Compress
-    return Invoke-RestMethod -Uri ($script:root + $Path) -Method Post -Headers $headers -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($json))
+    try {
+        return Invoke-RestMethod -Uri ($script:root + $Path) -Method Post -Headers $headers -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 20
+    } catch {
+        # HTTP rejections keep their original cause. Missing MACs alone never
+        # prevent contacting the server: a WMI inventory can be incomplete.
+        if ($_.Exception.Response) { throw }
+        $status=[string]$_.Exception.Status
+        if ($status -in @('TrustFailure','SecureChannelFailure')) { throw ('Connexion TLS refusee : verifier le certificat WinPE et la date du poste. '+$_.Exception.Message) }
+        $network=Get-AtelierWinPENetwork
+        throw ('Serveur Atelier injoignable. '+$network.message+' Verifier l acces HTTPS au serveur, le cable et le DHCP. '+$_.Exception.Message)
+    }
 }
 function Set-Profile([string]$Id) {
     $profile = $script:session.catalog.profiles | Where-Object { $_.id -eq $Id } | Select-Object -First 1
@@ -166,11 +177,13 @@ function Show-Page {
     switch ($script:page) {
         0 {
             Add-Text ($script:manufacturer + ' / ' + $computer.Model) 12 $true | Out-Null
-            Add-Text ('MAC Ethernet : ' + ($script:macs -join ' / ')) | Out-Null
+            Add-Text ('Numero de serie BIOS : ' + $(if($script:serialNumber){$script:serialNumber}else{'Indisponible ; identification impossible'})) 11 $true | Out-Null
+            Add-Text $script:network.message | Out-Null
+            Add-Text ('MAC observees (informatif) : ' + ($script:macs -join ' / ')) | Out-Null
             Add-Text 'Clavier francais suisse - QWERTZ (fixe)' | Out-Null
             Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez qwertz et 123' | Out-Null
             if (-not $Config.internal_mode) {
-            Add-Text 'Enregistrez cette MAC dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
+            Add-Text 'Enregistrez ce numero de serie dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
             Add-Input 'code' 'Code d installation' '' $true | Out-Null
             Add-Text ('Partage des images : ' + $script:share) | Out-Null
             Add-Input 'username' 'Compte de lecture du partage' ([string]$Config.share_account) | Out-Null
@@ -246,7 +259,7 @@ function Show-Page {
             if ($disk -and -not $Config.auto_enroll) { Add-Text ('Disque ' + $disk.Number + ' : ' + $disk.FriendlyName + ' | ' + [math]::Round($disk.Size/1GB) + ' Go | Serie ' + $disk.SerialNumber) 11 $true | Out-Null }
             $apps = if ($script:settings.software_mode -eq 'winget') { @($script:session.catalog.options.software_packages | Where-Object { $_.id -in @($script:settings.winget_packages) } | ForEach-Object { $_.name }) } else { @(Selected-Applications | ForEach-Object { $_.name }) }
             Add-Text ('Logiciels de ce poste : ' + ($apps -join ', ')) | Out-Null
-            Add-Text 'Toutes les partitions du disque indique seront supprimees. Les controles MAC, UEFI, image et disque seront executes avant cet effacement.' | Out-Null
+            Add-Text 'Toutes les partitions du disque indique seront supprimees. Les controles du numero de serie, UEFI, image et disque seront executes avant cet effacement.' | Out-Null
             $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $disk.Number
             if (-not $script:session.plan.internal_mode) {
                 Add-Input 'confirmation' ('Tapez exactement : ' + $expected) | Out-Null
@@ -271,10 +284,13 @@ function Show-Page {
     $script:body.ResumeLayout()
 }
 function Connect-Post {
-    if (-not $script:macs.Count) { throw 'Aucune MAC detectee : verifier le pilote Ethernet WinPE.' }
+    $script:serialNumber=Get-AtelierHardwareSerial
+    if (-not $script:serialNumber) { throw 'Numero de serie BIOS absent ou generique. Impossible d identifier ce poste de facon fiable.' }
+    $script:network=Get-AtelierWinPENetwork
+    $script:macs=@($script:network.macs)
     $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
     if ($Config.internal_mode) {
-        $connected = Send-Json '/api/boot/discover' @{macs=$script:macs;release=[string]$Config.boot_release} $false
+        $connected = Send-Json '/api/boot/discover' @{serial_number=$script:serialNumber;macs=$script:macs;release=[string]$Config.boot_release} $false
         $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
         $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders
         $username = $credentials.username
@@ -282,7 +298,7 @@ function Connect-Post {
         $connectionHeaders.Clear()
     } else {
         if (-not $script:controls.username.Text.Trim() -or -not $script:controls.password.Text) { throw 'Indiquez le compte et le mot de passe du partage.' }
-        $connected = Send-Json '/api/boot/connect' @{code=$script:controls.code.Text.Trim();macs=$script:macs} $false
+        $connected = Send-Json '/api/boot/connect' @{code=$script:controls.code.Text.Trim();serial_number=$script:serialNumber;macs=$script:macs} $false
         $username = $script:controls.username.Text.Trim()
         $password = $script:controls.password.Text
     }
@@ -320,7 +336,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.9'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.0'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea

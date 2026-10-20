@@ -6,6 +6,10 @@ IQ Atelier installe Windows sur les ordinateurs de l atelier depuis le reseau. L
 
 Sauvegarder les donnees du poste : le deploiement efface toutes les partitions du disque choisi. Brancher l alimentation et un cable reseau. Le poste doit demarrer en UEFI. Verifier qu une image Windows et ses profils Pro/Famille sont disponibles dans Atelier.
 
+## Identifier le PC, meme sur un dock
+
+Avec WinPE IQ-5.0, le numero de serie du PC identifie sa fiche. Le meme dock peut servir a plusieurs ordinateurs ; chacun conserve sa fiche et ses rapports. Une MAC absente de l inventaire WinPE n empeche plus la tentative de connexion. Le SN doit etre reel et lisible dans le firmware ; une valeur generique ou absente bloque l identification, sans toucher au disque. Les anciennes fiches MAC sans SN restent visibles ; les historiques ambigus ne sont pas fusionnes automatiquement.
+
 ## Installer un ordinateur
 
 1. Allumer le poste et choisir son demarrage reseau UEFI/PXE dans le menu de demarrage du constructeur.
@@ -25,7 +29,7 @@ Le compte de preparation utilise le mode automatique deja configure dans l ateli
 Ouvrir `https://192.168.99.250`. En mode interne, l acces administrateur est automatique sur le reseau de confiance de l atelier.
 
 - **Vue d ensemble** : progression de l image, etapes Windows, erreurs et avertissements. Cliquer sur le poste pour son journal.
-- **Parc machines** : noms, MAC et rapports disponibles. Cliquer un nom pour ouvrir la fiche ordinateur.
+- **Parc machines** : noms, numeros de serie et rapports disponibles. La MAC observee reste informative. Cliquer un nom pour ouvrir la fiche ordinateur.
 - **Profils Windows** : images enregistrees, editions/index, logiciels et personnalisation. Pour ajouter une image, copier le WIM dans `<data_dir>\artifacts` sur le serveur puis Enregistrer un fichier. Le SHA-256 est calcule a cet enregistrement.
 
 Dans Activite de deploiement, **Rapport PDF** telecharge le rapport du poste. **Dossier inventaire** affiche le chemin serveur et permet de telecharger XML et CSV. Les fichiers sont classes sous `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` sur .250. Le navigateur ne peut pas ouvrir de lui-meme l Explorateur d un autre ordinateur : copier le chemin dans l Explorateur du serveur, ou telecharger les fichiers depuis le site.

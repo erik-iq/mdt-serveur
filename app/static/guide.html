@@ -2,6 +2,8 @@
 <p>IQ Atelier installe Windows sur les ordinateurs de l atelier depuis le reseau. Le serveur de deploiement est DEPLOY-01, <code>192.168.99.250</code>. Le site permet de suivre les installations et retrouver leurs rapports. Consulter <a href="/static/atelier4.html">le guide de mise a jour ATELIER-4</a> pour mettre le serveur et WinPE a niveau.</p>
 <h2>Avant de commencer</h2>
 <p>Sauvegarder les donnees du poste : le deploiement efface toutes les partitions du disque choisi. Brancher l alimentation et un cable reseau. Le poste doit demarrer en UEFI. Verifier qu une image Windows et ses profils Pro/Famille sont disponibles dans Atelier.</p>
+<h2>Identifier le PC, meme sur un dock</h2>
+<p>Avec WinPE IQ-5.0, le numero de serie du PC identifie sa fiche. Le meme dock peut servir a plusieurs ordinateurs ; chacun conserve sa fiche et ses rapports. Une MAC absente de l inventaire WinPE n empeche plus la tentative de connexion. Le SN doit etre reel et lisible dans le firmware ; une valeur generique ou absente bloque l identification, sans toucher au disque. Les anciennes fiches MAC sans SN restent visibles ; les historiques ambigus ne sont pas fusionnes automatiquement.</p>
 <h2>Installer un ordinateur</h2>
 <ol>
 <li>Allumer le poste et choisir son demarrage reseau UEFI/PXE dans le menu de demarrage du constructeur.</li>
@@ -19,7 +21,7 @@
 <p>Ouvrir <code>https://192.168.99.250</code>. En mode interne, l acces administrateur est automatique sur le reseau de confiance de l atelier.</p>
 <ul>
 <li><strong>Vue d ensemble</strong> : progression de l image, etapes Windows, erreurs et avertissements. Cliquer sur le poste pour son journal.</li>
-<li><strong>Parc machines</strong> : noms, MAC et rapports disponibles. Cliquer un nom pour ouvrir la fiche ordinateur.</li>
+<li><strong>Parc machines</strong> : noms, numeros de serie et rapports disponibles. La MAC observee reste informative. Cliquer un nom pour ouvrir la fiche ordinateur.</li>
 <li><strong>Profils Windows</strong> : images enregistrees, editions/index, logiciels et personnalisation. Pour ajouter une image, copier le WIM dans <code>&lt;data_dir&gt;\artifacts</code> sur le serveur puis Enregistrer un fichier. Le SHA-256 est calcule a cet enregistrement.</li>
 </ul>
 <p>Dans Activite de deploiement, <strong>Rapport PDF</strong> telecharge le rapport du poste. <strong>Dossier inventaire</strong> affiche le chemin serveur et permet de telecharger XML et CSV. Les fichiers sont classes sous <code>&lt;data_dir&gt;\inventaires\NOM-DU-PC\ID-DEPLOIEMENT</code> sur .250. Le navigateur ne peut pas ouvrir de lui-meme l Explorateur d un autre ordinateur : copier le chemin dans l Explorateur du serveur, ou telecharger les fichiers depuis le site.</p>

@@ -38,3 +38,78 @@ function Set-AtelierOperatorKeyboard {
     }
     [Windows.Forms.InputLanguage]::CurrentInputLanguage = $language
 }
+
+function ConvertTo-AtelierSerialNumber {
+    param([AllowEmptyString()][string]$Value)
+    $serial=($Value.Trim().ToUpperInvariant() -replace '\s+',' ')
+    $compact=$serial -replace '[^A-Z0-9]',''
+    $generic=@('TOBEFILLEDBYOEM','DEFAULTSTRING','SYSTEMSERIALNUMBER','SERIALNUMBER','NONE','UNKNOWN','NOTAPPLICABLE','NOTSPECIFIED','NOTAVAILABLE','NOTPRESENT','NOTSET','UNSPECIFIED','NA','INVALID','OEM')
+    if ($serial.Length -lt 4 -or $serial.Length -gt 80 -or $serial -notmatch '^[A-Z0-9][A-Z0-9 ._-]*$' -or -not $compact -or $compact -match '^(0+|F+)$' -or $compact -in $generic) { return '' }
+    return $serial
+}
+function Get-AtelierHardwareSerial {
+    foreach ($source in @(@{class='Win32_BIOS';property='SerialNumber'},@{class='Win32_ComputerSystemProduct';property='IdentifyingNumber'})) {
+        try {
+            $hardware=Get-CimInstance -ClassName $source.class -OperationTimeoutSec 10 -ErrorAction Stop | Select-Object -First 1
+            $serial=ConvertTo-AtelierSerialNumber ([string]$hardware.($source.property))
+            if ($serial) { return $serial }
+        } catch { }
+    }
+    return ''
+}
+function ConvertTo-AtelierMacAddress {
+    param([string]$Value)
+    $mac=($Value -replace '[:-]','').ToUpperInvariant()
+    if ($mac -notmatch '^[0-9A-F]{12}$' -or $mac -eq '000000000000' -or ([Convert]::ToInt32($mac.Substring(0,2),16) -band 1)) { return '' }
+    return ($mac -replace '(.{2})(?!$)','$1:')
+}
+function Get-AtelierNetworkInterfaces {
+    return [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+}
+function Get-AtelierWinPENetwork {
+    $macs=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $ips=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $interfaces=0
+    try {
+        foreach ($adapter in @(Get-CimInstance Win32_NetworkAdapter -OperationTimeoutSec 10 -ErrorAction Stop)) {
+            $mac=ConvertTo-AtelierMacAddress ([string]$adapter.MACAddress)
+            if ($mac) { [void]$macs.Add($mac);$interfaces++ }
+        }
+    } catch { }
+    try {
+        foreach ($adapter in @(Get-CimInstance Win32_NetworkAdapterConfiguration -OperationTimeoutSec 10 -ErrorAction Stop)) {
+            $mac=ConvertTo-AtelierMacAddress ([string]$adapter.MACAddress)
+            if ($mac) { [void]$macs.Add($mac) }
+            foreach ($ip in @($adapter.IPAddress)) {
+                if ([string]$ip -match '^\d+\.\d+\.\d+\.\d+$' -and $ip -notmatch '^(0\.|127\.|169\.254\.)') { [void]$ips.Add([string]$ip) }
+            }
+        }
+    } catch { }
+    try {
+        foreach ($adapter in @(Get-AtelierNetworkInterfaces)) {
+            if ($adapter.NetworkInterfaceType -eq [Net.NetworkInformation.NetworkInterfaceType]::Loopback) { continue }
+            $interfaces++
+            $mac=ConvertTo-AtelierMacAddress ($adapter.GetPhysicalAddress().ToString())
+            if ($mac) { [void]$macs.Add($mac) }
+            foreach ($address in $adapter.GetIPProperties().UnicastAddresses) {
+                $ip=$address.Address.ToString()
+                if ($address.Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and $ip -notmatch '^(0\.|127\.|169\.254\.)') { [void]$ips.Add($ip) }
+            }
+        }
+    } catch { }
+    $message=if ($ips.Count) { 'IPv4 : '+(@($ips) -join ' / ')+'. Les MAC sont informatives ; identification par numero de serie.' }
+        elseif ($interfaces -eq 0 -and $macs.Count -eq 0) { 'Inventaire reseau WinPE incomplet. La connexion sera tentee avec le numero de serie, sans exiger de MAC.' }
+        else { 'Aucune IPv4 utilisable dans l inventaire. La connexion au serveur sera testee directement.' }
+    return [pscustomobject]@{macs=@($macs | Select-Object -First 16);ipv4=@($ips);message=$message}
+}
+function Assert-AtelierMachineIdentity {
+    param($Plan)
+    if ($Plan.serial_number) {
+        $serial=Get-AtelierHardwareSerial
+        if (-not $serial -or $serial -cne [string]$Plan.serial_number) { throw 'Le numero de serie BIOS ne correspond pas au poste autorise. Aucun disque efface.' }
+    } else {
+        # Retain explicit legacy authorizations; new WinPE discovery always sends a serial.
+        $network=Get-AtelierWinPENetwork
+        if (-not $Plan.mac -or $Plan.mac -notin $network.macs) { throw 'Ancienne autorisation MAC incompatible. Utiliser une fiche par numero de serie. Aucun disque efface.' }
+    }
+}
