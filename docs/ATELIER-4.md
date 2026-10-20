@@ -2,6 +2,16 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## IQ-5.3.1 : reprendre apres Image appliquee
+
+Le serveur conserve la protection contre un nouveau demarrage PXE apres application de l image lorsque la preparation Windows n est pas terminee. Ce cas renvoyait seulement HTTP 409 et bloquait aussi une reinstallation volontaire apres un premier demarrage Windows en echec.
+
+Le nouveau WinPE propose maintenant Recommencer l installation Windows ? pour ce cas precis. Non laisse l image intacte et invite a demarrer Windows Boot Manager. Oui cree un nouvel essai en attente, lie au meme numero de serie et a l identifiant du dernier essai applique. Le choix Windows, du nom et du disque reste a faire dans l assistant ; aucune partition n est effacee par cette reconnexion. Le premier essai, ses evenements, rapports et fichiers sont conserves. Le nouvel essai indique dans son journal l identifiant de l installation precedente.
+
+La reprise exige une reponse serveur structuree pour ce numero de serie et une confirmation locale. Un simple code 409, un autre poste, un ancien identifiant qui n est plus le dernier, un essai deja en cours ou une demande sans SN ne permettent pas de forcer une reinstallation. Deux demandes simultanees ne creent qu un nouvel essai ; une reconnexion normale retrouve ensuite cet essai.
+
+Mettre a jour .250 avec Upgrade-Atelier4.ps1, puis redemarrer sur WinPE IQ-5.3.1. Les reglages francais suisse et les corrections de compte / affichage / redemarrage IQ-5.3 sont inclus. La boite WinForms et la reinstallation physique restent a valider sous Windows ; les tests executent les transitions API et les fonctions de connexion avec les appels constructeur et l interaction operateur simules.
+
 ## IQ-5.3 : assistant adaptable, redemarrage et compte Administrateur
 
 L assistant WinPE s ouvre maximise et adapte les champs, les textes et le journal a la taille de sa fenetre. Le bandeau utilise la hauteur necessaire au titre et a sa description, sans ligne fixe qui coupe le texte. Le logo reste petit en haut a droite. Le menu lateral disparait lorsque l ecran manque de place ; les pages longues restent defilantes. Redimensionner ne recree pas les champs et ne remet pas a zero les choix ni la progression.

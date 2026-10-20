@@ -129,6 +129,49 @@ function Get-AtelierConnectionFailure {
     } catch { 'Adresse invalide' }
     return ('Etape : '+$Stage+"`r`nServeur : "+$destination+"`r`n"+$cause)
 }
+function Get-AtelierPreparedWindowsConflict {
+    param([System.Management.Automation.ErrorRecord]$Failure,[string]$SerialNumber)
+    if (-not $SerialNumber) { return }
+    # Only a structured response for this exact serial enables the recovery choice.
+    # Never infer permission to reinstall from a bare HTTP 409 or its wording.
+    $exception=$Failure.Exception;$http=0
+    for ($depth=0;$exception -and $depth -lt 10;$depth++) {
+        if ($exception.Response -and $exception.Response.StatusCode) { $http=[int]$exception.Response.StatusCode;break }
+        $exception=$exception.InnerException
+    }
+    if ($http -ne 409) { return }
+    $json=[string]$Failure.ErrorDetails.Message
+    if ($json) {
+        if ($json.Length -gt 4096) { return }
+        try { $null=$json | ConvertFrom-Json -ErrorAction Stop } catch { $json='' }
+    }
+    try { if (-not $json) {
+        $exception=$Failure.Exception
+        for ($depth=0;$exception -and $depth -lt 10;$depth++) {
+            if ($exception.Response -is [Net.WebResponse]) {
+                $stream=$exception.Response.GetResponseStream()
+                if ($stream) {
+                    if ($stream.CanTimeout) { $stream.ReadTimeout=2000 }
+                    $reader=New-Object IO.StreamReader($stream)
+                    try {
+                        $buffer=New-Object char[] 4097;$length=$reader.ReadBlock($buffer,0,$buffer.Length)
+                        if ($length -gt 4096) { return }
+                        $json=New-Object string($buffer,0,$length)
+                    } finally { $reader.Dispose() }
+                }
+                break
+            }
+            $exception=$exception.InnerException
+        }
+    } } catch { return }
+    try {
+        if (-not $json -or $json.Length -gt 4096) { return }
+        $detail=($json | ConvertFrom-Json -ErrorAction Stop).detail
+        $id=[guid]::Empty
+        if ($detail.code -cne 'windows_prepared' -or $detail.serial_number -cne $SerialNumber -or -not [guid]::TryParse([string]$detail.deployment_id,[ref]$id) -or $id -eq [guid]::Empty) { return }
+        return [pscustomobject]@{deployment_id=$id.ToString();serial_number=$SerialNumber}
+    } catch { return }
+}
 function Assert-AtelierMachineIdentity {
     param($Plan)
     if ($Plan.serial_number) {

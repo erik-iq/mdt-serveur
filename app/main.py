@@ -382,7 +382,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.3"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.3.1"}
 
     @api.get('/api/session')
     def session_options():
@@ -585,6 +585,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def boot_discover(body: BootDiscovery, request: Request):
         if not internal:
             raise HTTPException(403, 'Connexion automatique desactivee')
+        if body.reinstall_deployment_id and (not enrollment or not body.serial_number):
+            raise HTTPException(403, 'La reinstallation exige l arrivee automatique et le numero de serie du poste')
         if request.headers.get('sec-fetch-site') == 'cross-site' or request.headers.get('origin', public_url) != public_url:
             raise HTTPException(403, 'Origine externe refusee')
         if enrollment and body.release != 'ATELIER-4':
@@ -602,6 +604,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             records=[dict(r) for r in con.execute("SELECT * FROM deployments WHERE machine_id=? AND status IN ('queued','running')",(machine['id'],))] if machine else []
             if len(records) > 1 or any(r['status'] == 'running' for r in records):
                 raise HTTPException(409, 'Un deploiement est deja actif ou plusieurs postes correspondent')
+            if body.reinstall_deployment_id and (not machine or records):
+                raise HTTPException(409, 'Demande de reinstallation obsolete ; reconnecter le poste sans forcer une nouvelle installation')
             valid = [r for r in records if (enrollment or r['wizard_enabled']) and (enrollment or (r['boot_code_expires'] or '') > now())]
             if not valid and enrollment:
                 if records:
@@ -609,8 +613,13 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 known=bool(machine)
                 if machine:
                     latest = con.execute('SELECT * FROM deployments WHERE machine_id=? ORDER BY created_at DESC LIMIT 1', (machine['id'],)).fetchone()
-                    if latest and latest['status'] == 'staged' and latest['windows_status'] not in {'completed', 'failed', 'needs_attention'}:
-                        raise HTTPException(409, 'Windows est deja prepare : demarrer sur le disque local pour terminer')
+                    if body.reinstall_deployment_id:
+                        if not latest or latest['id'] != str(body.reinstall_deployment_id) or latest['status'] != 'staged':
+                            raise HTTPException(409, 'Cette ancienne installation ne correspond plus au dernier essai du poste')
+                    elif latest and latest['status'] == 'staged' and latest['windows_status'] not in {'completed', 'failed', 'needs_attention'}:
+                        raise HTTPException(409, detail={'code':'windows_prepared',
+                            'message':'Windows est deja prepare. Demarrer sur le disque local pour terminer, ou choisir une nouvelle installation dans WinPE.',
+                            'deployment_id':latest['id'],'serial_number':machine['serial_number'] or ''})
                 else:
                     identifier=str(uuid.uuid4())
                     hostname=('PC-'+uuid.uuid4().hex[:12].upper()) if body.serial_number else ('PC-'+macs[0].replace(':',''))
@@ -629,6 +638,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                     (identifier, machine['id'], profile['id'], digest(secrets.token_urlsafe(32)), timestamp, timestamp,
                      json.dumps(catalog), json.dumps(selection), (datetime.now(timezone.utc)+timedelta(hours=2)).isoformat()))
                 event(con, identifier, 'queued', 0, 'Poste detecte automatiquement ; attente du choix Windows et de la confirmation locale du disque')
+                if body.reinstall_deployment_id:
+                    event(con, identifier, 'queued', 0, 'Nouvelle installation demandee dans WinPE apres image appliquee : '+str(body.reinstall_deployment_id)+'. Confirmation du disque encore requise.')
                 valid = [row(con, 'deployments', identifier)]
             if len(valid) != 1:
                 raise HTTPException(409, 'Creer une autorisation pour ce numero de serie ou activer l arrivee automatique WinPE')

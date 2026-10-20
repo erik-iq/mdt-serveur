@@ -329,7 +329,19 @@ function Connect-Post {
     $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
     if ($Config.internal_mode) {
         $script:connectionStage='Connexion a l API Atelier /api/boot/discover'
-        $connected = Send-Json '/api/boot/discover' @{serial_number=$script:serialNumber;macs=$script:macs;release=[string]$Config.boot_release} $false
+        $discovery=@{serial_number=$script:serialNumber;macs=$script:macs;release=[string]$Config.boot_release}
+        try { $connected = Send-Json '/api/boot/discover' $discovery $false }
+        catch {
+            $prepared=Get-AtelierPreparedWindowsConflict -Failure $_ -SerialNumber $script:serialNumber
+            if (-not $prepared -or -not $Config.auto_enroll) { throw }
+            if (-not (Confirm-PreparedWindowsReinstall)) {
+                $script:status.Text='Image deja appliquee : demarrer sur Windows Boot Manager pour terminer la preparation.'
+                $script:next.Enabled=$true
+                return
+            }
+            $discovery.reinstall_deployment_id=$prepared.deployment_id
+            $connected=Send-Json '/api/boot/discover' $discovery $false
+        }
         $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
         $script:connectionStage='Recuperation des acces au partage'
         $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders -TimeoutSec 20
@@ -362,6 +374,10 @@ function Connect-Post {
     $script:page = 1; $script:status.Text = 'Poste autorise. Les choix restent modifiables avant installation.'
     Show-Page
 }
+function Confirm-PreparedWindowsReinstall {
+    $message="Une image Windows est deja appliquee sur ce poste, mais sa preparation n est pas terminee.`r`n`r`nPour terminer cette installation, choisissez Non puis demarrez sur Windows Boot Manager.`r`n`r`nSi Windows est bloque et que vous voulez recommencer, choisissez Oui. Une nouvelle installation sera preparee ; vous devrez encore choisir et confirmer le disque a effacer. L historique sera conserve."
+    return [Windows.Forms.MessageBox]::Show($form,$message,'Recommencer l installation Windows ?',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Warning,[Windows.Forms.MessageBoxDefaultButton]::Button2) -eq [Windows.Forms.DialogResult]::Yes
+}
 function Begin-Deployment {
     if ($Config.auto_enroll) { $script:session.plan.disk_number=[int](Choice-Value 'target_disk') }
     $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $script:session.plan.disk_number
@@ -379,7 +395,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.3'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.3.1'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'Dpi'
 $form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96)

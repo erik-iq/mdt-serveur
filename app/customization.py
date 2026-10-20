@@ -1,5 +1,6 @@
 """Validated installation settings and catalogue metadata shared by the API."""
 from typing import Literal
+from uuid import UUID
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -168,3 +169,4 @@ class BootConnection(BootIdentity):
 
 class BootDiscovery(BootIdentity):
     release: str = Field(default='', max_length=40)
+    reinstall_deployment_id: UUID | None = None
