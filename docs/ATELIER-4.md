@@ -18,6 +18,14 @@ Sur .250, appliquer la revision avec Upgrade-Atelier4.ps1, puis redemarrer le PC
 
 Sources : [pack WinPE officiel HP](https://ftp.hp.com/pub/caps-softpaq/cmit/HP_WinPE_DriverPack.html), [notes et pilotes inclus](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/softpaq/WinPE11.html).
 
+### Correctif extraction Windows PowerShell 5.1
+
+Le message Extraction WinPE HP en echec (code ) sans numero provenait d un code de sortie null apres Start-Process / WaitForExit. Le script classait cette valeur comme un echec alors que l extraction pouvait etre terminee. Le lancement utilise maintenant directement System.Diagnostics.Process, sans shell, avec attente limitee et recuperation du code avant fermeture du processus. Un code absent reste refuse avec un message explicite ; un vrai code non nul reste un echec. Les controles des fichiers INF / SYS / CAT restent obligatoires.
+
+Sur une console deja mise a jour vers IQ-5.1, remplacer seulement scripts\WinPE-HPDrivers.ps1 puis relancer Build-WinPE.ps1 depuis le dossier installe, avec le cache D:\AtelierPXE\Drivers\WinPE-Official. Le SoftPaq signe deja telecharge est reutilise. Importer le nouveau WinPE dans WDS avant de nettoyer les anciens. Aucun changement du serveur web ni de Windows sur les postes n est necessaire pour cette reprise.
+
+Les tests incluent un vrai processus a sortie immediate, un code 7 et un depassement du delai, ainsi que les simulations de cache et de code absent. Sous Windows, le test de processus utilise explicitement Windows PowerShell 5.1 et un extracteur de test compile ; ce test ne remplace pas l execution du vrai SoftPaq HP sur .250.
+
 ## Diagnostic du bouton Connexion IQ-5.0.1
 
 Cette correction concerne toutes les marques. Elle ne change ni les pilotes ni la configuration reseau. Le bouton distingue la connexion a l API Atelier, la recuperation des acces au partage, l ouverture du partage des images et le chargement des profils. Une erreur pendant la connexion ouvre une boite de dialogue complete, avec l etape, l adresse du serveur, le code HTTP / transport disponible et le message Windows. Elle ne reste plus tronquee dans la bande d etat de 32 pixels.

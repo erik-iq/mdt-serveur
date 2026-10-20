@@ -8,21 +8,21 @@ import subprocess
 import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
-PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
+PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh') or shutil.which('powershell')
 pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell required')
 
 
-def execute(tmp_path,source):
+def execute(tmp_path,source,powershell=PWSH):
     script=tmp_path/'run.ps1'
     script.write_text(source.replace('PROJECT',str(ROOT).replace("'","''"))
                       .replace('WORK',str(tmp_path).replace("'","''")),encoding='utf-8-sig')
-    run=subprocess.run([PWSH,'-NoProfile','-File',str(script)],capture_output=True,text=True,timeout=45)
+    run=subprocess.run([powershell,'-NoProfile','-File',str(script)],capture_output=True,text=True,timeout=45)
     assert run.returncode==0,run.stdout+run.stderr
     return json.loads(run.stdout.splitlines()[-1])
 
 
 @pytest.mark.parametrize('case',['cache','modified','missing','bad_signature','wrong_publisher',
-                                 'download_failure','extract_failure','empty_pack','timeout','locked'])
+                                 'download_failure','extract_failure','empty_pack','timeout','locked','missing_code','start_failure'])
 def test_cache_reuse_repair_and_failure_before_driver_injection(tmp_path,case):
     result=execute(tmp_path,r'''
 $ErrorActionPreference='Stop'
@@ -39,11 +39,10 @@ function Get-AuthenticodeSignature {
  [CmdletBinding()]param($LiteralPath)
  [pscustomobject]@{Status=$(if ('CASE' -eq 'bad_signature'){'NotTrusted'}else{'Valid'});SignerCertificate=[pscustomobject]@{Subject=$(if ('CASE' -eq 'wrong_publisher'){'CN=Other Publisher, O=Other'}else{'CN=HP Inc., O=HP Inc., C=US'})}}
 }
-function Start-Process {
- param($FilePath,$ArgumentList,[switch]$PassThru,[switch]$NoNewWindow)
+function New-AtelierWinPEExtractionProcess {
+ param($Package,$Destination)
  $script:extractions++
- if ($ArgumentList -notmatch '^/s /e /f "(.+)"$') { throw 'Extraction-only switches required' }
- $folder=$Matches[1]
+ $folder=$Destination
  if ('CASE' -ne 'empty_pack') {
   New-Item -ItemType Directory -Path (Join-Path $folder 'network') | Out-Null
   Set-Content (Join-Path $folder 'network/ethernet.inf') "[Version]`nClass=Net`nCatalogFile=ethernet.cat"
@@ -52,8 +51,9 @@ function Start-Process {
   Set-Content (Join-Path $folder 'storage.inf') "[Version]`nClass=SCSIAdapter"
   Set-Content (Join-Path $folder 'wifi.inf') "[Version]`nClass=Net`n[Wireless.Ndi]`n*IfType=71"
  }
- $process=[pscustomobject]@{ExitCode=$(if ('CASE' -eq 'extract_failure'){7}else{0})}
- $process | Add-Member ScriptMethod WaitForExit {param($Timeout) if ($Timeout -ne 600000){throw 'Missing extraction timeout'};return ('CASE' -ne 'timeout')}
+ $process=[pscustomobject]@{ExitCode=$(if ('CASE' -eq 'extract_failure'){7}elseif ('CASE' -eq 'missing_code'){$null}else{0})}
+ $process | Add-Member ScriptMethod Start {return ('CASE' -ne 'start_failure')}
+ $process | Add-Member ScriptMethod WaitForExit {param($Timeout) if ($Timeout -notin @(600000,5000)){throw 'Missing extraction timeout'};return ('CASE' -ne 'timeout')}
  $process | Add-Member ScriptMethod Kill {$script:killed++}
  $process | Add-Member ScriptMethod Dispose {$script:disposed++}
  return $process
@@ -82,12 +82,14 @@ finally { if ($held) { $held.Dispose() } }
     assert result['failed'] != success,result
     assert result['downloads']==(0 if case=='locked' else 1)
     assert result['extractions']==(2 if case in {'modified','missing'} else
-                                   1 if case in {'cache','extract_failure','empty_pack','timeout'} else 0)
+                                   1 if case in {'cache','extract_failure','empty_pack','timeout','missing_code','start_failure'} else 0)
     assert result['disposed']==result['extractions']
     assert result['killed']==(1 if case=='timeout' else 0)
     assert result['manifest']==success
     assert result['selected']==(['ethernet.inf'] if success else [])
     assert not result['partial'] and not result['staging']
+    if case=='missing_code':assert 'indisponible' in result['message']
+    if case=='extract_failure':assert 'code 7' in result['message']
 
 
 @pytest.mark.parametrize('case',['success','prepare_failure','driver_failure'])
@@ -146,3 +148,52 @@ catch { $failed=$true;$message=$_.Exception.Message }
     assert result['added']==(['network-first.inf','network-second.inf'] if case=='success' else [])
     assert result['saved']==result['marker']==result['imported']==(case=='success')
     assert result['discarded']==(case=='driver_failure')
+
+
+@pytest.mark.parametrize('case',['fast_success','exit_7','timeout'])
+def test_native_child_process_exit_and_arguments_with_spaces(tmp_path,case):
+    """Use a real child, including Windows PowerShell 5.1 when running on Windows."""
+    package=tmp_path/'HP extraction fixture.exe'
+    destination=tmp_path/'extracted drivers with spaces';destination.mkdir()
+    prelude=''
+    powershell=PWSH
+    if os.name=='nt':
+        powershell=str(Path(os.environ['SystemRoot'])/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe')
+        if not Path(powershell).exists():pytest.skip('Windows PowerShell 5.1 required')
+        code='''
+using System;
+using System.IO;
+using System.Threading;
+public class ExtractionFixture {
+ public static int Main(string[] args) {
+  if (args.Length!=4 || args[0]!="/s" || args[1]!="/e" || args[2]!="/f") return 91;
+  File.WriteAllLines(Path.Combine(args[3],"arguments.txt"),args);
+  Thread.Sleep(DELAY);
+  return EXIT;
+ }
+}
+'''.replace('DELAY','3000' if case=='timeout' else '0').replace('EXIT','7' if case=='exit_7' else '0')
+        prelude="Add-Type -OutputType ConsoleApplication -OutputAssembly 'WORK/HP extraction fixture.exe' -TypeDefinition @'\n"+code+"\n'@\n"
+    else:
+        package.write_text('#!/bin/sh\n'
+                           '[ "$#" -eq 4 ] && [ "$1" = /s ] && [ "$2" = /e ] && [ "$3" = /f ] || exit 91\n'
+                           'printf "%s\\n" "$@" > "$4/arguments.txt"\n'+
+                           ('exec sleep 3\n' if case=='timeout' else 'exit '+('7' if case=='exit_7' else '0')+'\n'))
+        package.chmod(0o700)
+    result=execute(tmp_path,prelude+r'''
+$ErrorActionPreference='Stop'
+. 'PROJECT/scripts/WinPE-HPDrivers.ps1'
+$failed=$false;$message='';$runs=0
+try {
+ for ($i=0;$i -lt 3;$i++) {
+  Invoke-AtelierWinPEHpExtraction -Package 'WORK/HP extraction fixture.exe' -Destination 'WORK/extracted drivers with spaces' -TimeoutSeconds 1
+  $runs++
+ }
+} catch { $failed=$true;$message=$_.Exception.Message }
+@{failed=$failed;message=$message;runs=$runs} | ConvertTo-Json -Compress
+''',powershell=powershell)
+    assert result['failed']==(case!='fast_success'),result
+    assert result['runs']==(3 if case=='fast_success' else 0)
+    assert (destination/'arguments.txt').read_text(encoding='utf-8-sig').splitlines()==['/s','/e','/f',str(destination)]
+    if case=='exit_7':assert 'code 7' in result['message']
+    if case=='timeout':assert 'trop longue' in result['message']

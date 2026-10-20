@@ -33,6 +33,34 @@ function Get-AtelierWinPEHpNetworkInfs {
         $inf.FullName
     }
 }
+function New-AtelierWinPEExtractionProcess {
+    param([string]$Package,[string]$Destination)
+    $start=New-Object Diagnostics.ProcessStartInfo
+    $start.FileName=$Package
+    $start.Arguments='/s /e /f "'+$Destination+'"'
+    $start.UseShellExecute=$false
+    $start.CreateNoWindow=$true
+    $process=New-Object Diagnostics.Process
+    $process.StartInfo=$start
+    return $process
+}
+function Invoke-AtelierWinPEHpExtraction {
+    param([string]$Package,[string]$Destination,[ValidateRange(1,600)][int]$TimeoutSeconds=600)
+    # Windows PowerShell 5.1 Start-Process can return a Process whose ExitCode
+    # stays null after WaitForExit. Own the process from creation through exit.
+    $process=New-AtelierWinPEExtractionProcess -Package $Package -Destination $Destination
+    try {
+        if (-not $process.Start()) { throw 'Impossible de lancer l extracteur WinPE HP.' }
+        if (-not $process.WaitForExit($TimeoutSeconds*1000)) {
+            $process.Kill()
+            [void]$process.WaitForExit(5000)
+            throw 'Extraction du pack WinPE HP trop longue.'
+        }
+        $exitCode=$process.ExitCode
+        if ($null -eq $exitCode) { throw 'Code de sortie de l extracteur WinPE HP indisponible. Extraction non validee.' }
+        if ($exitCode -ne 0) { throw ('Extraction WinPE HP en echec (code '+$exitCode+').') }
+    } finally { $process.Dispose() }
+}
 function Get-AtelierWinPEHpDrivers {
     param([Parameter(Mandatory)][string]$CacheRoot)
     $url='https://ftp.ext.hp.com/pub/softpaq/sp173001-173500/sp173204.exe'
@@ -81,12 +109,7 @@ function Get-AtelierWinPEHpDrivers {
             $staging=Join-Path $cache ('extract-'+[guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $staging | Out-Null
             Write-Host 'Extraction silencieuse des pilotes WinPE ; aucune installation sur .250...'
-            $process=$null
-            try {
-                $process=Start-Process -FilePath $package -ArgumentList ('/s /e /f "'+$staging+'"') -PassThru -NoNewWindow
-                if (-not $process.WaitForExit(600000)) { $process.Kill();throw 'Extraction du pack WinPE HP trop longue.' }
-                if ($process.ExitCode -ne 0) { throw ('Extraction WinPE HP en echec (code '+$process.ExitCode+').') }
-            } finally { if ($process) { $process.Dispose() } }
+            Invoke-AtelierWinPEHpExtraction -Package $package -Destination $staging
             $files=@(Get-AtelierWinPEHpTree $staging)
             $infs=@(Get-AtelierWinPEHpNetworkInfs $staging)
             if (-not $infs.Count -or -not @($files | Where-Object { $_.name -match '\.sys$' }).Count -or -not @($files | Where-Object { $_.name -match '\.cat$' }).Count) { throw 'Pack HP incomplet : INF reseau, SYS ou CAT absents.' }
