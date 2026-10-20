@@ -63,7 +63,7 @@ Internet est necessaire pour WinGet, les mises a jour et les portails de garanti
 ## En cas de probleme
 
 - PXE absent : verifier UEFI, Ethernet, pilotes WinPE et qu un seul serveur PXE repond.
-- Connexion WinPE impossible avec NetworkUnreachable et aucune interface dans ipconfig /all : la reconstruction IQ-5.1 integre automatiquement les pilotes reseau du pack WinPE officiel HP. Demarrer le PC sur la nouvelle image datee. Le fonctionnement sur un Dell ou une VM ne garantit pas que les pilotes du HP soient deja presents.
+- Connexion WinPE impossible avec NetworkUnreachable et aucune interface dans ipconfig /all : la reconstruction IQ-5.2 ajoute un seul pilote Intel I219 cible pour le port integre du HP 840 G5. Une docking qui fonctionne utilise une autre carte reseau. Demarrer le PC sur la nouvelle image datee. Le fonctionnement sur un Dell ou une VM ne garantit pas que les pilotes du HP soient deja presents.
 - Mauvaise edition : choisir un autre profil correspondant a la licence, ou faire synchroniser les profils depuis le WIM par l administrateur.
 - Echec avant partitionnement : lire le journal dans WinPE et dans l activite du site. Le disque ne doit pas etre efface tant que les controles ne sont pas passes.
 - Logiciel en echec : consulter `C:\ProgramData\AtelierPXE\software-logs` et le PDF. Le reste de la preparation peut continuer.

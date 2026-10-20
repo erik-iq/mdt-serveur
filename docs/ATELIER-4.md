@@ -2,6 +2,28 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## Reseau WinPE IQ-5.2 : un seul pilote Intel I219
+
+Sur le HP EliteBook 840 G5, la connexion fonctionne avec la docking mais pas avec le port integre. Les deux interfaces utilisent des pilotes differents. Le demarrage PXE utilise le reseau du firmware UEFI ; une fois WinPE charge, Windows doit disposer de son propre pilote. Une absence totale d interface dans ipconfig /all ne correspond pas a un refus du bouton Connexion. Le numero de serie reste l identifiant du PC, meme si le dock change.
+
+La construction n utilise plus le pack WinPE HP complet ni son extracteur SoftPaq. Elle telecharge le ZIP Ethernet x64 officiel Intel 31.2.2 (environ 39 Mo), puis selectionne exactement un INF NDIS e1d / e1d6*x64 de classe Net, applicable a la version de WinPE et contenant les identifiants I219-LM / I219-V PCI\VEN_8086&DEV_15D7 et PCI\VEN_8086&DEV_15D8 du 840 G5. Les autres familles Intel, NetAdapterCx et pilotes x86 ne sont pas injectes. La version du ZIP et son SHA-256 officiel sont fixes. Le nombre de fichiers INF ajoutes automatiquement est un ; un INF peut couvrir plusieurs variantes materielles de la meme famille.
+
+Le cache est D:\AtelierPXE\Drivers\WinPE-Official\Intel-I219-31.2.2 par defaut avec Upgrade-Atelier4.ps1. Le ZIP n est telecharge de nouveau que s il est absent ou son empreinte incorrecte. Les fichiers extraits sont controles et repares depuis le ZIP si necessaire. Le journal selection.json indique le fichier retenu, sa version et la version de WinPE. Aucun installateur Intel ou HP n est execute sur .250. Les fichiers CAT / SYS restent avec leur INF ; DISM valide le pilote signe pendant l integration. Un refus DISM ou un pilote absent du DriverStore empeche la publication et le nettoyage de l ancienne image.
+
+Les pilotes deja inclus par Microsoft dans l ADK sont conserves pour les autres PC et docks. Les anciens caches HP ne sont plus utilises. Aucun dossier de pilotes supplementaires n est repris automatiquement : -DriversPath doit etre indique explicitement pour en ajouter. Il n existe pas de pilote universel HP pour tous les ports Ethernet et tous les docks.
+
+Au lancement, si aucune IPv4 utilisable n est presente et si le PCI correspond a 15D7 / 15D8, Atelier tente une seule fois drvload sur le fichier effectivement injecte, verifie par son empreinte, puis relance l initialisation reseau. Chaque commande a un delai de 15 secondes maximum. Une docking deja connectee n est pas reinitialisee. L assistant reste accessible en cas d echec ; Logs\network-recovery.json conserve les codes des commandes dans WinPE.
+
+Appliquer la revision sur .250 avec Upgrade-Atelier4.ps1, puis redemarrer le HP sur le nouveau WinPE IQ-5.2 pour tester le port integre. Une session WinPE deja ouverte ne recoit pas les nouveaux pilotes. La docking peut etre utilisee entre-temps. L installation des logiciels et HPIA dans Windows n est pas modifiee par cette correction.
+
+Les tests executent l extraction de ZIP de test, la selection materielle / version de WinPE, les controles de cache, les refus d archive et l orchestration de la construction et du demarrage. Les operations ADK / DISM / WDS sont simulees. Le telechargement du vrai ZIP Intel est bloque par la politique reseau de l environnement de developpement ; sa structure reelle et le port du HP physique restent a valider sur .250. La construction refuse de substituer un autre pilote si aucun INF conforme n est trouve.
+
+Sources : [telechargement officiel Intel et SHA-256](https://www.intel.com/content/www/us/en/download/727998/intel-network-adapter-driver-for-microsoft-windows-11.html), [README Intel 31.2.2](https://downloadmirror.intel.com/923981/readme.txt), [notes HP listant le 840 G5 et la famille I219](https://ftp.hp.com/pub/softpaq/sp98501-99000/sp98585.html).
+
+## Historique IQ-5.1 : pack HP remplace en IQ-5.2
+
+Les sections IQ-5.1 ci-dessous decrivent l ancienne implementation. Ne pas appliquer leurs reprises de script a IQ-5.2.
+
 ## Pilotes reseau WinPE IQ-5.1
 
 Un PC qui affiche ConnectFailure / NetworkUnreachable et aucune interface dans ipconfig /all, meme apres wpeutil InitializeNetwork, ne dispose pas d une interface reseau utilisable dans WinPE. Le fonctionnement sur un autre PC ne garantit pas la prise en charge de sa carte : les controles SN et l API sont communs, les pilotes peuvent differer. L absence d interface oriente vers un pilote absent ou incompatible, ou une interface desactivee ; elle ne donne pas l identifiant materiel exact du controleur.
@@ -317,7 +339,7 @@ Les XML/CSV sont sur `.250` dans `<data_dir>\inventaires\NOM-DU-PC\ID-DEPLOIEMEN
 
 Executer la commande fournie dans la conversation dans **Windows PowerShell 5.1 administrateur sur DEPLOY-01**. Elle telecharge une revision precise et appelle `scripts\Upgrade-Atelier4.ps1`. Ne pas utiliser une archive de `main`, qui peut etre plus ancienne.
 
-Le script retrouve l installation par sa tache planifiee, sauvegarde code/configuration et SQLite, installe la revision 4, active le parcours automatique, synchronise les editions du WIM, reconstruit WinPE avec les pilotes detectes puis l importe dans WDS sous **Atelier PXE - ATELIER-4 - date**. Les nouvelles dependances graphiques et le lanceur en arriere-plan sont inclus dans le WIM. Un simple remplacement du site ne suffit pas.
+Le script retrouve l installation par sa tache planifiee, sauvegarde code/configuration et SQLite, installe la revision 4, active le parcours automatique, synchronise les editions du WIM, reconstruit WinPE avec le pilote Intel cible et les pilotes Microsoft ADK puis l importe dans WDS sous **Atelier PXE - ATELIER-4 - date**. Les nouvelles dependances graphiques et le lanceur en arriere-plan sont inclus dans le WIM. Un simple remplacement du site ne suffit pas.
 
 Exemple avec chemins explicites, depuis la nouvelle archive extraite :
 

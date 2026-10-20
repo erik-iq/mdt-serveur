@@ -3,6 +3,7 @@ param([switch]$TextMode)
 $ErrorActionPreference = 'Stop'
 $bootLog = Join-Path $PSScriptRoot 'Logs\startup.log'
 . (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
+. (Join-Path $PSScriptRoot 'WinPE-NetworkRecovery.ps1')
 Write-AtelierBootEvent -Path $bootLog -Stage Starting
 try {
     $config = Get-Content (Join-Path $PSScriptRoot 'config.json') -Encoding UTF8 -Raw | ConvertFrom-Json
@@ -25,6 +26,7 @@ try {
         try { $store.Add((New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($rootCertificate))) } finally { $store.Close() }
     }
     Write-AtelierBootEvent -Path $bootLog -Stage CertificateReady
+    Initialize-AtelierI219Network -Config $config -LogPath (Join-Path $PSScriptRoot 'Logs\network-recovery.json')
     if (-not $TextMode) {
         Write-AtelierBootEvent -Path $bootLog -Stage OpeningWizard
         & (Join-Path $PSScriptRoot 'Wizard.ps1') -Config $config

@@ -50,7 +50,7 @@ Le script détecte l’installation, sauvegarde le code/configuration et SQLite,
     -DriversPath 'D:\AtelierPXE\Drivers\WinPE-x64'
 ```
 
-Si `-DriversPath` est omis, le script réutilise un dossier `Drivers\WinPE-x64` existant contenant des INF sous la racine Atelier. Si aucun n’existe, seuls les pilotes ADK sont inclus. Il faut Windows ADK, son complément WinPE, WDS et le certificat public .cer déjà utilisés par l’atelier. La construction native exige Windows : elle n’est pas réalisable dans l’environnement Linux de développement. Tester la nouvelle image sur une VM avant les autres PC. Une ancienne version WinPE est refusée lorsque ce nouveau parcours est activé, pour éviter une installation sans ses scripts de logiciels et d’inventaire.
+Depuis IQ-5.2, la construction ajoute un seul pilote Intel I219 cible aux pilotes Microsoft ADK. Aucun ancien dossier `Drivers\WinPE-x64` n est repris automatiquement ; utiliser `-DriversPath` explicitement pour ajouter un autre pilote. Il faut Windows ADK, son complément WinPE, WDS et le certificat public .cer déjà utilisés par l’atelier. La construction native exige Windows : elle n’est pas réalisable dans l’environnement Linux de développement. Tester la nouvelle image sur une VM avant les autres PC. Une ancienne version WinPE est refusée lorsque ce nouveau parcours est activé, pour éviter une installation sans ses scripts de logiciels et d’inventaire.
 
 La maintenance refuse de remplacer la console pendant une installation ou une synchronisation serveur active. Elle conserve données, images Windows, profils, rapports et configuration IIS. Les réponses PXE WDS ne sont pas activées ou désactivées par cette mise à jour. Pour les essais, un seul des deux serveurs Atelier/ancien MDT doit répondre au PXE.
 

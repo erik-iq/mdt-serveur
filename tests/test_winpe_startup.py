@@ -19,7 +19,7 @@ def invoke(script):
 
 
 def boot_fixture(tmp_path):
-    for name in ('Launch.ps1', 'WinPE-Session.ps1'):
+    for name in ('Launch.ps1', 'WinPE-Session.ps1', 'WinPE-NetworkRecovery.ps1'):
         shutil.copyfile(ROOT / 'scripts' / name, tmp_path / name)
     # Replace only the native input-language operation. The real launcher,
     # configuration loading, error handling and journal writing still execute.

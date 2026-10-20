@@ -7,11 +7,6 @@ $ErrorActionPreference='Stop'
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
 if (-not (Test-Path $TrustedRootCertificate -PathType Leaf)) { throw 'Certificat public .cer absent ; fournir -TrustedRootCertificate.' }
 if ($DriversPath -and -not (Test-Path $DriversPath -PathType Container)) { throw 'Dossier des pilotes WinPE absent.' }
-if (-not $DriversPath) {
-    foreach ($candidate in @((Join-Path $OutputRoot 'Drivers\WinPE-x64'),'C:\AtelierPXE\Drivers\WinPE-x64') | Select-Object -Unique) {
-        if ((Test-Path $candidate -PathType Container) -and @(Get-ChildItem -LiteralPath $candidate -Filter '*.inf' -File -Recurse | Select-Object -First 1).Count) { $DriversPath=$candidate;break }
-    }
-}
 $source=Split-Path $PSScriptRoot -Parent
 $backup=Join-Path $env:ProgramData ('AtelierPXE\backups\atelier4-' + [guid]::NewGuid().ToString('N'))
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath -BackupPath $backup

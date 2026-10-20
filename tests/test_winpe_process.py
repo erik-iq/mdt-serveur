@@ -57,20 +57,27 @@ def test_adk_batch_paths_environment_and_failure_codes(tmp_path, environment_exi
 
     source = tmp_path / 'source'
     shutil.copytree(BUILD_SCRIPT.parent, source)
-    inf = tmp_path / 'official-network-fixture.inf'
+    inf = tmp_path / 'e1d.inf'
     inf.write_text('[Version]\nClass=Net')
-    (source / 'WinPE-HPDrivers.ps1').write_text(
-        "function Get-AtelierWinPEHpDrivers { param($CacheRoot) return [pscustomobject]@{network_infs=@(" + ps_quote(inf) + ");softpaq='fixture'} }", encoding='ascii')
+    (source / 'WinPE-IntelDrivers.ps1').write_text(
+        "function Get-AtelierIntelI219Driver { param($CacheRoot,$WinPEVersion) return [pscustomobject]@{network_infs=@(" + ps_quote(inf) + ");softpaq='fixture'} }", encoding='ascii')
     wrapper = tmp_path / 'invoke-build.ps1'
     wrapper.write_text(f"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+function Get-WindowsImage {{ [CmdletBinding()]param($ImagePath,$Index) return [pscustomobject]@{{Version='10.0.26100.1'}} }}
 function Mount-WindowsImage {{
     param($ImagePath, $Index, $Path)
     Set-Content -LiteralPath {ps_quote(mounted)} -Value 'mounted'
 }}
 function Add-WindowsPackage {{ param($Path, $PackagePath) }}
-function Add-WindowsDriver {{ [CmdletBinding()]param($Path,$Driver) if ($Driver -ne {ps_quote(inf)}) {{ throw 'Unexpected driver' }} }}
+function Add-WindowsDriver {{
+ [CmdletBinding()]param($Path,$Driver)
+ if ($Driver -ne {ps_quote(inf)}) {{ throw 'Unexpected driver' }}
+ $store=Join-Path $Path 'Windows\\System32\\DriverStore\\FileRepository\\e1d.inf_amd64_0123456789abcdef'
+ New-Item -ItemType Directory -Path $store -Force | Out-Null
+ Copy-Item $Driver (Join-Path $store 'e1d.inf')
+}}
 function Start-Process {{
     [CmdletBinding()]
     param($FilePath,$ArgumentList,[switch]$NoNewWindow,[switch]$Wait,[switch]$PassThru)
