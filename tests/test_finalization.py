@@ -83,7 +83,7 @@ def write_json(path,value):
 
 
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived'])
+@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof'])
 def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preserved(tmp_path,case):
     program=tmp_path/'ProgramData';data=program/'AtelierPXE';data.mkdir(parents=True)
     iq=tmp_path/'IQ_';(iq/'Rapports').mkdir(parents=True);(iq/'Personnalisation').mkdir()
@@ -100,6 +100,13 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
     (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Categorie;Propriete;Valeur\nPC-LAB;CPU;Name;Test\n')
     (data/'software-logs').mkdir();(data/'software-logs'/'vlc.log').write_text('fixture-private-report-token Downloaded VLC successfully')
     (data/'Unattend.generated.xml').write_text('<Password>private-setup-password</Password>')
+    hp_case=case in {'hp_reports','hp_bad_receipt','hp_bad_proof'}
+    if hp_case:
+        write_json(data/'personalization.json',{'settings':{'winget_packages':['hpia']},'deployment':{'id':identifier,'cleanup_after_reporting':True,'hp_repository':True,'previous_payload_name':previous.name}})
+        reports=iq/'Rapports'/'HPImageAssistant'/identifier;reports.mkdir(parents=True)
+        (reports/'native.log').write_text('HP detailed report fixture')
+        write_json(data/'hpia-result.json',{'status':'completed','report_directory':str(reports)})
+        for name in ['HP-Reports.ps1','HP-Repository.ps1']:shutil.copy(ROOT/'scripts'/name,data/name)
     report=json.dumps({'status':status,'hostname':'PC-LAB'},indent=2)
     (iq/'Rapports'/'Rapport-Deploiement.json').write_text(report)
     receipt={'status':'sent','deployment_id':identifier,'report_sha256':hashlib.sha256(report.encode()).hexdigest()}
@@ -138,9 +145,17 @@ function Invoke-RestMethod {
   if($script:testMode -eq 'bad_archive_receipt'){$hash='0'*64}
   return @{accepted=$true;deployment_id='ID';sha256=$hash}
  }
+ if($Uri.EndsWith('/inventory/hp_reports')){
+  [IO.File]::Copy($InFile,'ROOT/hp-sent.zip',$true)
+  $hash=(Get-FileHash $InFile -Algorithm SHA256).Hash.ToLowerInvariant()
+  if($script:testMode -eq 'hp_bad_receipt'){$hash='0'*64}
+  return @{accepted=$true;deployment_id='ID';sha256=$hash}
+ }
  if($Uri.EndsWith('/cleanup-ready')){
   $proof=[Text.Encoding]::UTF8.GetString($Body)|ConvertFrom-Json
   if($script:testMode -eq 'bad_final_proof'){$proof.csv='0'*64}
+  if($script:testMode -eq 'hp_bad_proof'){$proof.hp_reports='0'*64}
+  if($script:testMode -eq 'hp_reports' -and (-not $proof.hp_reports -or $proof.hp_reports -ne (Get-FileHash 'ROOT/hp-sent.zip' -Algorithm SHA256).Hash.ToLowerInvariant())){throw 'HP proof missing'}
   return @{accepted=$true;cleanup_allowed=$true;deployment_id='ID';hashes=$proof}
  }
  return @{accepted=$true}
@@ -167,12 +182,13 @@ if($held){$held.Dispose()}
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert run.returncode==0,run.stderr+run.stdout
     removed=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))['removed']
-    expected=case in {'success','maintenance_worker','offline_retry','after_reboot','failure_archived'}
+    expected=case in {'success','maintenance_worker','offline_retry','after_reboot','failure_archived','hp_reports'}
     assert removed==expected,(run.stdout,(data/'cleanup.log').read_text() if (data/'cleanup.log').exists() else '')
     assert data.exists()!=expected
     assert (outside/'keep').read_text()=='unrelated user file'
     assert (iq/'Personnalisation'/'Fond-Atelier.png').read_bytes()==b'permanent wallpaper'
     if expected:
+        if hp_case:assert (tmp_path/'hp-sent.zip').exists()
         assert not previous.exists()
         assert set((tmp_path/'tasks').read_text().splitlines())=={'AtelierPXE-Preparation','AtelierPXE-Progress','AtelierPXE-Tools','AtelierPXE-Maintenance'}
         with zipfile.ZipFile(tmp_path/'sent.zip') as z:

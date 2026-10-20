@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.8.1` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.9` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.8.1`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.9`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -25,6 +25,82 @@ Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom da
 Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation de l outil constructeur, les mises a jour HP et la collecte XML/CSV. Ces mesures apparaissent dans la fiche et les nouveaux rapports PDF. Les anciennes mesures Windows Update restent visibles dans l historique. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
+
+## Depot HP et execution silencieuse IQ-4.9
+
+La case HP Image Assistant reste l unique declencheur sur le poste. Sans cette case, aucune installation HPIA, aucune demande de depot ni execution SoftPaq. Les autres logiciels et Lenovo System Update gardent leurs selections WinGet.
+
+Sur .250, `Upgrade-Atelier4.ps1` met la console a jour, appelle `Enable-HPRepository.ps1`, puis reconstruit et importe le nouveau WinPE. Le titre de l assistant et `/health` doivent annoncer IQ-4.9. Aucun script manuel n est necessaire sur les prochains postes deployes. Les postes deja termines ne recoivent pas retroactivement ces fichiers.
+
+### Parcours du poste
+
+1. WinGet prepare l outil HPIA et verifie l executable signe HP, comme en IQ-4.8.1.
+2. Dans Windows, HPIA lance une analyse `Action:List` sans interface. Les IDs des SoftPaq recommandes sont lus dans ses rapports ; les IDs des logiciels deja installes ne sont pas utilises pour demander des telechargements.
+3. Atelier demande le depot correspondant au code de plateforme HP (quatre chiffres hexadecimaux), a Windows 10/11 et a sa version reelle lue dans le registre. Le nom libre du profil Windows n est pas une preuve de version.
+4. Si le depot date de moins de 24 heures et contient les IDs recommandes, il est copie depuis .250 par HTTPS, controle par SHA-256 puis extrait dans le cache prive du poste.
+5. HPIA analyse a nouveau le vrai materiel puis installe seulement les SoftPaq applicables, en utilisant `OfflineMode` avec cette copie CMSL. Aucun `/Force` n est utilise et aucun code constructeur n est transforme en succes artificiel.
+6. Si le depot manque, est ancien ou incomplet, une synchronisation serveur est demandee. L attente de preparation est limitee a environ 90 secondes. Si l agent est indisponible, le repli est immediat. Le poste utilise alors HP directement ; le travail de preparation du cache peut continuer sur .250 pour les prochains postes.
+7. Un code 256 apres l analyse signifie aucune recommandation : pas de copie du depot, pas de seconde passe d installation. Le serveur peut quand meme entretenir ses references en arriere-plan.
+
+Le premier remplissage telecharge un ensemble coherent pour la plateforme / Windows, pas uniquement un fichier manquant. La copie locale du depot peut donc faire plusieurs Go, meme si un seul paquet doit etre installe. Les demandes identiques sont regroupees ; les paquets existants sont reutilises par CMSL. Une recommandation nouvelle absente du depot declenche une actualisation. Si une synchronisation terminee ne fournit toujours pas ce SoftPaq, la meme demande ne tourne pas en boucle : le poste utilise HP directement.
+
+L installation n est lancee qu une fois par passage. Un echec apres son lancement ne provoque pas une seconde passe Internet pendant le meme demarrage, afin de ne pas repeter un BIOS / firmware. Un autre HPIA deja actif empeche de lancer un deuxieme traitement. Les nouveaux deploiements autorisent la reprise apres un vrai redemarrage Windows, decrite ci-dessous.
+
+### Depot sur le serveur
+
+La tache `AtelierPXE-HpRepository` fonctionne en SYSTEM, sans session administrateur ouverte. Elle utilise la bibliotheque officielle HPCMSL 1.9.0 (ou une version plus recente deja installee pour tous les utilisateurs). Le programme d activation l installe depuis PSGallery si necessaire. Les noms actuels et les anciens alias des commandes de depot sont reconnus. CMSL n est pas installe sur les PC deployes.
+
+L agent appelle Initialize-HPRepository, active OfflineCacheMode, applique les filtres de plateforme / Windows, puis Invoke-HPRepositorySync et le nettoyage des paquets obsoletes de la copie de travail. Il n execute aucun SoftPaq sur le serveur. Les EXE sont verifies par signature HP avant publication. Une copie de travail invalide est retiree pour permettre un nouveau telechargement. Une version deja publiee n est jamais ecrasee.
+
+Dossiers sous `<data_dir>\hp-repository` :
+
+| Dossier / fichier | Role |
+| --- | --- |
+| `work\PLATEFORME\win11-VERSION` | Depot CMSL de travail ; contenu reutilise lors des synchronisations |
+| `snapshots\GUID.zip` | Copies publiees pour les postes, sans configuration privee CMSL ni journal SMTP |
+| `worker.log` | Activite et erreurs de synchronisation ; rotation a 2 Mo |
+| `setup.log` | Erreurs d installation ou de chargement de CMSL |
+| `worker-key` | Secret local de l agent ; ne pas diffuser ni copier sur un poste |
+
+Les plateformes deja rencontrees sont resynchronisees quotidiennement lorsque l agent et Internet sont disponibles. Dans Vue d ensemble, ouvrir **Pilotes HP partages** pour voir l etat et demander une actualisation. Cela ne retablit pas les anciennes pages Logiciels / Bundles ou Infrastructure PXE.
+
+Trois versions publiees sont conservees par plateforme / Windows. Une archive transmise a un poste est protegee pendant deux heures, au-dela de la copie client limitee a quinze minutes. Les archives plus anciennes non utilisees sont supprimees apres une publication. Les versions precedentes restent disponibles si une nouvelle synchronisation echoue. La copie de travail conserve les paquets courants ; les anciens snapshots ont leur propre conservation.
+
+Une archive est limitee a 20 Go et 5000 fichiers. La preparation est reportee si le serveur dispose de moins de 4 Go libres ; la publication reserve la place d une copie supplementaire et 2 Go de marge. L agent surveille egalement l espace pendant le telechargement. Sur le poste, la place necessaire a l archive et a son extraction est controlee ; un manque de place provoque le repli direct avant l installation. Le transfert HTTPS refuse les redirections, les tailles / empreintes differentes et une absence de donnees de 30 secondes. Une copie complete est limitee a quinze minutes.
+
+### Silence, progression et rapports
+
+HPIA utilise `/Silent`, sans `/Noninteractive` qui demande une barre HP. L interface IQ reste le suivi visible. Elle affiche l analyse, l attente du depot, les Mo copies, l installation puis, si le journal le permet, le dernier SoftPaq mentionne. Ce n est pas un pourcentage invente de progression d un firmware.
+
+`/AutoReport` est active. Le CSV natif recent est recupere depuis son emplacement HP par defaut et conserve avec les rapports du traitement. Les paquets declares non automatisables sont signales A verifier ; les codes HP 3011 / 3020 et le besoin de redemarrage restent visibles. Un code de redemarrage sur un pilote ordinaire reste manuel. Pour un paquet BIOS identifie explicitement, les nouveaux deploiements peuvent redemarrer et reprendre automatiquement. Le mode silencieux ne garantit pas le comportement natif de tous les installateurs BIOS / firmwares ; verifier sur le modele reel, notamment si le BIOS est protege.
+
+### Redemarrage BIOS et reprise
+
+Pour les nouveaux deploiements IQ-4.9, `allow_bios_restart` est active dans le contenu prepare par WinPE. Avant chaque lancement HPIA, Atelier ecrit un point de reprise de maniere atomique, verifie ses octets et force son ecriture sur disque. Il contient le demarrage Windows, le passage, la phase et le processus HP. Les logiciels WinGet sont deja termines avant ce traitement ; ils ne sont pas relances par la reprise HP.
+
+Un SoftPaq identifie BIOS avec un code 3010 ou 1641 place la preparation en **Redemarrage en attente**. Atelier demande un redemarrage Windows dans 60 secondes, avec un message visible. La demande est enregistree avant la commande et n est emise qu une fois pour ce passage / demarrage. Un echec de la commande reste indique ; un redemarrage manuel permet aussi la reprise. Un besoin de redemarrage dont le paquet BIOS ne peut pas etre etabli reste manuel. Un firmware HP peut aussi redemarrer nativement avant le retour de HPIA.
+
+La tache SYSTEM `AtelierPXE-Maintenance` conserve son declencheur au demarrage, sans ouverture de session. Quand le demarrage Windows a change, elle reprend par une nouvelle analyse du vrai materiel et installe ce que HP recommande encore. Elle ne tente pas de reprendre un flash au milieu de son execution. Les rapports de chaque passage sont isoles dans `Passage-01`, `Passage-02`, etc. L historique avant redemarrage reste dans le PDF / JSON et dans Rapports-HP.zip.
+
+Pendant le meme demarrage, une execution active ou interrompue n est jamais lancee une deuxieme fois. Aucun processus de flash n est tue au depassement du delai. La preparation reste en attente de verification / redemarrage. Une date de demarrage absente interdit la reprise automatique. Trois reprises apres redemarrage sont autorisees au maximum ; au-dela, le resultat reste A verifier et aucune nouvelle installation n est lancee. Le cache prive et les taches ne sont pas supprimes pendant un cycle BIOS.
+
+Le redemarrage et les API Windows sont simules dans les tests ici. Une recette sur un HP reel avec alimentation secteur et Windows PowerShell 5.1 reste necessaire pour valider les particularites de son BIOS, son eventuel mot de passe et ses installateurs. Lenovo System Update garde son fonctionnement existant, sans automatisation de ses firmwares.
+
+Les rapports HTML/XML/JSON, CSV et journaux du traitement courant sont transmis sous **Rapports-HP.zip**, dans le meme dossier serveur que les XML/CSV et Diagnostics-Deploiement.zip. Ils sont telechargeables depuis **Dossier inventaire** ou la fiche du poste. Le PDF indique la source : depot local .250 ou serveurs HP par Internet.
+
+Les rapports HP sont envoyes avant la confirmation finale du rapport, meme si un redemarrage manuel reste necessaire. Une erreur de transmission conserve le cache et le jeton de reprise. Le nettoyage des nouveaux postes ayant HPIA selectionne exige aussi la preuve de reception des rapports HP. Les rapports locaux dans IQ_ et l executable HPIA installe restent disponibles ; le depot local temporaire et ses ZIP sont retires avec ProgramData/AtelierPXE une fois les confirmations obtenues.
+
+L archive HP est limitee a 32 Mo compressee / 128 Mo de texte et 1024 fichiers, 16 Mo par fichier. Les fichiers de configuration prives, executables, liens et chemins dangereux sont exclus ou refuses. Les fichiers natifs partiels sont conserves comme pieces de diagnostic, sans evaluation serveur. Une archive hors limites est conservee localement et son envoi reste en attente.
+
+### Validation et limites
+
+Les tests de laboratoire couvrent la file d attente, la publication, les signatures simulees, les references CMSL, le transport HTTPS reel avec autorite de test temporaire, les empreintes / redirections, le cache / repli, les rapports et le nettoyage. Ils n executent aucun installateur HP reel et ne prouvent pas la compatibilite d un modele ou d une version Windows.
+
+La documentation CMSL annonce Windows 10/11 et PowerShell 64 bits ; le fonctionnement de ses fonctions de depot sur DEPLOY-01 / Windows Server 2025 reste a confirmer sur cette VM. Un echec de chargement est visible dans le suivi du depot et setup.log, avec repli direct HPIA. Ne pas presenter ce cas comme un cache pret.
+
+Pour la recette, effectuer un deploiement HP avec le nouveau WinPE, verifier le resultat des SoftPaq et les archives sur .250, puis tester un deuxieme poste compatible utilisant le depot. Verifier aussi un HP sans HPIA coche et le bundle Lenovo. Une VM ne valide pas les pilotes et BIOS d un vrai HP. Windows Update et Microsoft Store restent manuels.
+
+Sources officielles : [guide HPIA](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf), [filtres CMSL](https://developers.hp.com/hp-client-management/doc/add-repositoryfilter), [synchronisation](https://developers.hp.com/hp-client-management/doc/invoke-repositorysync), [configuration hors ligne](https://developers.hp.com/hp-client-management/doc/set-hprepositoryconfiguration), [HPCMSL sur PSGallery](https://www.powershellgallery.com/packages/HPCMSL/1.9.0).
 
 ## Stabilisation HP / AnyDesk IQ-4.8.1
 
@@ -42,11 +118,11 @@ Le correctif s applique aux prochains deploiements avec le nouveau WinPE IQ-4.8.
 
 ### Evolution HP recommandee, non activee par ce correctif
 
-CMSL est une bibliotheque PowerShell HP : elle peut recuperer des SoftPaq et maintenir un depot par plateforme / version de Windows. Sur .250, un depot local et des packs INF par plateforme eviteraient de telecharger les memes pilotes sur chaque PC. Les pilotes reseau / stockage pour WinPE doivent rester separes des packs Windows complets. Le code actuel ne comporte pas encore ce depot CMSL ni l injection automatique des packs par plateforme : ce sont des evolutions distinctes.
+CMSL est une bibliotheque PowerShell HP : elle peut recuperer des SoftPaq et maintenir un depot par plateforme / version de Windows. Sur .250, un depot local et des packs INF par plateforme eviteraient de telecharger les memes pilotes sur chaque PC. Les pilotes reseau / stockage pour WinPE doivent rester separes des packs Windows complets. En IQ-4.8.1, ce depot CMSL et l injection automatique des packs par plateforme n etaient pas implementes. IQ-4.9 ajoute le depot pour HPIA dans Windows ; l injection de packs INF pendant l application du WIM reste distincte.
 
 Dans ce projet, adapter ce mecanisme au deploiement DISM existant, plutot que copier les reglages MDT Out-of-Box Drivers ou CustomSettings.ini de la piece jointe. Garder HPIA dans Windows pour completer les SoftPaq compatibles, depuis Internet ou, apres integration/test, le depot CMSL en mode hors ligne. Les outils ConfigMgr / Intune de HP ne sont pas necessaires pour cette architecture.
 
-La piece jointe donne la bonne direction, mais sa commande Category:Drivers,Software,Firmware omet le BIOS et sa proposition de redemarrage automatique ne correspond pas a la procedure de cet atelier. Les paquets non automatisables ne doivent pas etre annonces installes. La version de Windows doit figurer dans les references HP ; afficher A verifier si HPIA emploie une reference generique.
+La piece jointe donne la bonne direction, mais sa commande Category:Drivers,Software,Firmware omet le BIOS et sa proposition de redemarrage automatique ne correspondait pas a la procedure IQ-4.8.1. IQ-4.9 ajoute maintenant une reprise controlee apres redemarrage BIOS. Les paquets non automatisables ne doivent pas etre annonces installes. La version de Windows doit figurer dans les references HP ; afficher A verifier si HPIA emploie une reference generique.
 
 Sources officielles : [CMSL](https://developers.hp.com/hp-client-management/doc/client-management-script-library), [extraction HPIA](https://developers.hp.com/hp-client-management/doc/install-hpimageassistant), [packs par plateforme](https://developers.hp.com/hp-client-management/doc/new-hpdriverpack), [depots](https://developers.hp.com/hp-client-management/doc/initialize-hprepository), [guide HPIA](https://ftp.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf), [CLI AnyDesk](https://support.anydesk.com/docs/command-line-interface-for-windows).
 
@@ -86,7 +162,7 @@ La preparation teste que WinGet execute vraiment `--version`, puis essaie l enre
 
 Pour un PC deja deploye, extraire la nouvelle archive puis executer `scripts/Repair-Software.ps1` en PowerShell administrateur sur ce PC. La reparation conserve la selection enregistree, sauvegarde les anciens fichiers dans `repair-backups/software-<identifiant>`, controle chaque logiciel et installe les manquants. Elle refuse une preparation ou un installateur encore actif. Elle met a jour le rapport et l inventaire ; les echecs restent visibles. Le resultat HP durable est conserve pour eviter de relancer automatiquement un flash deja traite. Aucun redemarrage n est demande par Atelier et aucune recherche Windows Update / Store n est ajoutee.
 
-Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.8.1. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
+Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.9. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
 
 ## Bundles et choix des logiciels IQ-4.5
 
@@ -107,7 +183,7 @@ Lenovo System Update coche : installation silencieuse du paquet `Lenovo.SystemUp
 
 Reference Lenovo verifiee : [manifeste Lenovo.SystemUpdate](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/l/Lenovo/SystemUpdate/5.08.04.85/Lenovo.SystemUpdate.installer.yaml). Les prochains postes installent la version proposee par la source WinGet, sans figer cette version.
 
-Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.8.1.
+Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.9.
 
 ## Installation HPIA par WinGet et clavier fixe
 

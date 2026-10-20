@@ -60,7 +60,8 @@ try {
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
     if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent etre termines avant la finalisation du poste.' }
-    $state.attempts++
+    $hpContinuation=$payload.deployment.allow_bios_restart -and $state.status -in @('reboot_pending','retry_pending')
+    if (-not $hpContinuation) { $state.attempts++ }
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }
     $state | Add-Member NoteProperty reboot_required ([bool]$customization.restart_needed -or [bool]$state.reboot_required -or $state.status -eq 'reboot_pending') -Force
     $warnings=New-Object 'System.Collections.Generic.List[string]'
@@ -79,6 +80,23 @@ try {
     }
     $script:updateDetail=$null
     $state | Add-Member NoteProperty hpia $hp -Force
+    if ($hp.resumed_after_reboot -and $state.hp_boot_id -ne $hp.boot_id) {
+        # The software and earlier HP restart requests were consumed by this real boot.
+        $state.reboot_required=$false;$state.reboots++
+        $state | Add-Member NoteProperty hp_boot_id $hp.boot_id -Force
+        $customization | Add-Member NoteProperty restart_needed $false -Force
+        Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'result.json') -Content ($customization | ConvertTo-Json -Depth 12) -NoBackup | Out-Null
+    }
+    if ($payload.deployment.allow_bios_restart -and $hp.status -in @('reboot_pending','retry_pending')) {
+        $state.reboot_required=[bool]$hp.reboot_required
+        Save-Maintenance $hp.status 90 $hp.message
+        if ($hp.status -eq 'reboot_pending') {
+            try { Request-AtelierHpBiosRestart -DataPath $DataPath }
+            catch { Save-Maintenance 'reboot_pending' 90 $_.Exception.Message }
+        }
+        # Never finish, unregister the startup task or remove payloads during a BIOS cycle.
+        return
+    }
     if ($hp.status -notin @('completed','skipped')) { $warnings.Add(('HP Image Assistant : '+$hp.message)) }
     if ($hp.reboot_required) { $state.reboot_required=$true }
     $licenseScript = Get-AtelierIQFile $ToolsPath 'Licence' 'Verifier-Licence.ps1'

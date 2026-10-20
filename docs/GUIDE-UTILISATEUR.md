@@ -46,13 +46,13 @@ Ouvrir `C:\IQ_`. Les fichiers sont classes par categorie :
 | Personnalisation | Fond d ecran selectionne. |
 | Constructeur | HP-ImageAssistant.cmd ouvre l outil portable verifie en administrateur si sa case a ete cochee. |
 
-L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Si HP Image Assistant est coche, WinGet l installe et le verifie apres le demarrage Windows, puis l analyse et l installation des SoftPaq compatibles se font en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Le technicien lance le redemarrage quand les installations sont terminees. Lenovo System Update est installe uniquement si sa case est cochee ; son outil de mise a jour reste accessible dans Windows. HPIA se trouve dans `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
+L outil de tests utilise le navigateur local : images webcam et son ne sont pas envoyes a Internet. Les resultats sont valides par l operateur. Les inventaires ne contiennent pas de cle produit complete ni de cle BitLocker. Si HP Image Assistant est coche, WinGet l installe et le verifie apres le demarrage Windows, puis l analyse et l installation des SoftPaq compatibles se font en arriere-plan : pilotes, logiciels HP, BIOS et firmwares proposes par HPIA. L outil ne s ouvre plus automatiquement sur le bureau. Un pilote ordinaire demandant un redemarrage reste manuel. Depuis IQ-4.9, un paquet BIOS identifie peut declencher un redemarrage dans 60 secondes ; la preparation reprend automatiquement apres le demarrage Windows, sans ouverture de session. Lenovo System Update est installe uniquement si sa case est cochee ; son outil de mise a jour reste accessible dans Windows. HPIA se trouve dans `%ProgramFiles%\AtelierPXE\Tools\HPImageAssistant`. Les rapports HP se trouvent dans Rapports\HPImageAssistant ; le resultat est aussi dans le PDF et la fiche du site.
 
 ## Mises a jour et lenteur
 
 Windows Update et Microsoft Store ne sont plus lances par la preparation. Effectuer ces operations manuellement depuis Parametres > Windows Update et Microsoft Store > Bibliotheque. Le rapport les indique comme manuels. Cela ne desactive pas les services ni les politiques Windows : Windows peut continuer son propre fonctionnement automatique.
 
-Pour HP Image Assistant, le suivi affiche le traitement SoftPaq en cours puis son resultat. Un paquet incompatible, un BIOS protege ou une installation en echec restent a verifier dans les rapports HP. Le script Atelier ne lance pas de redemarrage. Si une execution est interrompue ou depasse son delai, verifier les processus avant toute reprise : aucun flash n est tue et aucune deuxieme passe n est lancee automatiquement.
+Pour HP Image Assistant, le suivi affiche le traitement SoftPaq en cours puis son resultat. Un paquet incompatible, un BIOS protege ou une installation en echec restent a verifier dans les rapports HP. Les nouveaux deploiements IQ-4.9 enregistrent leur phase avant HPIA. Apres un redemarrage BIOS, une nouvelle analyse installe les mises a jour restantes ; les logiciels deja verifies ne sont pas reinstalles. Pendant le meme demarrage, aucun flash n est tue et aucune deuxieme execution n est lancee. Si le suivi reste en attente apres une interruption, verifier les processus avant de redemarrer. Apres trois reprises, un probleme persistant reste A verifier.
 
 Internet est necessaire pour WinGet, les mises a jour et les portails de garantie. L installation d une application peut etre lente selon sa taille et son editeur ; consulter le nom de l etape et le journal, sans relancer simultanement le meme installateur.
 
@@ -97,8 +97,24 @@ Les journaux sont telechargeables sur le site, dans Dossier inventaire, fichier 
 
 ## Controle HP / AnyDesk IQ-4.8.1
 
-Le nouveau WinPE doit annoncer IQ-4.8.1. HPIA est un outil portable : ne pas chercher obligatoirement une application dans Parametres. Le lancer au besoin depuis Constructeur/HP-ImageAssistant.cmd dans IQ_. La preparation verifie son fichier signe dans Program Files avant de declarer sa presence. Le resultat des SoftPaq est indique separement dans le rapport.
+Le nouveau WinPE doit annoncer IQ-4.9. HPIA est un outil portable : ne pas chercher obligatoirement une application dans Parametres. Le lancer au besoin depuis Constructeur/HP-ImageAssistant.cmd dans IQ_. La preparation verifie son fichier signe dans Program Files avant de declarer sa presence. Le resultat des SoftPaq est indique separement dans le rapport.
 
 AnyDesk officiel est reconnu par sa signature et son enregistrement Windows ou son service, meme si certaines informations de desinstallation manquent. Un fichier simplement telecharge ne suffit pas. Les erreurs de signature restent visibles. Pour un diagnostic sans commande sur le PC, ouvrir son activite sur le site puis Dossier inventaire et telecharger Diagnostics-Deploiement.zip. Les journaux ne sont disponibles sur .250 qu apres transmission reussie.
 
 Pour valider le correctif, effectuer un deploiement de laboratoire avec Bundle HP puis verifier les applications, le lanceur HP, le resultat des SoftPaq dans le PDF et les XML/CSV/journaux sur .250. Redemarrer manuellement si le suivi le demande. Le cache prive est supprime seulement apres confirmation des archives et fin des installations. Un test en VM ne valide pas les pilotes ni le BIOS d un vrai HP.
+
+## Pilotes HP partages IQ-4.9
+
+Mettre a jour uniquement le serveur avec Upgrade-Atelier4.ps1 et utiliser le WinPE reconstruit IQ-4.9. La mise a jour prepare aussi l agent CMSL sur .250. Il ne faut pas installer CMSL ou coller une commande sur les PC deployes.
+
+Avec HP Image Assistant coche, chaque poste HP est analyse. Si des mises a jour sont recommandees, Atelier utilise le depot local correspondant a sa plateforme et a Windows quand il est pret. HPIA controle le vrai materiel et installe les paquets applicables. Aucun paquet BIOS n est force sur un modele ou une VM incompatible. Sans recommandation, le poste passe directement a la finalisation sans recopier le depot.
+
+Le depot est alimente automatiquement sur .250 et entretenu chaque jour pour les plateformes connues. Le premier remplissage peut prendre du temps et contenir plusieurs Go de paquets. Le poste n attend sa preparation qu environ 90 secondes, puis peut utiliser HP directement pendant que le serveur termine son depot. Si l agent est indisponible, ce repli est immediat. Le depot complet est copie par le reseau local ; seul le necessaire est installe.
+
+Dans Vue d ensemble, ouvrir **Pilotes HP partages** pour voir les synchronisations ou cliquer **Actualiser les pilotes HP**. Trois versions du depot sont conservees ; une copie en cours d utilisation est protegee. Un echec conserve les versions precedentes.
+
+Le suivi indique la source et les etapes ; HPIA reste sans fenetre propre. Les paquets manuels ou en echec sont A verifier. Le technicien lance le redemarrage. Windows Update et Microsoft Store restent manuels.
+
+Dans l activite du poste ou sa fiche, ouvrir **Dossier inventaire**, puis telecharger **Rapports-HP.zip** pour les rapports HP detailles. **Diagnostics-Deploiement.zip** contient le bilan Atelier et les journaux logiciels. La transmission HP fait partie des confirmations necessaires avant de supprimer le cache temporaire du poste. Les fichiers IQ_ restent accessibles localement.
+
+En cas de depot indisponible, consulter sur .250 `<data_dir>\hp-repository\setup.log` et `worker.log`. La bibliotheque HP et les installateurs doivent encore etre valides sur votre serveur et vos vrais modeles HP ; les tests du projet utilisent du materiel simule.

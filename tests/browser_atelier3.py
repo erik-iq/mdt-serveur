@@ -72,6 +72,16 @@ def run():
                 row.locator('[data-inventory]').click();expect(page.locator('#inventory-files')).to_contain_text('En attente')
                 page.locator('[data-close="inventory-dialog"]').click()
                 reporter=api('/agent/'+identifier+'/claim',{},token)['report_token']
+                hp_profile=api('/profiles',{'name':'HP cache lab','asset_id':asset['id'],'settings':{'software_mode':'winget','winget_packages':['hpia']}})
+                hp_session=api('/boot/discover',{'macs':['00:11:22:33:44:66'],'release':'ATELIER-4'})
+                api('/agent/'+hp_session['id']+'/configure',{'profile_id':hp_profile['id'],'hostname':'HP-BROWSER','disk_number':0,'settings':hp_profile['settings']},hp_session['agent_token'])
+                hp_token=api('/agent/'+hp_session['id']+'/claim',{},hp_session['agent_token'])['report_token']
+                api('/windows/'+hp_session['id']+'/hp-repository',{'platform':'8AB8','os':'win11','os_version':'25H2','required_softpaqs':['SP12345']},hp_token)
+                page.evaluate('refresh()');page.locator('#hp-repository-panel summary').click()
+                expect(page.locator('#hp-repository-jobs')).to_contain_text('HP 8AB8')
+                page.get_by_role('button',name='Actualiser les pilotes HP',exact=True).click()
+                expect(page.get_by_role('button',name='Actualiser les pilotes HP',exact=True)).to_be_enabled()
+                assert len(api('/hp-repository')['jobs'])==1
                 xml=b'<InventaireOrdinateur ordinateur="PC-BROWSER3"><Proprietes/></InventaireOrdinateur>'
                 csv=b'Ordinateur;Categorie;Propriete;Valeur\nPC-BROWSER3;RAM;Go;16\n'
                 api('/windows/'+identifier+'/inventory/xml',token=reporter,raw=xml)
@@ -81,6 +91,9 @@ def run():
                     z.writestr('result.json','{"status":"completed"}')
                     z.writestr('maintenance.json','{"status":"completed"}')
                 api('/windows/'+identifier+'/inventory/diagnostics',token=reporter,raw=log_stream.getvalue())
+                hp_stream=io.BytesIO()
+                with zipfile.ZipFile(hp_stream,'w') as z:z.writestr('hpia-result.json','{"status":"not_run"}')
+                api('/windows/'+identifier+'/inventory/hp_reports',token=reporter,raw=hp_stream.getvalue())
                 api('/windows/'+identifier+'/report',token=reporter,body={'hostname':'PC-BROWSER3','status':'completed','generated_at':'2026-10-20T12:00:00Z','inventory':{'Modele':'Test'},'steps':[],'warnings':[]})
                 page.evaluate('refresh()');row.locator('[data-inventory]').click()
                 expect(page.locator('#inventory-directory')).to_have_value(str(data/'inventaires'/'PC-BROWSER3'/identifier))
@@ -94,12 +107,19 @@ def run():
                 with page.expect_download() as diagnostic_download:
                     page.get_by_role('button',name='Telecharger Diagnostics-Deploiement.zip',exact=True).click()
                 assert Path(diagnostic_download.value.path()).read_bytes()==log_stream.getvalue()
+                with page.expect_download() as hp_download:
+                    page.get_by_role('button',name='Telecharger Rapports-HP.zip',exact=True).click()
+                assert Path(hp_download.value.path()).read_bytes()==hp_stream.getvalue()
                 page.goto(origin+'?deployment='+identifier+'&view=report')
                 expect(page.locator('#page-computer')).to_be_visible()
                 expect(page.locator('#computer-report')).to_contain_text('Rapport du')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
                 page.screenshot(path='/tmp/atelier3-mobile.png',full_page=True)
+                page.locator('[data-page="overview"]').click()
+                if not page.locator('#hp-repository-panel').evaluate('(el)=>el.open'):page.locator('#hp-repository-panel summary').click()
+                expect(page.locator('#hp-repository-jobs')).to_contain_text('HP 8AB8')
+                assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
                 assert not errors,errors
                 browser.close()
             print('ATELIER-4 browser passed: no site authorization, software choices, automatic machine activity, server inventory directory and CSV download; no JavaScript errors.')

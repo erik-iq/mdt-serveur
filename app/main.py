@@ -25,6 +25,7 @@ from app.reports import ComputerReport, WindowsProgress, make_pdf, report_lines
 from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
+from app.hp_repository import HpRepository
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_KINDS = {"wimboot", "bcd", "sdi", "winpe"}
@@ -237,6 +238,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     inventories = Inventories(data, db)
     software = SoftwareJobs(api, db, data, admin, ROOT / 'scripts' / 'software-sources.json')
+    hp_repository = HpRepository(data, db)
 
     def row(con, table, identifier):
         record = con.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
@@ -365,7 +367,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.8.1"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.9"}
 
     @api.get('/api/session')
     def session_options():
@@ -393,6 +395,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 FROM computer_reports r JOIN deployments d ON d.id=r.deployment_id ORDER BY r.created_at DESC LIMIT 100''')]
             # The client WinGet path has no server worker UI to refresh/expire.
             result['software_sync'] = None if client_apps else software.state(con)
+            result['hp_repository'] = hp_repository.state(con)
             result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
@@ -748,6 +751,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         return FileResponse(path, media_type='application/octet-stream', filename=asset['filename'])
 
     inventories.routes(api, windows_agent, admin, now)
+    hp_repository.routes(api, windows_agent, admin)
     computer_routes(api, db, admin, windows_agent, now)
 
     @api.post('/api/windows/{identifier}/progress')

@@ -9,6 +9,7 @@ $OutputDirectory=Get-AtelierIQDirectory $toolsRoot 'Rapports'
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
 $payloadPath=Join-Path $DataPath 'personalization.json'
 $payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
+if ($payload.deployment.hp_repository) { $inventory['Revision preparation']='IQ-4.9' }
 $centralInventory=$payload.settings.central_inventory -or $payload.deployment.cleanup_after_reporting
 $inventoryDirectory=if ($centralInventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
@@ -99,14 +100,24 @@ foreach ($manualUpdate in @(@{name='Windows Update';value=$maintenance.windows},
 }
 $hp=if ($maintenance.hpia) { $maintenance.hpia } else { Read-ReportJson (Join-Path $DataPath 'hpia-result.json') }
 if ($hp) {
+    foreach ($pass in @($hp.history)) {
+        if (-not $pass) { continue }
+        $steps.Add(@{name=('HP passage '+[string]$pass.pass_number+' avant redemarrage');status=[string]$pass.status;message=([string]$pass.message+' / Code '+[string]$pass.exit_code);timestamp=[string]$pass.timestamp})
+        foreach ($package in @($pass.packages)) {
+            if ($package) { $steps.Add(@{name='SoftPaq HP avant redemarrage';status=$(if ($package.code -in @(0,3010,1641)) { 'completed' } else { 'needs_attention' });message=([string]$package.softpaq_id+' '+[string]$package.name+' / Code '+[string]$package.code);timestamp=[string]$pass.timestamp}) }
+        }
+    }
+    if ($hp.resumed_after_reboot) { $steps.Add(@{name='Reprise HP apres redemarrage';status='completed';message=('Nouvelle analyse HP ; passage '+[string]$hp.pass_number+'. Les logiciels deja verifies ne sont pas reinstalles.');timestamp=[string]$hp.timestamp}) }
+    if ($hp.source) { $inventory['Source des pilotes HP']=if ($hp.source -eq 'depot_250') { 'Depot local .250' } else { 'Serveurs HP (Internet)' } }
+    if ($hp.repository) { $steps.Add(@{name='Depot HP .250';status=[string]$hp.repository.status;message=[string]$hp.repository.message;timestamp=[string]$hp.timestamp}) }
     $steps.Add(@{name='HP Image Assistant / SoftPaq';status=[string]$hp.status;message=([string]$hp.message+' / Code '+[string]$hp.exit_code);timestamp=[string]$hp.timestamp})
     foreach ($package in @($hp.packages)) {
         if (-not $package) { continue }
-        $packageStatus=if ($package.code -in @(0,3010)) { 'completed' } else { 'needs_attention' }
+        $packageStatus=if ($package.code -in @(0,3010,1641)) { 'completed' } else { 'needs_attention' }
         $steps.Add(@{name='SoftPaq HP';status=$packageStatus;message=([string]$package.softpaq_id+' '+[string]$package.name+' / Code '+[string]$package.code+' / '+[string]$package.description);timestamp=[string]$hp.timestamp})
     }
     if ($hp.status -notin @('completed','skipped')) { $warnings.Add(('Mises a jour HP a verifier : '+[string]$hp.message)) }
-    if ($hp.reboot_required) { $warnings.Add('HP Image Assistant demande un redemarrage manuel.') }
+    if ($hp.reboot_required) { $warnings.Add($(if ($hp.status -eq 'reboot_pending') { 'Redemarrage BIOS en attente ; la preparation reprendra automatiquement.' } else { 'HP Image Assistant demande un redemarrage manuel.' })) }
 }
 if (-not $maintenance -or $maintenance.status -notin @('completed','needs_attention')) { $warnings.Add('Maintenance Windows incomplete ou en attente. Ce rapport peut etre regenere apres la fin.') }
 if ($maintenance.windows.status -eq 'deferred') { $warnings.Add(('Windows Update non verifie : ' + $maintenance.windows.message)) }
@@ -150,7 +161,7 @@ $lines=@('ATELIER PXE - Rapport de deploiement',('Poste : ' + $env:COMPUTERNAME 
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ($entry.Key + ' : ' + $entry.Value) }
 $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.8.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'
@@ -158,6 +169,10 @@ if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','need
     try {
         $config=Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
+        if ($payload.deployment.hp_repository -and 'hpia' -in @($payload.settings.winget_packages)) {
+            . (Join-Path $DataPath 'HP-Reports.ps1')
+            Send-AtelierHpReports -DataPath $DataPath -ToolsPath $toolsRoot -Config $config | Out-Null
+        }
         $reportBytes=[Text.Encoding]::UTF8.GetBytes($json)
         $reply=Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body $reportBytes -TimeoutSec 15
         $algorithm=[Security.Cryptography.SHA256]::Create()

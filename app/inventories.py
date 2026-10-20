@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MAX_INVENTORY = 32 * 1024 * 1024
 MAX_DIAGNOSTICS = 8 * 1024 * 1024
-DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
+DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
 
 
 class CleanupProof(BaseModel):
@@ -25,6 +25,27 @@ class CleanupProof(BaseModel):
     xml: str=Field(pattern=r'^[a-f0-9]{64}$')
     csv: str=Field(pattern=r'^[a-f0-9]{64}$')
     diagnostics: str=Field(pattern=r'^[a-f0-9]{64}$')
+    hp_reports: str | None=Field(default=None,pattern=r'^[a-f0-9]{64}$')
+
+
+def validate_hp_reports(payload):
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            entries=archive.infolist();names=set()
+            if not 1<=len(entries)<=1024 or sum(e.file_size for e in entries)>128*1024*1024:raise ValueError('Limite rapports HP')
+            for entry in entries:
+                name=entry.filename
+                if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. /-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entree HP invalide')
+                if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privee refusee')
+                names.add(name.casefold());content=archive.read(entry).decode('utf-8-sig')
+                if name.lower()=='hpia-result.json':json.loads(content)
+                if name.lower().endswith('.xml'):
+                    if re.search(r'<!\s*(?:DOCTYPE|ENTITY)',content,re.I):raise ValueError('DTD HP refusee')
+                    # Native files can be truncated by a failed HP process.
+                    # Preserve them as attachment-only evidence; never evaluate.
+            if 'hpia-result.json' not in names:raise ValueError('Resultat HP absent')
+    except (ValueError,UnicodeError,ET.ParseError,zipfile.BadZipFile,RuntimeError,NotImplementedError) as exc:
+        raise HTTPException(422,'Archive des rapports HP invalide') from exc
 
 
 def validate_diagnostics(payload):
@@ -78,14 +99,14 @@ class Inventories:
     def describe(self, con, identifier):
         files = [dict(r) for r in con.execute('SELECT kind,size,sha256 FROM inventory_files WHERE deployment_id=? ORDER BY kind', (identifier,))]
         for item in files:
-            item['filename'] = 'Diagnostics-Deploiement.zip' if item['kind']=='diagnostics' else 'Inventaire-Technique.' + item['kind']
+            item['filename'] = {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip'}.get(item['kind'],'Inventaire-Technique.' + item['kind'])
             item['url'] = f"/api/deployments/{identifier}/inventory/{item['kind']}"
         return {'deployment_id': identifier, 'files': files}
 
     def routes(self, api, windows_agent, admin, now):
         @api.post('/api/windows/{identifier}/inventory/{kind}')
         async def upload(identifier: str, kind: str, request: Request, authorization: str = Header(default='')):
-            if kind not in {'xml', 'csv','diagnostics'}:
+            if kind not in {'xml', 'csv','diagnostics','hp_reports'}:
                 raise HTTPException(404, 'Format inventaire inconnu')
             # Authenticate before parsing or writing any inventory data.
             with self.db() as con:
@@ -102,8 +123,9 @@ class Inventories:
             if not payload:
                 raise HTTPException(413, 'Inventaire vide ou trop volumineux')
             if kind=='diagnostics':validate_diagnostics(payload)
+            if kind=='hp_reports':validate_hp_reports(payload)
             try:
-                text = '' if kind=='diagnostics' else payload.decode('utf-8-sig')
+                text = '' if kind in {'diagnostics','hp_reports'} else payload.decode('utf-8-sig')
                 if kind == 'xml':
                     if re.search(r'<!\s*(?:DOCTYPE|ENTITY)', text, re.I):
                         raise ValueError('DTD refusee')
@@ -121,7 +143,7 @@ class Inventories:
                 raise HTTPException(422, 'Inventaire invalide : ' + str(exc)[:150]) from exc
             folder = self.checked(self.folder(hostname, identifier))
             folder.mkdir(parents=True, exist_ok=True)
-            destination = self.checked(folder / ('Diagnostics-Deploiement.zip' if kind=='diagnostics' else 'Inventaire-Technique.' + kind))
+            destination = self.checked(folder / {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip'}.get(kind,'Inventaire-Technique.' + kind))
             temporary = folder / (uuid.uuid4().hex + '.tmp')
             try:
                 temporary.write_bytes(payload)
@@ -136,13 +158,18 @@ class Inventories:
 
         @api.post('/api/windows/{identifier}/cleanup-ready')
         def cleanup_ready(identifier:str,body:CleanupProof,authorization:str=Header(default='')):
-            proof=body.model_dump()
+            proof=body.model_dump(exclude_none=True)
             with self.db() as con:
                 job=windows_agent(con,identifier,authorization)
                 report=con.execute('SELECT sha256 FROM report_receipts WHERE deployment_id=?',(identifier,)).fetchone()
                 if job['windows_status'] not in {'completed','needs_attention','failed'} or not report or report['sha256']!=proof['report']:
                     raise HTTPException(409,'Rapport courant pas encore confirme')
-                for kind in ('xml','csv','diagnostics'):
+                record=con.execute('SELECT report_json FROM computer_reports WHERE deployment_id=?',(identifier,)).fetchone()
+                snapshot=json.loads(record['report_json']) if record else {}
+                selected=json.loads(job['selection_json'])
+                requires_hp=snapshot.get('inventory',{}).get('Revision preparation')=='IQ-4.9' and 'hpia' in selected.get('settings',{}).get('winget_packages',[])
+                if requires_hp and not proof.get('hp_reports'):raise HTTPException(409,'Rapports HP pas encore confirmes')
+                for kind in ('xml','csv','diagnostics')+(('hp_reports',) if proof.get('hp_reports') else ()):
                     record=con.execute('SELECT * FROM inventory_files WHERE deployment_id=? AND kind=?',(identifier,kind)).fetchone()
                     if not record or record['sha256']!=proof[kind]:raise HTTPException(409,'Transmission incomplete ou obsolete')
                     path=self.checked(self.root/record['relative_path'])

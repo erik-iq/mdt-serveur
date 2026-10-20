@@ -21,7 +21,7 @@ function Send-AtelierDiagnostics {
     param([string]$DataPath,$Config)
     Add-Type -AssemblyName System.IO.Compression
     $archivePath=Join-Path $DataPath 'diagnostics-upload.zip'
-    $files=@('result.json','maintenance.json','progress.json','hpia-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log')
+    $files=@('result.json','maintenance.json','progress.json','hpia-result.json','hp-repository-state.json','first-logon.log','maintenance.log','reporting.log','cleanup.log')
     foreach ($key in @('vlc','reader','chrome','anydesk','hpia','lenovo_system_update','winget-preparation')) { $files+=@('software-logs/'+$key+'.log') }
     $timings=Join-Path $DataPath 'timings'
     if (Test-Path $timings) {
@@ -111,6 +111,10 @@ function Complete-AtelierLocalCleanup {
             $proof[$kind]=(Get-FileHash -LiteralPath (Join-Path $DataPath ('Inventory\Inventaire-Technique.'+$kind)) -Algorithm SHA256).Hash.ToLowerInvariant()
         }
         $proof.diagnostics=Send-AtelierDiagnostics $DataPath $config
+        if ($payload.deployment.hp_repository -and 'hpia' -in @($payload.settings.winget_packages)) {
+            . (Join-Path $DataPath 'HP-Reports.ps1')
+            $proof.hp_reports=Send-AtelierHpReports -DataPath $DataPath -ToolsPath $ToolsPath -Config $config
+        }
         $confirmation=Invoke-RestMethod -Uri ($config.server_url+'/api/windows/'+$config.id+'/cleanup-ready') -Method Post -Headers @{Authorization=('Bearer '+$config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($proof|ConvertTo-Json))) -TimeoutSec 15
         if (-not $confirmation.cleanup_allowed -or $confirmation.deployment_id -ne $config.id) { return $false }
         foreach ($key in $proof.Keys) { if ($confirmation.hashes.$key -ne $proof[$key]) { return $false } }

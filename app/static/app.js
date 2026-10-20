@@ -2,7 +2,7 @@
 let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
 let requestedDeploymentOpened=false;
 const $ = id => document.getElementById(id);
-const labels = {manual:'Manuel',skipped:'Non applicable',active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
+const labels = {not_needed:'Aucune mise a jour necessaire',ready:'Pret',not_ready:'Indisponible',offline:'Depot local',online:'HP Internet',unavailable:'Indisponible',manual:'Manuel',skipped:'Non applicable',active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = s => new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const size = n => n > 1024**3 ? `${(n/1024**3).toFixed(2)} Go` : `${(n/1024**2).toFixed(1)} Mo`;
@@ -30,6 +30,17 @@ function render() {
   $('machines').innerHTML = state.machines.map(m=>`<tr><td><button class="text-button" data-computer="${esc(m.id)}">${esc(m.hostname)}</button></td><td class="hash">${esc(m.mac)}</td><td>${esc(m.description)||'-'}</td><td>${date(m.created_at)}</td><td>${(state.reports||[]).filter(r=>r.machine_id===m.id).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} | PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join('');
   $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} | ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} | ${esc(p.locale)}<br>${esc(p.settings.timezone)} | ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.software_mode==='winget'?`${p.settings.winget_packages.length} logiciel(s) WinGet apres Windows`:`${p.settings.bundle_ids.length} bundle(s) | ${p.settings.application_ids.length} logiciel(s)`}<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Creez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis selectionnez l index de l edition avec DISM /Get-WimInfo.</p></div>';
   $('assets').innerHTML = state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}...</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistre.</td></tr>';
+  const hp=state.hp_repository;
+  if(hp && $('hp-repository-state')) {
+    $('hp-repository-state').textContent=hp.worker.available?hp.worker.message:'Depot non disponible pour le moment. Les postes peuvent continuer directement avec HP.';
+    $('hp-repository-refresh').disabled=!hp.jobs.length;
+    const seen=new Set();
+    $('hp-repository-jobs').innerHTML=hp.jobs.filter(job=>{const key=job.platform+'|'+job.os+'|'+job.os_version;if(seen.has(key))return false;seen.add(key);return true;}).map(job=>{
+      const saved=hp.snapshots.find(s=>s.platform===job.platform && s.os===job.os && s.os_version===job.os_version);
+      return `<article class="hp-repository-entry"><div><b>HP ${esc(job.platform)} | Windows ${job.os==='win11'?'11':'10'} ${esc(job.os_version)}</b> ${badge(job.status)}<p>${esc(job.message)}</p><small>${saved?'Copie conservee : '+esc(size(saved.size))+' | '+esc(date(saved.created_at)):'Premier telechargement en preparation'}</small></div></article>`;
+    }).join('') || '<p>Le depot sera alimente automatiquement au premier poste avec HP Image Assistant selectionne.</p>';
+  }
+
 
 }
 async function refresh() {
@@ -229,4 +240,11 @@ $('computer-note-form').addEventListener('submit',async event=>{
   const button=event.target.querySelector('button');button.disabled=true;$('computer-note-error').textContent='';
   try{await api('/machines/'+encodeURIComponent(currentComputer)+'/notes','POST',Object.fromEntries(new FormData(event.target)));event.target.reset();await openComputer(currentComputer);}
   catch(error){$('computer-note-error').textContent=error.message;}finally{button.disabled=false;}
+});
+
+$('hp-repository-refresh').addEventListener('click',async()=>{
+  const button=$('hp-repository-refresh');button.disabled=true;
+  try {await api('/hp-repository/refresh','POST',{});await refresh();}
+  catch(error){$('hp-repository-state').textContent=error.message;}
+  finally{button.disabled=false;}
 });

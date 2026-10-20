@@ -231,7 +231,7 @@ function Show-Page {
             Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'HP Image Assistant coche : analyse et SoftPaq HP compatibles en arriere-plan. Lenovo System Update coche : installation de l outil. Windows Update et Microsoft Store restent manuels. Redemarrage manuel.' | Out-Null
+            Add-Text 'HP Image Assistant coche : analyse et SoftPaq HP compatibles en arriere-plan. Lenovo System Update coche : installation de l outil. Windows Update et Microsoft Store restent manuels. Un BIOS peut redemarrer le poste ; la preparation reprend automatiquement.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
@@ -320,7 +320,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.8.1'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-4.9'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea

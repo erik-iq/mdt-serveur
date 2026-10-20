@@ -81,3 +81,15 @@ L’appel `POST /api/agent/{id}/claim` fournit également un `report_token`, dis
 - GET /api/deployments/{id}/inventory et /inventory/diagnostics exposent l archive seulement aux administrateurs de la console. Aucun jeton n est publie dans ces reponses.
 
 Le client valide aussi les recus, les fichiers locaux et l arret des installateurs avant suppression. Les reponses cleanup-ready autorisent uniquement le nettoyage de son propre dossier prive, jamais une action WinPE ou un effacement de disque.
+
+## Depot HP IQ-4.9
+
+- `GET /api/hp-repository` : etat admin de l agent CMSL, demandes et copies publiees ; aucun secret ni identite agent dans la reponse.
+- `POST /api/hp-repository/refresh` : actualise les plateformes deja connues, admin uniquement. Les demandes actives identiques sont regroupees.
+- `POST /api/windows/{id}/hp-repository` : jeton Windows du deploiement avec HPIA selectionne ; body strict `platform` (4 hex), `os` (`win10`/`win11`), `os_version`, `required_softpaqs` (200 IDs SP maximum). La premiere identite plateforme / Windows reste fixe pour ce deploiement. Aucun chemin, URL ou code PowerShell accepte.
+- `GET /api/windows/{id}/hp-repository/{snapshot}.zip` : archive complete / compatible avec la demande enregistree et le jeton Windows valide. URL relative de meme origine ; transfert immuable et empreinte SHA-256 annoncee. Aucun acces via le jeton WinPE.
+- `POST /api/hp-repository/worker/heartbeat`, `/worker/claim`, `/worker/jobs/{id}/finish` : secret local propre a l agent CMSL. Le worker ecrit une archive privee et ne publie que son identifiant ; le serveur valide les chemins, references, limites et calcule l empreinte avant exposition.
+- `POST /api/windows/{id}/inventory/hp_reports` : ZIP des rapports HP, fichiers texte autorises uniquement, limites 32 Mo / 128 Mo developpes, 1024 entrees / 16 Mo chacune. Telechargement admin sous `Rapports-HP.zip` via la route inventaire existante.
+- `POST /api/windows/{id}/cleanup-ready` accepte une preuve `hp_reports` supplementaire. Elle est obligatoire si le rapport annonce IQ-4.9 et la selection contient HPIA. Les anciens clients gardent leur protocole de confirmation a quatre empreintes.
+
+Le transport de rapports reste borne avant l analyse et les fichiers HP sont servis uniquement en archive a telecharger. Le serveur n execute pas le HTML ou XML natif et ne decompresse aucun SoftPaq. Les snapshots sont conserves par trois versions et leurs locations temporaires de deux heures protegent les descripteurs emis aux postes.
