@@ -102,6 +102,33 @@ function Get-AtelierWinPENetwork {
         else { 'Aucune IPv4 utilisable dans l inventaire. La connexion au serveur sera testee directement.' }
     return [pscustomobject]@{macs=@($macs | Select-Object -First 16);ipv4=@($ips);message=$message}
 }
+function Get-AtelierConnectionFailure {
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$Failure,[string]$Stage,[string]$ServerUrl)
+    # Describe the actual failed operation. Do not infer a missing driver from
+    # empty WMI inventory, or record request bodies, headers or credentials.
+    $exception=$Failure.Exception
+    $status='';$http='';$socket=''
+    for ($depth=0;$exception -and $depth -lt 10;$depth++) {
+        if ($exception -is [Net.WebException]) { $status=[string]$exception.Status }
+        if ($exception -is [Net.Sockets.SocketException]) { $socket=[string]$exception.SocketErrorCode }
+        if ($exception.Response -and $exception.Response.StatusCode) { $http=[string][int]$exception.Response.StatusCode }
+        $exception=$exception.InnerException
+    }
+    $cause=if ($http) { 'Le serveur a repondu HTTP '+$http+'.' }
+        elseif ($status -in @('TrustFailure','SecureChannelFailure')) { 'La connexion TLS a echoue. Verifier le certificat et la date du poste.' }
+        elseif ($status -eq 'NameResolutionFailure') { 'Le nom du serveur ne peut pas etre resolu.' }
+        elseif ($status -eq 'Timeout') { 'Le serveur n a pas repondu dans le delai prevu.' }
+        elseif ($status -eq 'ConnectFailure') { 'La connexion au serveur n a pas pu etre etablie.' }
+        else { 'L operation n a pas abouti.' }
+    $codes=@($status,$socket) | Where-Object { $_ }
+    if ($codes) { $cause+=' Code : '+($codes -join ' / ')+'.' }
+    $destination=try {
+        $origin=New-Object UriBuilder($ServerUrl)
+        $origin.UserName='';$origin.Password=''
+        $origin.Uri.GetLeftPart([UriPartial]::Authority)
+    } catch { 'Adresse invalide' }
+    return ('Etape : '+$Stage+"`r`nServeur : "+$destination+"`r`n"+$cause)
+}
 function Assert-AtelierMachineIdentity {
     param($Plan)
     if ($Plan.serial_number) {

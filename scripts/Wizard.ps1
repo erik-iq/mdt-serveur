@@ -106,17 +106,7 @@ function Send-Json([string]$Path, [psobject]$Body, [bool]$Authenticated = $true)
     $headers = @{}
     if ($Authenticated) { $headers.Authorization = 'Bearer ' + $script:session.agent_token }
     $json = $Body | ConvertTo-Json -Depth 14 -Compress
-    try {
-        return Invoke-RestMethod -Uri ($script:root + $Path) -Method Post -Headers $headers -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 20
-    } catch {
-        # HTTP rejections keep their original cause. Missing MACs alone never
-        # prevent contacting the server: a WMI inventory can be incomplete.
-        if ($_.Exception.Response) { throw }
-        $status=[string]$_.Exception.Status
-        if ($status -in @('TrustFailure','SecureChannelFailure')) { throw ('Connexion TLS refusee : verifier le certificat WinPE et la date du poste. '+$_.Exception.Message) }
-        $network=Get-AtelierWinPENetwork
-        throw ('Serveur Atelier injoignable. '+$network.message+' Verifier l acces HTTPS au serveur, le cable et le DHCP. '+$_.Exception.Message)
-    }
+    return Invoke-RestMethod -Uri ($script:root + $Path) -Method Post -Headers $headers -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 20
 }
 function Set-Profile([string]$Id) {
     $profile = $script:session.catalog.profiles | Where-Object { $_.id -eq $Id } | Select-Object -First 1
@@ -284,20 +274,24 @@ function Show-Page {
     $script:body.ResumeLayout()
 }
 function Connect-Post {
+    $script:connectionStage='Identification du poste'
     $script:serialNumber=Get-AtelierHardwareSerial
     if (-not $script:serialNumber) { throw 'Numero de serie BIOS absent ou generique. Impossible d identifier ce poste de facon fiable.' }
     $script:network=Get-AtelierWinPENetwork
     $script:macs=@($script:network.macs)
     $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
     if ($Config.internal_mode) {
+        $script:connectionStage='Connexion a l API Atelier /api/boot/discover'
         $connected = Send-Json '/api/boot/discover' @{serial_number=$script:serialNumber;macs=$script:macs;release=[string]$Config.boot_release} $false
         $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
-        $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders
+        $script:connectionStage='Recuperation des acces au partage'
+        $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders -TimeoutSec 20
         $username = $credentials.username
         $password = $credentials.password
         $connectionHeaders.Clear()
     } else {
         if (-not $script:controls.username.Text.Trim() -or -not $script:controls.password.Text) { throw 'Indiquez le compte et le mot de passe du partage.' }
+        $script:connectionStage='Connexion a l API Atelier /api/boot/connect'
         $connected = Send-Json '/api/boot/connect' @{code=$script:controls.code.Text.Trim();serial_number=$script:serialNumber;macs=$script:macs} $false
         $username = $script:controls.username.Text.Trim()
         $password = $script:controls.password.Text
@@ -305,6 +299,7 @@ function Connect-Post {
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
     $credential = New-Object PSCredential($username, $secure)
     try {
+        $script:connectionStage='Ouverture du partage des images'
         $letter = @('Y','Z','V','U','T') | Where-Object { -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) } | Select-Object -First 1
         if (-not $letter) { throw 'Aucune lettre libre pour le partage des images.' }
         New-PSDrive -Name $letter -PSProvider FileSystem -Root $script:share -Credential $credential -Persist -Scope Global | Out-Null
@@ -314,6 +309,7 @@ function Connect-Post {
         if ($secure) { $secure.Dispose() }
     }
     $script:session = $connected
+    $script:connectionStage='Chargement des profils Windows'
     $script:targetName = $script:proposedName
     Set-Profile $connected.plan.profile_id
     $script:page = 1; $script:status.Text = 'Poste autorise. Les choix restent modifiables avant installation.'
@@ -336,7 +332,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.0'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.0.1'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'None'
 $bounds = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -399,7 +395,14 @@ $script:next.Add_Click({
         elseif ($script:page -eq 4) { Begin-Deployment }
         elseif ($script:page -eq 5) { $form.Close() }
         else { Save-Page; $script:page++; Show-Page }
-    } catch { $script:status.Text=$_.Exception.Message; $script:next.Enabled=$true }
+    } catch {
+        $script:status.Text=$_.Exception.Message; $script:next.Enabled=$true
+        if ($script:page -eq 0) {
+            $details=Get-AtelierConnectionFailure -Failure $_ -Stage $script:connectionStage -ServerUrl $script:root
+            $details+="`r`n`r`nMessage Windows : "+$_.Exception.Message
+            [Windows.Forms.MessageBox]::Show($form,$details,'Connexion Atelier - erreur complete',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        }
+    }
 })
 $script:timer = New-Object Windows.Forms.Timer
 $script:timer.Interval=400

@@ -2,6 +2,14 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## Diagnostic du bouton Connexion IQ-5.0.1
+
+Cette correction concerne toutes les marques. Elle ne change ni les pilotes ni la configuration reseau. Le bouton distingue la connexion a l API Atelier, la recuperation des acces au partage, l ouverture du partage des images et le chargement des profils. Une erreur pendant la connexion ouvre une boite de dialogue complete, avec l etape, l adresse du serveur, le code HTTP / transport disponible et le message Windows. Elle ne reste plus tronquee dans la bande d etat de 32 pixels.
+
+Un echec HTTPS ne declenche plus une nouvelle lecture WMI et n est plus presente automatiquement comme un inventaire reseau incomplet. Les erreurs TLS, DNS, delai et connexion sont distinguees quand Windows les expose. La lecture des acces au partage utilise aussi un delai de 20 secondes. Les informations affichees servent a identifier la cause sur le poste ; cette revision ne pretend pas reparer une cause reseau ou certificat encore inconnue.
+
+Mettre a jour et reconstruire avec Upgrade-Atelier4.ps1, puis demarrer sur le nouveau WinPE qui affiche IQ-5.0.1. En cas d echec, la photo de la boite Connexion Atelier - erreur complete suffit pour transmettre le diagnostic, sans commande PowerShell sur le poste. Les tests executent le vrai parcours Connect-Post avec API et partage simules, ainsi que les classifications d exceptions Windows ; le rendu WinForms et la connexion au serveur physique restent a verifier sous Windows.
+
 ## Identification par numero de serie IQ-5.0
 
 Les nouveaux WinPE identifient le PC par son numero de serie SMBIOS, lu dans Win32_BIOS puis, si necessaire, Win32_ComputerSystemProduct. La valeur est normalisee en majuscules, sans espaces superflus. Un SN absent, generique ou invalide est refuse ; aucun identifiant MAC ou nom invente ne le remplace dans le nouvel assistant. Le nom Windows propose reste les quatre derniers chiffres du SN, a completer comme auparavant.
