@@ -87,3 +87,9 @@ Ces commandes ne desinstallent pas les images ou la console. Un poste deja en tr
 Consulter `C:\ProgramData\AtelierPXE\result.json`, puis `software-logs/winget-preparation.log` et les journaux de chaque logiciel. Une fin de preparation ne doit pas masquer une installation non verifiee : IQ-4.6 affiche A verifier et les noms concernes. Si aucune case n etait cochee, aucune application n est installee. Extraire la revision courante et executer `scripts/Repair-Software.ps1` sur le PC en PowerShell administrateur pour reprendre uniquement la selection enregistree, sans redeployer Windows. Attendre la fin de toute preparation deja active.
 
 La revision IQ-4.7 corrige l erreur `Argument WinGet non autorise.` due a la lecture du catalogue sous Windows PowerShell 5.1. Mettre a jour uniquement le serveur avec `Upgrade-Atelier4.ps1`, puis utiliser le nouveau WinPE pour les prochains deploiements. Sur une VM, le bundle HP permet d installer HPIA pour tester sa presence ; les pilotes et BIOS de vrais PC HP ne sont pas applicables au materiel virtuel.
+
+## Apres la preparation IQ-4.8
+
+Le dossier cache ProgramData/AtelierPXE est temporaire. Apres confirmation du rapport, des XML/CSV et des journaux sur le serveur, il est supprime automatiquement. Une coupure reseau ou un installateur encore actif reporte ce nettoyage ; aucun redemarrage n est force. Si un redemarrage est necessaire, le technicien le lance et le nettoyage reprend au demarrage suivant.
+
+Les journaux sont telechargeables sur le site, dans Dossier inventaire, fichier Diagnostics-Deploiement.zip. Le dossier IQ_ et les logiciels installes restent sur le PC. Apres nettoyage, les raccourcis Rapports / Inventaire ouvrent les archives du serveur. Les nouveaux tests materiels ou garanties realises ensuite restent enregistres localement dans IQ_ ; ils ne sont pas renvoyes automatiquement sans le dossier de preparation.

@@ -72,3 +72,12 @@ L’appel `POST /api/agent/{id}/claim` fournit également un `report_token`, dis
 `customization_options.software_packages` expose six valeurs : `vlc`, `reader`, `chrome`, `anydesk`, `hpia` et `lenovo_system_update`. `settings.winget_packages` conserve exactement la selection finale, y compris une liste vide ; aucune detection constructeur ne rajoute HPIA. Les nouveaux profils gardent les quatre logiciels usuels comme valeurs initiales, sans outil constructeur.
 
 `customization_options.software_presets` fournit deux raccourcis : `hp` selectionne les quatre logiciels usuels et `hpia`, `lenovo` selectionne les quatre logiciels et `lenovo_system_update`. Les clients appliquent ces raccourcis aux cases puis transmettent la liste finale. HPIA non selectionne donne un etat `skipped` et ne lance pas de SoftPaq. Lenovo est installe silencieusement par WinGet sans ajout d un lancement automatique de ses mises a jour de pilotes.
+
+## Archivage et nettoyage IQ-4.8
+
+- POST /api/windows/{id}/report retourne accepted, deployment_id et sha256 des octets JSON recus.
+- POST /api/windows/{id}/inventory/diagnostics accepte un ZIP de journaux strictement limites, 8 MiB compresses et 32 MiB extraits au maximum. Aucune extraction ni execution serveur. Les chemins, entrees dupliquees, liens ZIP, fichiers de configuration / identifiants et autres extensions sont refuses.
+- POST /api/windows/{id}/cleanup-ready exige report, xml, csv et diagnostics (SHA-256 minuscules). Il utilise le jeton Windows du seul deploiement, exige un etat final et verifie le recu du rapport ainsi que les octets des fichiers serveur. Une absence ou divergence retourne 409 ; un jeton invalide / expire retourne 401.
+- GET /api/deployments/{id}/inventory et /inventory/diagnostics exposent l archive seulement aux administrateurs de la console. Aucun jeton n est publie dans ces reponses.
+
+Le client valide aussi les recus, les fichiers locaux et l arret des installateurs avant suppression. Les reponses cleanup-ready autorisent uniquement le nettoyage de son propre dossier prive, jamais une action WinPE ou un effacement de disque.

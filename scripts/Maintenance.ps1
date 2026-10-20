@@ -25,6 +25,13 @@ function Save-Maintenance([string]$Status,[int]$Percent,[string]$Message) {
 function Finish-Maintenance {
     Disable-AtelierAutoLogon
     if (Get-Command Complete-AtelierReport -ErrorAction SilentlyContinue) { Complete-AtelierReport $DataPath $ToolsPath }
+    $cleanupRequested=$false
+    $payloadFile=Join-Path $DataPath 'personalization.json'
+    if (Test-Path $payloadFile) { $cleanupRequested=[bool](Get-Content $payloadFile -Encoding UTF8 -Raw | ConvertFrom-Json).deployment.cleanup_after_reporting }
+    if ($cleanupRequested) {
+        . (Join-Path $DataPath 'Finalization.ps1')
+        if (Complete-AtelierLocalCleanup -DataPath $DataPath -ToolsPath $ToolsPath) { return }
+    }
     $configuration=Join-Path $DataPath 'reporting.json'
     $sent=$false; $expired=$false
     $receipt=Get-AtelierIQFile $ToolsPath 'Rapports' 'Transmission-Rapport.json'
@@ -35,7 +42,7 @@ function Finish-Maintenance {
         try { $expired=[DateTime]::Parse((Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json).expires) -lt [DateTime]::UtcNow } catch { }
     }
     # Keep only the bounded reporting retry alive while the server is offline.
-    if (-not (Test-Path $configuration) -or $sent -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
+    if (-not (Test-Path $configuration) -or ($sent -and -not $cleanupRequested) -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Progress' -Confirm:$false -ErrorAction SilentlyContinue
 }
 

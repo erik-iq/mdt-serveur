@@ -8,9 +8,9 @@ Le logo est limite a 40 x 40 pixels et place en haut a droite sur le site, WinPE
 
 La feuille de style utilise un seul theme : fond clair, cartes blanches, texte bleu nuit, boutons bleus et degrade bleu `#D2E4F1` / lilas `#E9D9EA`. Les anciennes regles vert fonce ont ete retirees.
 
-Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.7` ; la mise a jour controle ce marqueur avant de valider le demarrage.
+Chaque adresse CSS, JavaScript et logo contient une empreinte de son contenu. Les pages et ressources du site portent `Cache-Control: no-store`, pour eviter le melange nouveau HTML / ancien CSS lors d une mise a jour. `/health` confirme maintenant `ui_revision: IQ-4.8` ; la mise a jour controle ce marqueur avant de valider le demarrage.
 
-Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.7`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
+Apres la mise a jour, ouvrir `https://192.168.99.250/?theme=IQ-4.8`. Pour WinPE et la preparation des prochains postes, utiliser l image reconstruite par le script de mise a jour. Les tests navigateur reproduisent le logo geant avec l ancien CSS puis verifient la correction sur ecran 1440, 1920 et mobile 390 pixels. Le rendu WinForms reste a valider sur Windows.
 
 ## Assistant et fiche ordinateur IQ-4.2
 
@@ -25,6 +25,18 @@ Dans Activite de deploiement, cliquer **Fiche ordinateur**, ou cliquer le nom da
 Chaque nouveau deploiement mesure l application DISM du WIM, les logiciels WinGet, la preparation de l outil constructeur, les mises a jour HP et la collecte XML/CSV. Ces mesures apparaissent dans la fiche et les nouveaux rapports PDF. Les anciennes mesures Windows Update restent visibles dans l historique. Les durees sont mesurees par chronometre dans le processus ; elles n incluent pas les periodes hors tension ni les attentes entre redemarrages. Une fin de mesure non recue reste signalee et les anciens deploiements n obtiennent pas de durees reconstituees. Les transmissions reutilisent les memes identifiants de mesure pour eviter les doublons.
 
 La fiche utilise la MAC d enregistrement comme identite du poste. Un changement de carte reseau peut donc necessiter un rapprochement manuel ; le numero de serie du dernier rapport reste visible.
+
+## Suppression du dossier de travail IQ-4.8
+
+Les nouveaux deploiements ne conservent plus definitivement `C:\ProgramData\AtelierPXE`. Ce dossier reste necessaire pendant la preparation. Apres la fin des logiciels, le client transmet le rapport, les XML/CSV et une archive des journaux au serveur, puis demande une confirmation portant sur les empreintes SHA-256 des quatre envois. Le serveur verifie aussi que les fichiers existent encore avec le bon contenu. Un ancien recu, un fichier modifie ou un transfert incomplet ne permet pas la suppression.
+
+Les journaux sont dans `Diagnostics-Deploiement.zip`, dans le meme dossier serveur que les inventaires : `<data_dir>/inventaires/NOM-DU-PC/ID-DEPLOIEMENT`. Le bouton Dossier inventaire de la console permet de telecharger cette archive. Elle contient les resultats de preparation, les mesures et les derniers journaux de chaque logiciel, limites a 2000 lignes / 256 K caracteres par journal. Les fichiers reporting.json, personalization.json, les reponses Windows, mots de passe et scripts ne sont pas archives. Le jeton de rapport est masque s il apparait dans un journal selectionne.
+
+Apres confirmation, le nettoyage retire le dossier de travail (scripts, caches, telechargements, jeton et etats), les taches Atelier et l ancien payload de reference cree par ce deploiement. Les autres dossiers de ProgramData ne sont pas touches. Les liens et jonctions sont refuses. Un fichier encore ouvert bloque le nettoyage avant la suppression des taches. Le nettoyage ne tue aucun installateur. Si un redemarrage est demande, il attend le redemarrage manuel avant de supprimer les caches, notamment ceux du constructeur. Si le serveur est indisponible, les fichiers et la tache de reprise sont conserves temporairement ; la tache retente toutes les 15 minutes pendant la validite du jeton de rapport (14 jours). Un jeton expire ou une erreur persistante laisse la copie locale disponible pour diagnostic, sans la supprimer sans archive validee.
+
+Les applications installees et `C:\IQ_` sont conserves. Le fond d ecran est utilise depuis `IQ_/Personnalisation`, et le logo de progression ne garde plus le fichier source ouvert. Les outils son, webcam, clavier, batterie, licence et garantie restent autonomes. Apres nettoyage, les raccourcis Generer-Rapport et Export-Inventaire ouvrent le rapport ou le dossier archives sur le site, sans garder de jeton. Ils ne regenerent plus un inventaire du poste et n envoient plus automatiquement de nouveaux tests : les tests et garanties realises ensuite restent locaux dans IQ_. Le PDF de deploiement local reste consultable.
+
+Cette modification s applique aux prochains deploiements utilisant le WinPE IQ-4.8 reconstruit par Upgrade-Atelier4.ps1 sur DEPLOY-01. Les postes deja termines ne sont pas modifies a distance. Les tests verifient le protocole serveur et la suppression de vrais dossiers temporaires avec processus / redemarrage simules ; la suppression native sous Windows reste a valider sur une machine de test.
 
 ## Correction du catalogue Windows PowerShell 5.1 IQ-4.7
 
@@ -50,7 +62,7 @@ La preparation teste que WinGet execute vraiment `--version`, puis essaie l enre
 
 Pour un PC deja deploye, extraire la nouvelle archive puis executer `scripts/Repair-Software.ps1` en PowerShell administrateur sur ce PC. La reparation conserve la selection enregistree, sauvegarde les anciens fichiers dans `repair-backups/software-<identifiant>`, controle chaque logiciel et installe les manquants. Elle refuse une preparation ou un installateur encore actif. Elle met a jour le rapport et l inventaire ; les echecs restent visibles. Le resultat HP durable est conserve pour eviter de relancer automatiquement un flash deja traite. Aucun redemarrage n est demande par Atelier et aucune recherche Windows Update / Store n est ajoutee.
 
-Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.7. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
+Pour les prochains deploiements, executer `scripts/Upgrade-Atelier4.ps1` sur DEPLOY-01 afin de mettre a jour la console et reconstruire WinPE. L assistant doit annoncer IQ-4.8. Les tests utilisent des installateurs et un registre simules ; l installation reelle WinGet / ADK reste a valider sous Windows.
 
 ## Bundles et choix des logiciels IQ-4.5
 
@@ -71,7 +83,7 @@ Lenovo System Update coche : installation silencieuse du paquet `Lenovo.SystemUp
 
 Reference Lenovo verifiee : [manifeste Lenovo.SystemUpdate](https://github.com/microsoft/winget-pkgs/blob/16a1cf2cdb0ab480506cef361146633af6a7bfe4/manifests/l/Lenovo/SystemUpdate/5.08.04.85/Lenovo.SystemUpdate.installer.yaml). Les prochains postes installent la version proposee par la source WinGet, sans figer cette version.
 
-Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.7.
+Pour appliquer ces choix, mettre a jour le serveur et reconstruire WinPE avec la commande de mise a jour. La fenetre de l assistant doit annoncer IQ-4.8.
 
 ## Installation HPIA par WinGet et clavier fixe
 

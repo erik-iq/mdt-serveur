@@ -76,7 +76,7 @@ $save.Add_Click({
         $report.statut=if ($end -lt (Get-Date).Date) { 'expiree_confirmee_operateur' } else { 'active_confirmee_operateur' }
         $report.verifie_le=[DateTime]::UtcNow.ToString('o');$report.observation=$inputs.observation.Text
         Save-AtelierWarranty $report $OutputDirectory
-        $notice.Text='Garantie.txt et Garantie.json enregistres. Relancer Generer-Rapport.cmd pour actualiser le PDF.'
+        $notice.Text='Garantie.txt et Garantie.json enregistres localement dans IQ_. Le rapport de deploiement reste consulte sur le serveur apres nettoyage.'
     } catch { $notice.Text='Dates AAAA-MM-JJ attendues. ' + $_.Exception.Message }
 })
 $form.Controls.AddRange(@($logo,$label,$open,$copy,$save,$notice))

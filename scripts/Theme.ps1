@@ -12,7 +12,8 @@ function New-AtelierLogo {
     $picture.Size=New-Object Drawing.Size(40,40)
     $picture.Anchor='Top,Right'
     $picture.SizeMode='Zoom';$picture.BackColor=[Drawing.Color]::Transparent
-    $picture.Image=[Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'brand-logo.png'))
+    $source=[Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'brand-logo.png'))
+    try { $picture.Image=$source.Clone() } finally { $source.Dispose() }
     $picture.Add_Disposed({ if ($this.Image) { $this.Image.Dispose() } })
     return $picture
 }

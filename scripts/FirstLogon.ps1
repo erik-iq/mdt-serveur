@@ -83,6 +83,10 @@ try {
     $desktopDeadline=(Get-Date).AddSeconds(60)
     while (-not (Get-Process explorer -ErrorAction SilentlyContinue) -and (Get-Date) -lt $desktopDeadline) { Start-Sleep -Seconds 1 }
     Initialize-AtelierReportTrust -DataPath $DataPath
+    if ($payload.deployment.cleanup_after_reporting) {
+        $self=Get-Process -Id $PID
+        @{pid=$PID;started=$self.StartTime.ToUniversalTime().ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $DataPath 'preparation-worker.json') -Encoding UTF8
+    }
     # Always check the requested applications against this Windows installation.
     # Captured WIMs and resumed clients may contain obsolete success files.
     Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
@@ -98,7 +102,12 @@ try {
         New-ItemProperty -Path $registry -Name SystemUsesLightTheme -Value $value -PropertyType DWord -Force | Out-Null
     }
     if ($payload.wallpaper) {
-        $wallpaper = Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
+        $wallpaperSource = Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
+        Assert-FileHash $wallpaperSource $payload.wallpaper.sha256
+        $wallpaperDirectory=Join-Path $env:SystemDrive 'IQ_\Personnalisation'
+        New-Item -ItemType Directory -Path $wallpaperDirectory -Force | Out-Null
+        $wallpaper=Join-Path $wallpaperDirectory $payload.wallpaper.filename
+        Copy-Item -LiteralPath $wallpaperSource -Destination $wallpaper -Force
         Assert-FileHash $wallpaper $payload.wallpaper.sha256
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wallpaper
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'

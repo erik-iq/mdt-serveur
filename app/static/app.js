@@ -1,5 +1,6 @@
 'use strict';
 let token = '', state = null, currentForm = '', refreshing = false, internalMode = false, sessionReady = false;
+let requestedDeploymentOpened=false;
 const $ = id => document.getElementById(id);
 const labels = {manual:'Manuel',skipped:'Non applicable',active_confirmee_operateur:'Active (confirmee par le technicien)',expiree_confirmee_operateur:'Expiree (confirmee par le technicien)',non_verifie:'Non verifie',passed:'Conforme',not_tested:'Non teste',requested:'Demande',unknown:'Non connu',up_to_date:'A jour',installed:'Installe',deferred:'Reporte',partial:'Partiellement termine',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquee', failed:'Echec', cancelled:'Annule',completed:'Termine',needs_attention:'A verifier',retry_pending:'Nouvelle tentative prevue',reboot_pending:'Redemarrage prevu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34,7 +35,7 @@ function render() {
 async function refresh() {
   if ((!token && !internalMode) || refreshing) return;
   refreshing = true;
-  try { state = await api('/state'); render(); $('connection').textContent = ' Console connectee'; $('notice').hidden = true; }
+  try { state = await api('/state'); render(); $('connection').textContent = ' Console connectee'; $('notice').hidden = true; await openRequestedDeployment(); }
   catch(e) { $('connection').textContent = ' Connexion interrompue'; $('notice').textContent = e.message; $('notice').hidden = false; }
   finally { refreshing = false; }
 }
@@ -70,7 +71,7 @@ function openForm(kind) {
 }
 $('login-form').addEventListener('submit',async e=>{
   e.preventDefault(); token=new FormData(e.target).get('token').trim(); $('login-error').textContent='';
-  try { state=await api('/state'); e.target.reset(); $('login-dialog').close(); render(); $('connection').textContent=' Console connectee'; }
+  try { state=await api('/state'); e.target.reset(); $('login-dialog').close(); render(); $('connection').textContent=' Console connectee'; await openRequestedDeployment(); }
   catch(error) { token=''; $('login-error').textContent=error.message; }
 });
 $('login-dialog').addEventListener('cancel',e=>e.preventDefault());
@@ -148,6 +149,17 @@ async function downloadReport(id) {
     const url=URL.createObjectURL(await response.blob()), link=document.createElement('a');
     link.href=url;link.download='Rapport-'+id+'.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
   } catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}
+}
+async function openRequestedDeployment() {
+  if(requestedDeploymentOpened || !state)return;
+  const query=new URLSearchParams(location.search),id=query.get('deployment');
+  if(!/^[a-f0-9-]{36}$/i.test(id||''))return;
+  requestedDeploymentOpened=true;
+  if(query.get('view')==='inventory'){await openInventory(id);return;}
+  const job=state.deployments.find(d=>d.id===id);
+  if(job)await openComputer(job.machine_id);
+  else {document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-computer');$('breadcrumb').textContent='Fiche ordinateur';}
+  await viewComputerReport(id);
 }
 
 async function openInventory(id) {

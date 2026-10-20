@@ -1,5 +1,6 @@
 """Real browser test of automatic arrival, client WinGet settings, and the server inventory folder."""
 import json
+import io
 import os
 from pathlib import Path
 import shutil
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from urllib.request import Request,urlopen
 
 from playwright.sync_api import sync_playwright,expect
@@ -74,6 +76,12 @@ def run():
                 csv=b'Ordinateur;Categorie;Propriete;Valeur\nPC-BROWSER3;RAM;Go;16\n'
                 api('/windows/'+identifier+'/inventory/xml',token=reporter,raw=xml)
                 api('/windows/'+identifier+'/inventory/csv',token=reporter,raw=csv)
+                log_stream=io.BytesIO()
+                with zipfile.ZipFile(log_stream,'w') as z:
+                    z.writestr('result.json','{"status":"completed"}')
+                    z.writestr('maintenance.json','{"status":"completed"}')
+                api('/windows/'+identifier+'/inventory/diagnostics',token=reporter,raw=log_stream.getvalue())
+                api('/windows/'+identifier+'/report',token=reporter,body={'hostname':'PC-BROWSER3','status':'completed','generated_at':'2026-10-20T12:00:00Z','inventory':{'Modele':'Test'},'steps':[],'warnings':[]})
                 page.evaluate('refresh()');row.locator('[data-inventory]').click()
                 expect(page.locator('#inventory-directory')).to_have_value(str(data/'inventaires'/'PC-BROWSER3'/identifier))
                 with page.expect_download() as download:
@@ -81,6 +89,14 @@ def run():
                 assert Path(download.value.path()).read_bytes()==csv
                 page.screenshot(path='/tmp/atelier3-inventory.png',full_page=True)
                 page.locator('[data-close="inventory-dialog"]').click()
+                page.goto(origin+'?deployment='+identifier+'&view=inventory')
+                expect(page.locator('#inventory-dialog')).to_be_visible()
+                with page.expect_download() as diagnostic_download:
+                    page.get_by_role('button',name='Telecharger Diagnostics-Deploiement.zip',exact=True).click()
+                assert Path(diagnostic_download.value.path()).read_bytes()==log_stream.getvalue()
+                page.goto(origin+'?deployment='+identifier+'&view=report')
+                expect(page.locator('#page-computer')).to_be_visible()
+                expect(page.locator('#computer-report')).to_contain_text('Rapport du')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
                 page.screenshot(path='/tmp/atelier3-mobile.png',full_page=True)

@@ -43,7 +43,12 @@ $timer=New-Object Windows.Forms.Timer
 $timer.Interval=1000
 $timer.Add_Tick({
     try {
-        $state=Get-Content (Join-Path $DataPath 'progress.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+        $path=Join-Path $DataPath 'progress.json'
+        if (Test-Path $path) { $state=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json }
+        else {
+            $report=Get-Content 'C:\IQ_\Rapports\Rapport-Deploiement.json' -Encoding UTF8 -Raw | ConvertFrom-Json
+            $state=[pscustomobject]@{status=$report.status;progress=100;detail=$null;message='Preparation archivee. Consulter le rapport et les journaux sur Atelier PXE.'}
+        }
         $message.Text=$state.message
         $elapsed=(Get-Date)-$started
         $note.Text='Session : ' + $elapsed.ToString('hh\:mm\:ss') + ' | Bureau disponible ; preparation en arriere-plan.'

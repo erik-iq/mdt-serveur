@@ -9,13 +9,14 @@ $OutputDirectory=Get-AtelierIQDirectory $toolsRoot 'Rapports'
 $inventory=[ordered]@{}; $warnings=New-Object 'Collections.Generic.List[string]'
 $payloadPath=Join-Path $DataPath 'personalization.json'
 $payload=if (Test-Path $payloadPath) { Get-Content $payloadPath -Encoding UTF8 -Raw | ConvertFrom-Json } else { $null }
-$inventoryDirectory=if ($payload.settings.central_inventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
+$centralInventory=$payload.settings.central_inventory -or $payload.deployment.cleanup_after_reporting
+$inventoryDirectory=if ($centralInventory) { Join-Path $DataPath 'Inventory' } else { Get-AtelierIQDirectory $toolsRoot 'Inventaire' }
 $xmlInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.xml'
 $csvInventory=Join-Path $inventoryDirectory 'Inventaire-Technique.csv'
 $finalMarker=Join-Path $DataPath 'inventory-finalized.json'
 $maintenancePath=Join-Path $DataPath 'maintenance.json'
 $finalInventory=$false
-if ($payload.settings.central_inventory -and (Test-Path $maintenancePath)) {
+if ($centralInventory -and (Test-Path $maintenancePath)) {
     try { $finalInventory=(Get-Content $maintenancePath -Encoding UTF8 -Raw | ConvertFrom-Json).status -in @('completed','needs_attention') } catch { }
 }
 $inventoryPending=$false
@@ -30,7 +31,7 @@ if ($RefreshInventory -or $refreshFinal -or -not (Test-Path $xmlInventory) -or -
     } catch {
         if ($inventoryTiming) { Stop-AtelierTiming $DataPath $inventoryTiming 'failed' }
         $warnings.Add('Inventaire XML/CSV a regenerer avec Export-Inventaire.cmd.')
-        if ($payload.settings.central_inventory) {
+        if ($centralInventory) {
             $inventoryPending=$true
             if (Test-Path $finalMarker) { Remove-Item -LiteralPath $finalMarker -Force }
         }
@@ -141,7 +142,7 @@ if (Test-Path $timingDirectory) {
         }
     }
 }
-if ($steps.Count -gt 230) { $warnings.Add('Historique PDF limite aux 230 dernieres entrees. Les journaux complets restent dans ProgramData.') }
+if ($steps.Count -gt 230) { $warnings.Add('Historique PDF limite aux 230 dernieres entrees. Consulter aussi les journaux de preparation archives sur le serveur.') }
 $report=[ordered]@{hostname=$env:COMPUTERNAME;status=$status;generated_at=[DateTime]::UtcNow.ToString('o');inventory=$inventory;steps=@($steps.ToArray() | Select-Object -Last 230);warnings=@($warnings.ToArray())}
 $json=$report | ConvertTo-Json -Depth 12
 $json | Set-Content (Join-Path $OutputDirectory 'Rapport-Deploiement.json') -Encoding UTF8
@@ -149,7 +150,7 @@ $lines=@('ATELIER PXE - Rapport de deploiement',('Poste : ' + $env:COMPUTERNAME 
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ($entry.Key + ' : ' + $entry.Value) }
 $lines += @('','DEROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + $step.status + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.7.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : verification humaine requise. Le BIOS Fast Boot n est pas modifie. Windows Update et Microsoft Store sont manuels dans IQ-4.8.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'
@@ -157,12 +158,21 @@ if ((Test-Path $configuration) -and ($maintenance.status -in @('completed','need
     try {
         $config=Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-        Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 15 | Out-Null
-        if ($payload.settings.central_inventory) {
+        $reportBytes=[Text.Encoding]::UTF8.GetBytes($json)
+        $reply=Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/report') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body $reportBytes -TimeoutSec 15
+        $algorithm=[Security.Cryptography.SHA256]::Create()
+        try { $reportHash=([BitConverter]::ToString($algorithm.ComputeHash($reportBytes))).Replace('-','').ToLowerInvariant() } finally { $algorithm.Dispose() }
+        if ($payload.deployment.cleanup_after_reporting -and (-not $reply.accepted -or $reply.deployment_id -ne $config.id -or $reply.sha256 -ne $reportHash)) { throw 'Rapport serveur non confirme.' }
+        if ($centralInventory) {
             . (Join-Path $DataPath 'Inventory-Transfer.ps1')
             if ($inventoryPending -or -not (Send-AtelierInventory -DataPath $DataPath -InventoryDirectory $inventoryDirectory)) { throw 'Transmission inventaire en attente.' }
         }
-        @{status='sent';date=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8
+        $receipt=@{status='sent';date=[DateTime]::UtcNow.ToString('o');deployment_id=$config.id;report_sha256=$reportHash}
+        foreach ($name in @('result','maintenance')) {
+            $path=Join-Path $DataPath ($name+'.json')
+            if (Test-Path $path) { $receipt[($name+'_sha256')]=(Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+        }
+        $receipt | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8
     } catch {
         @{status='pending';message='Rapport local conserve. Relancer Generer-Rapport.cmd lorsque la console est joignable.'} | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'Transmission-Rapport.json') -Encoding UTF8
     }

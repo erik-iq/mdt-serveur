@@ -365,7 +365,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.7"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-4.8"}
 
     @api.get('/api/session')
     def session_options():
@@ -761,8 +761,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         return {'accepted': True}
 
     @api.post('/api/windows/{identifier}/report')
-    def receive_computer_report(identifier: str, body: ComputerReport, authorization: str = Header(default='')):
+    async def receive_computer_report(identifier: str, body: ComputerReport, request:Request, authorization: str = Header(default='')):
         snapshot = body.model_dump()
+        report_hash=hashlib.sha256(await request.body()).hexdigest()
         if any(len(k) > 100 or len(v) > 2000 for k, v in body.inventory.items()) or any(len(w) > 1500 for w in body.warnings):
             raise HTTPException(422, 'Champ de rapport trop long')
         with db(write=True) as con:
@@ -775,9 +776,10 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 raise HTTPException(409, 'Etat final different du rapport precedent')
             con.execute('INSERT INTO computer_reports VALUES (?,?,?) ON CONFLICT(deployment_id) DO UPDATE SET report_json=excluded.report_json,created_at=excluded.created_at',
                         (identifier, json.dumps(snapshot, ensure_ascii=False), now()))
+            con.execute('INSERT OR REPLACE INTO report_receipts VALUES (?,?)',(identifier,report_hash))
             con.execute('UPDATE deployments SET windows_status=?,windows_progress=?,windows_updated_at=? WHERE id=?',
                         (body.status, 100 if body.status == 'completed' else 90, now(), identifier))
-        return {'accepted': True, 'pdf_path': f'/api/deployments/{identifier}/report.pdf'}
+        return {'accepted': True, 'pdf_path': f'/api/deployments/{identifier}/report.pdf','deployment_id':identifier,'sha256':report_hash}
 
     @api.get('/api/deployments/{identifier}/report.pdf', dependencies=[Depends(admin)])
     def download_computer_report(identifier: str):
