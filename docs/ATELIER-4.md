@@ -32,6 +32,16 @@ La case HP Image Assistant reste l unique declencheur sur le poste. Sans cette c
 
 Sur .250, `Upgrade-Atelier4.ps1` met la console a jour, appelle `Enable-HPRepository.ps1`, puis reconstruit et importe le nouveau WinPE. Le titre de l assistant et `/health` doivent annoncer IQ-4.9. Aucun script manuel n est necessaire sur les prochains postes deployes. Les postes deja termines ne recoivent pas retroactivement ces fichiers.
 
+### Correctif d installation CMSL pour PowerShellGet ancien
+
+Le journal `hp-repository\setup.log` peut indiquer : `Impossible de trouver un parametre correspondant au nom AcceptLicense`. La version initiale IQ-4.9 passait ce parametre a Install-Module sans verifier la version de PowerShellGet fournie avec Windows PowerShell 5.1. CMSL n etait donc pas installe, meme si la creation de la tache continuait ensuite.
+
+Le correctif d `Enable-HPRepository.ps1` met PowerShellGet a niveau vers 2.2.5 pour tous les utilisateurs si necessaire, avec une commande compatible avec l ancienne version. Il installe ensuite HPCMSL dans un nouveau processus Windows PowerShell, sans profil, afin de charger les nouvelles versions de PowerShellGet et PackageManagement. Aucun redemarrage Windows n est necessaire pour ce changement de session.
+
+Le programme verifie le chargement de CMSL et ses cinq commandes de depot avant d annoncer leur disponibilite. Un echec affiche maintenant l etape, son message et le chemin complet du journal. L agent peut rester en attente et les postes conservent leur repli Internet ; la creation de la tache ne signifie plus que le depot est pret.
+
+Pour une console deja mise a jour vers IQ-4.9, remplacer uniquement `scripts\Enable-HPRepository.ps1` dans le dossier de la console et le relancer en Windows PowerShell administrateur sur .250. Le script de localisation existant retrouve l installation par la tache AtelierPXE-Console. Il n est pas necessaire de reconstruire WinPE pour cette reparation serveur. La tache de depot deja active retente le chargement du module dans sa boucle habituelle.
+
 ### Parcours du poste
 
 1. WinGet prepare l outil HPIA et verifie l executable signe HP, comme en IQ-4.8.1.
