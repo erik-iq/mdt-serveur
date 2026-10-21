@@ -59,6 +59,37 @@ function Read-AtelierHpiaPackages {
     }
 }
 
+function Test-AtelierHpiaAnalysisOnly {
+    param([string]$Directory)
+    $seen=$false
+    foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.json' -File | Select-Object -First 50)) {
+        if ($file.Length -gt 16MB) { continue }
+        try {
+            $report=Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
+            if ($report.HPIA) {
+                if ($report.HPIA.HPIAOperation -ne 'Analyze Action List' -or $report.HPIA.LastOperation -ne 'EndAnalyze') { return $false }
+                $seen=$true
+            }
+        } catch { return $false }
+    }
+    return $seen
+}
+
+function Get-AtelierHpiaInstallableSoftpaqs {
+    param([string]$Directory)
+    $ids=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.json' -File -Recurse | Select-Object -First 50)) {
+        if ($file.Length -gt 16MB) { continue }
+        try {
+            $report=Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
+            foreach ($item in @($report.HPIA.Recommendations)) {
+                if ([string]$item.SSMCompliant -match '^(?i)true$' -and [string]$item.SoftPaqID -match '^(?i)(?:SP)?([0-9]{4,8})$') { [void]$ids.Add('SP'+$Matches[1]) }
+            }
+        } catch { }
+    }
+    return @($ids | Sort-Object | Select-Object -First 200)
+}
+
 function Get-AtelierHpiaRecommendedSoftpaqs {
     param([string]$Directory)
     $ids=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
@@ -258,7 +289,7 @@ function Invoke-AtelierHpia {
                     . (Join-Path $DataPath 'HP-ClientRepository.ps1')
                     $repository=Get-AtelierHpRepository -DataPath $DataPath -RequiredSoftpaqs $required -OnProgress $OnProgress -PrepareOnly:($result.analysis_exit_code -eq 256)
                     $result.repository=$repository
-                    $result.source=if ($repository.status -eq 'offline') { 'depot_250' } else { 'online' }
+                    $result.source=if ($repository.status -in @('offline','package_cache')) { 'depot_250' } else { 'online' }
                     $reports=Join-Path $reports 'Installation';New-Item -ItemType Directory -Path $reports -Force | Out-Null
                 }
                 if ($useRepository -and $result.analysis_exit_code -eq 256) {
@@ -278,6 +309,25 @@ function Invoke-AtelierHpia {
                     $installStarted=[DateTime]::UtcNow
                     $result.exit_code=Invoke-AtelierHpiaProcess -Executable $exe -Arguments $arguments -Directory $reports -ResultPath $resultPath -State $result -OnProgress $OnProgress -TimeoutSeconds $TimeoutSeconds
                     Copy-AtelierHpiaAutoReport -Directory $reports -Started $installStarted
+                    $explicit=@(Get-AtelierHpiaInstallableSoftpaqs $reports)
+                    if ($result.exit_code -in @(0,4104) -and $explicit.Count -and (Test-AtelierHpiaAnalysisOnly $reports) -and -not @(Read-AtelierHpiaPackages $reports).Count -and -not @(Read-AtelierHpiaAutoReport $reports | Where-Object { $null -ne $_.code }).Count) {
+                        # HP's documented SPList operation selects only IDs from
+                        # this PC's own fresh recommendations. Never use Force or
+                        # install a catalogue of optional/unrelated devices.
+                        $result.initial_install_exit_code=$result.exit_code
+                        $result.exit_code=$null
+                        $retry=Join-Path $reports 'Selection-Explicite';New-Item -ItemType Directory -Path $retry -Force | Out-Null
+                        $list=Join-Path $retry 'SoftPaqs.txt'
+                        [IO.File]::WriteAllLines($list,[string[]]@($explicit | ForEach-Object { $_.Substring(2) }),[Text.Encoding]::ASCII)
+                        $result.explicit_softpaqs=$explicit;$result.phase='installation des SoftPaq selectionnes'
+                        $result.message='HPIA n a confirme aucune installation : reprise unique avec la liste des '+$explicit.Count+' SoftPaq recommandes et automatisables.'
+                        Save-AtelierHpCheckpoint $resultPath $result
+                        & $OnProgress $result.message | Out-Null
+                        $retryArguments=$arguments.Replace(('/ReportFolder:"'+$reports+'"'),('/ReportFolder:"'+$retry+'"'))+' /SPList:"'+$list+'"'
+                        $retryStarted=[DateTime]::UtcNow
+                        $result.exit_code=Invoke-AtelierHpiaProcess -Executable $exe -Arguments $retryArguments -Directory $retry -ResultPath $resultPath -State $result -OnProgress $OnProgress -TimeoutSeconds $TimeoutSeconds
+                        Copy-AtelierHpiaAutoReport -Directory $retry -Started $retryStarted
+                    }
                     $outcome=Get-AtelierHpiaOutcome $result.exit_code
                     $result.status=$outcome.status;$result.reboot_required=$outcome.reboot_required;$result.message=$outcome.message
                     $result.packages=@(Read-AtelierHpiaPackages $reports | Select-Object -First 200)
@@ -292,7 +342,7 @@ function Invoke-AtelierHpia {
                     } elseif ($result.status -eq 'completed' -and -not $result.packages.Count -and @(Get-AtelierHpiaRecommendedSoftpaqs $reports).Count) {
                         $result.status='needs_attention';$result.message='Recommandations HP presentes, mais aucun resultat d installation confirme. Consulter le journal HPIA.'
                     }
-                    $result.generic_os_reference=$result.analysis_exit_code -eq 4104 -or $result.exit_code -eq 4104
+                    $result.generic_os_reference=$result.analysis_exit_code -eq 4104 -or $result.initial_install_exit_code -eq 4104 -or $result.exit_code -eq 4104
                     if ($result.generic_os_reference -and $result.exit_code -ne 4104) {
                         $result.message+=' Reference HP generique : cette version de Windows ne dispose pas d une reference HP dediee. Compatibilite a verifier.'
                         if ($result.status -eq 'completed') { $result.status='needs_attention' }

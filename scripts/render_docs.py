@@ -54,10 +54,11 @@ def render(source):
 
 
 if __name__ == '__main__':
-    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html'), ('ATELIER-3.md','atelier3.html'), ('ATELIER-4.md','atelier4.html'), ('MAINTENANCE-IMAGES-WINDOWS.md','windows-image-maintenance.html')]:
+    for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html'), ('ATELIER-3.md','atelier3.html'), ('ATELIER-4.md','atelier4.html'), ('MAINTENANCE-IMAGES-WINDOWS.md','windows-image-maintenance.html'), ('VALIDATION-DEPLOIEMENT.md','deployment-validation.html')]:
         body=render((ROOT/'docs'/filename).read_text())
         body=body.replace('href="ATELIER-4.md"','href="/static/atelier4.html"')
         body=body.replace('href="MAINTENANCE-IMAGES-WINDOWS.md"','href="/static/windows-image-maintenance.html"')
+        body=body.replace('href="VALIDATION-DEPLOIEMENT.md"','href="/static/deployment-validation.html"')
         body=body.replace('href="ATELIER-3.md"','href="/static/atelier3.html"')
         body=body.replace('href="LOGICIELS-AUTOMATIQUES.md"','href="/static/software-guide.html"')
         body=body.replace('href="MISE-A-JOUR-ATELIER-2.md"','href="/static/upgrade.html"').replace('href="GUIDE-UTILISATEUR.md"','href="/static/guide.html"')

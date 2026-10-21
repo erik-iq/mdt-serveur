@@ -15,7 +15,7 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH or os.name=='nt',reason='PowerShell and Linux executable fixture required')
 
 
-@pytest.mark.parametrize('case',['cached','pending','failed_sync','failed_worker_offline','bad_archive','manual_package','package_restart','install_failure','analysis_network_failure','no_updates','agent_unavailable','cached_worker_offline'])
+@pytest.mark.parametrize('case',['cached','pending','failed_sync','failed_worker_offline','bad_archive','manual_package','package_restart','install_failure','analysis_network_failure','no_updates','agent_unavailable','cached_worker_offline','package_cache','bad_cache_signature'])
 def test_each_hp_is_analyzed_before_cached_or_online_install_and_no_install_is_retried(tmp_path,case):
     data=tmp_path/'data';data.mkdir();identifier=str(uuid.uuid4());snapshot_id=str(uuid.uuid4())
     for name in ['HP-ImageAssistant.ps1','HP-ClientRepository.ps1','HP-Repository.ps1','Unattend.ps1']:
@@ -34,6 +34,9 @@ function Receive-AtelierHpArchive {
         z.writestr('.repository/cache/offline/platformList.cab','Reference fixture')
         z.writestr('.repository/cache/8AB8_64_11.0.25h2.cab','Reference fixture')
         z.writestr('sp12345.exe','Package fixture - never executed')
+        if case in {'package_cache','bad_cache_signature'}:
+            z.writestr('sp12345.cva','CVA fixture')
+            z.writestr('.repository/cache/atelier-softpaq-cache.json',json.dumps({'schema':1,'mode':'packages_only','platform':'8AB8','os':'win11','os_version':'25H2','softpaqs':['SP12345']}))
         if case=='bad_archive':z.writestr('../escape.exe','Not allowed')
     program=tmp_path/'Program Files'
     tool=program/'AtelierPXE'/'Tools'/'HPImageAssistant'/'HPImageAssistant.exe';tool.parent.mkdir(parents=True)
@@ -48,7 +51,7 @@ if '/Action:List' in args:
 else:
  assert '/Action:Install' in args and '/AutoReport' in args and '/IgnoreGenericOsError' in args
  offline=[a for a in args if a.startswith('/OfflineMode:')]
- expected='CASE' not in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates'}
+ expected='CASE' not in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates','package_cache','bad_cache_signature'}
  assert bool(offline)==expected,(args,expected)
  if offline:
   cache=pathlib.Path(offline[0].split(':',1)[1]);assert (cache/'sp12345.exe').is_file()
@@ -73,7 +76,7 @@ function Get-CimInstance {
  if($ClassName -eq 'Win32_BaseBoard'){[pscustomobject]@{Product='8AB8'}}else{[pscustomobject]@{Manufacturer='HP'}}
 }
 function Get-ItemProperty {param($Path);[pscustomobject]@{DisplayVersion='25H2';CurrentBuildNumber='26200'}}
-function Get-AuthenticodeSignature {param($LiteralPath);[pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=HP Inc.'}}}
+function Get-AuthenticodeSignature {param($LiteralPath);[pscustomobject]@{Status=$(if('CASE' -eq 'bad_cache_signature' -and $LiteralPath -like '*sp12345.exe'){'NotSigned'}else{'Valid'});SignerCertificate=[pscustomobject]@{Subject='CN=HP Inc.'}}}
 function Invoke-RestMethod {
  param($Uri,$Method,$Headers,$ContentType,$Body,$TimeoutSec)
  if($Headers.Authorization -ne 'Bearer private-fixture-token-not-real'){throw 'Wrong reporting credential'}
@@ -103,7 +106,7 @@ $second=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'ROOT/IQ_'
     result=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stderr+result.stdout
     outcome=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))['first']
-    expected_online=case in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates'}
+    expected_online=case in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates','bad_cache_signature'}
     assert outcome['source']==('online' if expected_online else 'depot_250'),outcome
     assert outcome['status']==('needs_attention' if case in {'manual_package','install_failure'} else 'completed'),outcome
     assert outcome['reboot_required']==(case=='package_restart')
@@ -117,3 +120,6 @@ $second=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'ROOT/IQ_'
     if case=='manual_package':
         assert any(p.get('manual') for p in outcome['packages'])
         assert list((tmp_path/'IQ_').rglob('SoftPaqReport.csv'))
+    if case=='package_cache':
+        assert outcome['repository']['status']=='package_cache'
+        assert (data/'HP-SoftPaqs'/'sp12345.exe').exists() and (data/'HP-SoftPaqs'/'sp12345.cva').exists()

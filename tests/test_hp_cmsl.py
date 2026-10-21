@@ -14,6 +14,50 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell required')
 
 
+@pytest.mark.parametrize('case',['success','bad_signature','empty_recommendations'])
+def test_unrecognized_os_uses_exact_recommended_packages_without_faking_version_or_running_installer(tmp_path,case):
+    identifier=str(uuid.uuid4())
+    script=r'''
+$ErrorActionPreference='Stop'
+. 'LIBRARY'
+$script:downloads=0
+function Add-HPRepositoryFilter {param([ValidateSet('24H2','25H2')][string]$OsVer);throw 'An unsupported OS must never use a substitute filter'}
+function Get-AtelierHpCmslCommand {param($Name);if($Name -eq 'Add-HPRepositoryFilter'){return Get-Command Add-HPRepositoryFilter};return $Name}
+function Get-HPSoftpaq {
+ param($Number,$SaveAs,[switch]$Quiet,$Overwrite)
+ if($Number -notin @('12345','23456') -or $Overwrite -ne 'skip'){throw 'Unexpected acquisition request'}
+ $script:downloads++;Set-Content -LiteralPath $SaveAs 'Fixture - never executed'
+}
+function Get-HPSoftpaqMetadataFile {param($Number,$SaveAs,[switch]$Quiet,$Overwrite);if(-not(Test-Path -LiteralPath $SaveAs)){Set-Content -LiteralPath $SaveAs 'Fixture CVA'}}
+function Get-AuthenticodeSignature {
+ param($LiteralPath)
+ return [pscustomobject]@{Status=$(if('CASE' -eq 'bad_signature'){'NotSigned'}else{'Valid'});SignerCertificate=[pscustomobject]@{Subject='CN=HP Inc.'}}
+}
+$job=[pscustomobject]@{id='ID';platform='83B2';os='win11';os_version='26H2';required_softpaqs=$(if('CASE' -eq 'empty_recommendations'){@()}else{@('SP12345','SP23456')})}
+$failed=$false;$message=''
+try {
+ $one=Sync-AtelierHpRepository -DataRoot 'DATA' -Job $job
+ $job.id=[guid]::NewGuid().ToString()
+ $two=Sync-AtelierHpRepository -DataRoot 'DATA' -Job $job
+} catch {$failed=$true;$message=$_.Exception.Message}
+@{failed=$failed;message=$message;downloads=$script:downloads} | ConvertTo-Json -Compress
+'''.replace('LIBRARY',str(ROOT/'scripts'/'HP-Repository.ps1')).replace('CASE',case).replace('ID',identifier).replace('DATA',str(tmp_path))
+    wrapper=tmp_path/'run.ps1';wrapper.write_text(script,encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=35)
+    assert run.returncode==0,run.stderr
+    result=json.loads(run.stdout.splitlines()[-1])
+    assert result['failed']==(case!='success'),result
+    path=tmp_path/'hp-repository'/'snapshots'/(identifier+'.zip')
+    if case=='success':
+        assert result['downloads']==2
+        with zipfile.ZipFile(path) as archive:
+            assert set(archive.namelist())=={'.repository/cache/atelier-softpaq-cache.json','sp12345.exe','sp12345.cva','sp23456.exe','sp23456.cva'}
+            marker=json.loads(archive.read('.repository/cache/atelier-softpaq-cache.json').decode('utf-8-sig'))
+            assert marker['os_version']=='26H2' and marker['mode']=='packages_only'
+    else:
+        assert not path.exists()
+
+
 @pytest.mark.parametrize('case',['success','sync_failure','bad_signature','missing_reference','unowned_work','unsafe_link','low_disk'])
 def test_cmsl_snapshots_preserve_old_versions_and_never_execute_packages(tmp_path,case):
     first=str(uuid.uuid4());second=str(uuid.uuid4())

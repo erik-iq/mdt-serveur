@@ -172,3 +172,32 @@ def test_retention_keeps_three_versions_and_archives_leased_by_a_client(system):
     with db(True) as con:con.execute('UPDATE hp_repository_leases SET expires=?',('2000-01-01',))
     repository.prune()
     assert {p.stem for p in (data/'hp-repository'/'snapshots').glob('*.zip')}==set(ids[2:])
+
+
+@pytest.mark.parametrize('case', ['valid', 'wrong_os', 'extra_package', 'missing_cva'])
+def test_explicit_package_cache_preserves_real_windows_version_and_requires_capable_client(system, case):
+    client, data, deployment, headers = hp_client(system)
+    route = '/api/windows/' + deployment['id'] + '/hp-repository'
+    body = request_body(os_version='26H2', package_cache=True)
+    assert client.post(route, headers=headers, json=body).status_code == 200
+    wh, identity = worker(client, data)
+    job = client.post('/api/hp-repository/worker/claim', headers=wh, json=identity).json()['job']
+    assert job['os_version'] == '26H2' and job['required_softpaqs'] == ['SP12345']
+    marker = {'schema': 1, 'mode': 'packages_only', 'platform': '8AB8', 'os': 'win11',
+              'os_version': '25H2' if case == 'wrong_os' else '26H2', 'softpaqs': ['SP12345']}
+    path = data / 'hp-repository' / 'snapshots' / (job['id'] + '.zip')
+    with zipfile.ZipFile(path, 'w') as archive:
+        archive.writestr('.repository/cache/atelier-softpaq-cache.json', json.dumps(marker))
+        archive.writestr('sp12345.exe', b'Fixture - never executed')
+        if case != 'missing_cva':
+            archive.writestr('sp12345.cva', b'HP CVA fixture')
+        if case == 'extra_package':
+            archive.writestr('sp99999.exe', b'Not selected')
+    finished = client.post('/api/hp-repository/worker/jobs/' + job['id'] + '/finish', headers=wh,
+                           json={**identity, 'success': True})
+    assert finished.status_code == (200 if case == 'valid' else 422), finished.text
+    if case == 'valid':
+        result = client.post(route, headers=headers, json=body).json()
+        assert result['status'] == 'ready' and result['os_version'] == '26H2'
+        legacy = client.post(route, headers=headers, json={**body, 'package_cache': False}).json()
+        assert legacy['status'] == 'unavailable' and legacy['snapshot'] is None

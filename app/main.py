@@ -388,7 +388,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4.1"}
 
     @api.get('/api/session')
     def session_options():
@@ -404,6 +404,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             for asset in result['assets']:
                 asset['image_validation'] = validations.get(asset['id'])
             result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
+            image_tests = {r['profile_id'] for r in con.execute('SELECT profile_id FROM windows_image_test_profiles')}
+            for profile in result['profiles']:
+                profile['image_test'] = profile['id'] in image_tests
             result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
                 d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,m.serial_number,p.name AS profile_name,

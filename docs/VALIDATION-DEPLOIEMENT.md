@@ -1,0 +1,54 @@
+# Valider un deploiement Windows et HP
+
+Le suivi Image appliquee confirme seulement la preparation du disque. Un resultat WinGet confirme la presence des applications, pas la mise a jour des pilotes par HPIA. Un code HPIA zero avec seulement Analyze Action List ne prouve aucune installation de SoftPaq. La validation combine les rapports, une analyse recente apres redemarrage et les essais du technicien.
+
+## Fichiers a reunir sur .250
+
+Depuis Activite de deploiement, ouvrir la fiche du poste puis Dossier inventaire. Sur le serveur, les fichiers sont dans `D:\AtelierPXE\data\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` (adapter le data_dir si different). Compresser ce dossier permet de reunir :
+
+- Inventaire-Technique.xml et Inventaire-Technique.csv : materiel, pilotes, etat PnP, versions, reglages et sections qui n ont pas pu etre collectees.
+- Diagnostics-Deploiement.zip : result.json, maintenance.json, progress.json, hpia-result.json, journaux des logiciels et mesures de temps.
+- Rapports-HP.zip : analyses, resultats d installation, CSV et journaux natifs HPIA.
+
+Telecharger aussi le Rapport PDF depuis la fiche du site. Il est genere depuis les donnees du deploiement et ne se trouve pas necessairement dans le dossier inventaire. Pour un probleme de cache HP, ajouter `D:\AtelierPXE\data\hp-repository\worker.log` et, si l installation CMSL a echoue, `setup.log`. Ces journaux restent sur .250 ; aucune commande PowerShell sur le poste n est necessaire pour les reunir. Ne pas transmettre reporting.json, personalization.json, data-runtime.json, une base SQLite complete ni les fichiers de jetons.
+
+## Points a confirmer
+
+| Controle | Preuve attendue |
+| --- | --- |
+| Windows | Bon nom, edition correspondant a la licence, build attendu et premier demarrage reussi. |
+| Suisse | Clavier francais suisse, formats fr-CH, fuseau Zurich/Berne. |
+| Applications | Toutes les applications cochees ont un resultat verifie et leur executable present ; AnyDesk est signe par son editeur officiel. |
+| HPIA | Outil signe present, vrais resultats par SoftPaq ou analyse sans recommandation, erreurs et redemarrages pris en compte. |
+| Pilotes | Aucun peripherique present avec ConfigManagerErrorCode non nul, sinon identification et correction de chaque erreur. |
+| Redemarrage | Redemarrage final effectue et nouvelle verification ; un BIOS doit reprendre la preparation si elle a ete interrompue. |
+| Licence | Activation Windows confirmee ; une collecte CIM en erreur signifie inconnu, pas active ni sans licence. |
+| Poste | SSD sain, demarrage rapide desactive, reseau et bureau utilisables. |
+| Tests operateur | Souris/pave tactile, son, webcam et clavier essayes puis resultats enregistres dans C:\IQ_\Diagnostics. |
+| Rapports | XML, CSV, diagnostics, rapports HP et PDF accessibles dans la fiche sur .250. |
+
+L inventaire est une photographie a son heure de collecte. Il ne prouve pas qu un pave tactile repond aux gestes, qu une webcam donne une image ni que tous les correctifs Microsoft sont presents. Apres un changement manuel ou Windows Update, utiliser les raccourcis Inventaire et Generer-Rapport du dossier C:\IQ_ pour actualiser les preuves si les outils de rapport sont encore disponibles.
+
+## Constat sur les rapports HP recus le 21 octobre 2026
+
+Les rapports portent sur un EliteBook 840 G5 sous Windows 11 Pro 26H2. VLC 3.0.24, Adobe Acrobat 26.002.22031, Chrome 155.0.8059.85, AnyDesk 9.8 et HP Image Assistant 5.3.6 sont declares installes et verifies. La verification AnyDesk confirme l executable signe et le service. La preparation n a pas execute Windows Update ni Store, conformement au choix de l atelier.
+
+Le journal CMSL recent refuse OsVer=26H2 ; son ValidateSet s arrete a 25H2. Les anciens messages Module HPCMSL introuvable sont anterieurs a ce refus : ne pas conclure qu une reinstallation de la meme bibliotheque corrigera le support d une nouvelle version Windows.
+
+HPIA recoit bien Action:Install et IgnoreGenericOsError, puis termine avec code zero ; pourtant son propre JSON annonce Analyze Action List, EndAnalyze et onze recommandations dont Remediation est vide. Aucun telechargement ou resultat d installation SoftPaq n est confirme dans ce passage. IgnoreGenericOsError a expose le code normal mais n a pas suffi a obtenir des installations. Une reference HP generique est utilisee pour 26H2 ; la compatibilite certifiee de tous les paquets avec cette version n est pas etablie.
+
+L inventaire contient 141 peripheriques PnP et une erreur code 28, pilote absent, pour PCI VEN_8086 DEV_15D9. HPIA recommande notamment Intel Thunderbolt 3 Secure Connect SP150742 ; son applicabilite et le resultat de son installation doivent etre verifies. Les peripheriques Synaptics Pointing Device / HID ClickPad et les controleurs Intel Serial IO sont declares sans erreur a la collecte. Ce constat ne reconstitue pas leur etat avant une mise a jour Windows et ne garantit pas le fonctionnement physique du pave tactile.
+
+Le SSD est declare sain, Secure Boot actif, le demarrage rapide desactive et le fuseau W. Europe Standard Time configure. Le systeme retourne Locale 100c. La section LicencesWindows echoue avec CimException : cet export seul ne permet pas de conclure. L utilisateur a ensuite confirme que Windows est actif dans Parametres ; cette verification humaine est distincte de la collecte CIM en echec. Le pave tactile reste a tester apres redemarrage. L absence d OfficeSoftwareProtectionProduct ou de certaines informations batterie peut simplement correspondre a un fournisseur non disponible ; ce n est pas une preuve de panne.
+
+## Correction IQ-5.4.1 et limites
+
+Le client ne retente une installation que si HPIA confirme lui-meme un simple Analyze Action List, sans aucun resultat d installation JSON/XML ou code d installation CSV. Il cree alors une liste des seuls SoftPaq recommandes avec SSMCompliant=True et utilise la fonction officielle HP SPList une seule fois. Aucun Force n est ajoute. Les resultats absents restent a verifier, les erreurs reelles restent visibles et l avertissement de reference generique demeure. Une installation au resultat inconnu n est pas relancee automatiquement.
+
+Si CMSL refuse OsVer, .250 conserve la vraie version du poste et acquiert seulement les numeros SoftPaq recommandes via Get-HPSoftpaq et Get-HPSoftpaqMetadataFile. Il n execute aucun paquet. Les EXE sont controles par signature HP, puis publies dans un cache identifie par plateforme et version. Le nouveau client recopie les paquets demandes dans le dossier de telechargement HPIA apres controle de l archive et des signatures. L analyse et les metadonnees restent en ligne : ce cache n est pas annonce comme un depot CMSL integralement hors ligne. Aucun filtre 25H2 n est utilise pour un poste 26H2. Les anciens clients ne recoivent pas ce nouveau format de cache.
+
+La premiere machine peut utiliser directement HP si le cache serveur n est pas encore pret ; le traitement .250 continue pour les machines suivantes. La presence d un paquet dans ce cache ne certifie pas sa compatibilite avec une version Windows sans reference HP dediee. HPIA et ses controles restent responsables de l installation.
+
+Cette correction doit etre mise a jour sur .250 et integree a un nouveau WinPE IQ-5.4.1 pour un nouveau test. Une mise a jour du serveur seule ne relance pas HPIA sur un Windows deja termine dont le payload a ete nettoye. La validation physique finale n a pas ete executee depuis l environnement de developpement.
+
+Sources : [guide officiel HPIA, Action et SPList](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf), [CMSL et acquisition des SoftPaq](https://developers.hp.com/hp-client-management/doc/client-management-script-library), [bibliotheque HPCMSL 1.9.0](https://www.powershellgallery.com/packages/HPCMSL/1.9.0).

@@ -39,6 +39,7 @@ class RepositoryRequest(BaseModel):
     os: Literal['win10','win11']
     os_version: str=Field(pattern=r'^(?:[12][0-9]H[12]|1809|1903|1909|2004|2009)$')
     required_softpaqs: list[str]=Field(default_factory=list,max_length=200)
+    package_cache: bool=False
 
 
 class WorkerMessage(BaseModel):
@@ -88,6 +89,8 @@ class HpRepository:
                 CREATE TABLE IF NOT EXISTS hp_repository_leases (
                     deployment_id TEXT NOT NULL REFERENCES deployments(id), snapshot_id TEXT NOT NULL,
                     expires TEXT NOT NULL, PRIMARY KEY(deployment_id,snapshot_id));
+                CREATE TABLE IF NOT EXISTS hp_package_cache_snapshots (
+                    snapshot_id TEXT PRIMARY KEY REFERENCES hp_repository_snapshots(id) ON DELETE CASCADE);
             ''')
 
     def checked(self,path):
@@ -163,6 +166,10 @@ class HpRepository:
                     job=self.queue(con,key)
                     con.execute('INSERT OR REPLACE INTO hp_repository_attempts VALUES (?,?,?)',(identifier,request_hash,job['id']))
                 available=complete and fresh
+                packages_only=bool(snapshot and con.execute('SELECT 1 FROM hp_package_cache_snapshots WHERE snapshot_id=?',(snapshot['id'],)).fetchone())
+                if packages_only and not body.package_cache:
+                    available=False
+                    job={'status':'unavailable','message':'Ce cache SoftPaq exige le nouveau client Atelier ; utilisation directe de HP'}
                 response={'status':'ready' if available else (job['status'] if job else 'unavailable'),'message':'Depot HP disponible' if available else (job['message'] if job else 'Depot HP indisponible'),'platform':key[0],'os':key[1],'os_version':key[2],'snapshot':None}
                 agent=con.execute('SELECT state,last_seen FROM hp_repository_worker WHERE singleton=1').fetchone()
                 response['worker_available']=bool(agent and agent['state'] in {'ready','busy'} and agent['last_seen']>(datetime.now(timezone.utc)-timedelta(seconds=90)).isoformat())
@@ -209,16 +216,21 @@ class HpRepository:
                 record=con.execute("SELECT * FROM hp_repository_jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
                 if not record:return {'job':None}
                 con.execute("UPDATE hp_repository_jobs SET status='running',worker_id=?,message='Synchronisation CMSL des SoftPaq',updated_at=? WHERE id=?",(str(body.worker_id),timestamp(),record['id']))
-                return {'job':{k:record[k] for k in ('id','platform','os','os_version')}}
+                required=set()
+                for request in con.execute('SELECT required_json FROM hp_repository_requests WHERE platform=? AND os=? AND os_version=?',(record['platform'],record['os'],record['os_version'])):
+                    required.update(json.loads(request['required_json']))
+                return {'job':{**{k:record[k] for k in ('id','platform','os','os_version')},'required_softpaqs':sorted(required)}}
 
         @api.post('/api/hp-repository/worker/jobs/{identifier}/finish',dependencies=[Depends(worker_auth)])
         def finish(identifier:uuid.UUID,body:WorkerFinish):
             with self.db() as con:owned=self.owned(con,str(identifier),str(body.worker_id))
-            snapshot=self.validate_snapshot(str(identifier),owned['platform']) if body.success else None
+            snapshot=self.validate_snapshot(str(identifier),owned['platform'],owned['os'],owned['os_version']) if body.success else None
             with self.db(write=True) as con:
                 job=self.owned(con,str(identifier),str(body.worker_id))
                 if snapshot:
                     con.execute('INSERT INTO hp_repository_snapshots VALUES (?,?,?,?,?,?,?,?)',(str(identifier),job['platform'],job['os'],job['os_version'],snapshot['sha256'],snapshot['size'],json.dumps(snapshot['softpaqs']),timestamp()))
+                    if snapshot['mode']=='packages_only':
+                        con.execute('INSERT INTO hp_package_cache_snapshots VALUES (?)',(str(identifier),))
                 con.execute('UPDATE hp_repository_jobs SET status=?,message=?,updated_at=? WHERE id=?',('completed' if snapshot else 'failed',body.message or ('Depot HP publie' if snapshot else 'Synchronisation HP en echec'),timestamp(),str(identifier)))
             self.prune()
             return {'accepted':True}
@@ -250,10 +262,10 @@ class HpRepository:
         if not job or job['status']!='running' or job['worker_id']!=worker_id:raise HTTPException(409,'Demande HP non detenue par cet agent')
         return job
 
-    def validate_snapshot(self,identifier,platform):
+    def validate_snapshot(self,identifier,platform,os_name=None,os_version=None):
         path=self.checked(self.root/'snapshots'/(identifier+'.zip'))
         if not path.is_file() or not 0<path.stat().st_size<=MAX_REPOSITORY:raise HTTPException(422,'Taille du depot HP invalide')
-        softpaqs=set();names=set();reference=False;platforms=False
+        softpaqs=set();names=set();reference=False;platforms=False;marker=None
         try:
             with zipfile.ZipFile(path) as archive:
                 entries=archive.infolist()
@@ -263,12 +275,22 @@ class HpRepository:
                     if not public_path(name) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000:raise ValueError('Chemin du depot invalide')
                     names.add(name.casefold())
                     if name.lower().endswith('.exe'):softpaqs.add(Path(name).stem.upper())
+                    if name=='.repository/cache/atelier-softpaq-cache.json':
+                        if entry.file_size>65536:raise ValueError('Description du cache HP trop grande')
+                        marker=json.loads(archive.read(entry).decode('utf-8-sig'))
                     if name.startswith('.repository/cache/') and name.lower().endswith('.cab'):
                         if Path(name).name.lower()=='platformlist.cab':platforms=True
                         elif Path(name).name.upper().startswith(platform+'_'):reference=True
-            if not platforms or not reference:raise ValueError('References HP hors ligne absentes')
+            if marker is not None:
+                ids=marker.get('softpaqs') if isinstance(marker,dict) else None
+                if (not isinstance(ids,list) or not 1<=len(ids)<=200 or any(not isinstance(p,str) or not re.fullmatch(r'SP[0-9]{4,8}',p) for p in ids)
+                    or marker.get('schema')!=1 or marker.get('mode')!='packages_only' or marker.get('platform')!=platform
+                    or marker.get('os')!=os_name or marker.get('os_version')!=os_version or set(ids)!=softpaqs
+                    or any(p.lower()+'.cva' not in names for p in ids)):
+                    raise ValueError('Identite ou contenu du cache SoftPaq incoherent')
+            elif not platforms or not reference:raise ValueError('References HP hors ligne absentes')
         except (ValueError,zipfile.BadZipFile) as exc:raise HTTPException(422,str(exc)) from exc
         digest=hashlib.sha256()
         with path.open('rb') as f:
             for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
-        return {'sha256':digest.hexdigest(),'size':path.stat().st_size,'softpaqs':sorted(softpaqs)}
+        return {'sha256':digest.hexdigest(),'size':path.stat().st_size,'softpaqs':sorted(softpaqs),'mode':'packages_only' if marker is not None else 'offline'}

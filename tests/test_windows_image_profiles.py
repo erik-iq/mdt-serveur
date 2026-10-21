@@ -57,6 +57,7 @@ def test_register_is_idempotent_and_tests_never_become_auto_selected(automatic):
     assert response.json()['plan']['profile_id'] == pro['id']
     assert {p['id'] for p in tests} <= {p['id'] for p in response.json()['catalog']['profiles']}
     assert all(p['asset_id'] == result['asset_id'] for p in tests)
+    assert all(p['image_test'] for p in tests)
     assert {p['edition'] for p in tests} == {'Pro', 'Famille'}
     assert len(workflow.sources(data)) == 1
     assert client.post('/api/profiles', json={'name': 'Bypass test', 'asset_id': result['asset_id']}).status_code == 409

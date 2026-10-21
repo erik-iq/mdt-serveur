@@ -2,6 +2,12 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## IQ-5.4.1 : reprise HPIA et cache pour Windows non reconnu par CMSL
+
+Les rapports du HP physique confirment l installation des cinq logiciels coches, mais HPIA 5.3.6 reste sur Analyze Action List avec onze recommandations et aucune installation confirmee, meme avec un code final zero. Le journal CMSL refuse explicitement OsVer=26H2. IQ-5.4.1 ajoute une seule reprise SPList sur les recommandations automatisables lorsque le rapport prouve qu aucune installation n a eu lieu, sans Force. Pour les versions absentes du ValidateSet CMSL, le serveur met en cache les seuls numeros SoftPaq recommandes, sans les executer ni substituer une autre version Windows. L analyse HP reste en ligne dans ce mode. Les signatures, erreurs, reprises BIOS et avertissements de compatibilite sont conserves.
+
+Consulter [le diagnostic et la procedure de validation](VALIDATION-DEPLOIEMENT.md). Mettre a jour .250 avec Upgrade-Atelier4.ps1 et utiliser le nouveau WinPE IQ-5.4.1 pour le prochain essai. Le serveur ne relance pas HPIA sur le poste deja termine. Les tests reproduisent les rapports et les commandes avec les appels constructeur simules ; le resultat natif est encore a verifier sur le HP.
+
 ## IQ-5.4 : maintenance mensuelle des WIM sur .250
 
 La console serveur IQ-5.4 ajoute la sauvegarde verifiee du WIM, la recherche des correctifs Microsoft stables et de leurs checkpoints, l integration DISM sur une copie, les profils TEST et une publication apres deploiement Windows reussi pour chaque index utilise. La tache mensuelle du 15 a 02:00 ne change jamais les profils de production. Les erreurs conservent l image actuelle. Les scripts HPIA et le WinPE IQ-5.3.2 ne changent pas dans cette revision.

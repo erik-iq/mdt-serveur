@@ -17,7 +17,8 @@ $state=Invoke-RestMethod -Uri ($base + '/api/state') -Headers $headers
 foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
     if ($asset.image_validation -eq 'testing') { continue }
     $path=Join-Path (Join-Path $config.data_dir 'artifacts') $asset.filename
-    $template=@($state.profiles | Where-Object { $_.asset_id -eq $asset.id } | Select-Object -First 1)
+    $template=@($state.profiles | Where-Object { $_.asset_id -eq $asset.id -and -not $_.image_test } | Select-Object -First 1)
+    if ($asset.image_validation -and -not $template.Count) { continue }
     if (-not $template.Count) { Write-Warning ('Creer d abord un profil avec la langue et les parametres corrects : ' + $asset.filename);continue }
     foreach ($summary in @(Get-WindowsImage -ImagePath $path)) {
         $image=Get-WindowsImage -ImagePath $path -Index $summary.ImageIndex

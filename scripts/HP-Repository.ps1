@@ -17,11 +17,45 @@ function Assert-AtelierHpTree {
 }
 function Get-AtelierHpCmslCommand {
     param([string]$Name)
-    foreach ($candidate in @($Name,($Name -replace '-HPRepository','-Repository'))) {
+    foreach ($candidate in @($Name,($Name -replace '-HP','-'))) {
         $command=Get-Command $candidate -ErrorAction SilentlyContinue
         if ($command -and $command.ModuleName -match '^(HP\.|HPCMSL)') { return $command }
     }
     throw ('Commande CMSL absente : '+$Name+'. Installer HPCMSL sur le serveur.')
+}
+function Test-AtelierHpCmslOsVersion {
+    param([string]$Version)
+    $command=Get-AtelierHpCmslCommand 'Add-HPRepositoryFilter'
+    if ($command.Parameters -and $command.Parameters.ContainsKey('OsVer')) {
+        foreach ($attribute in $command.Parameters['OsVer'].Attributes) {
+            if ($attribute -is [Management.Automation.ValidateSetAttribute]) { return $Version -in $attribute.ValidValues }
+        }
+    }
+    return $true
+}
+
+function Save-AtelierHpSelectedPackages {
+    param([string]$Work,$Job)
+    $ids=@($Job.required_softpaqs | Sort-Object -Unique)
+    if (-not $ids.Count -or $ids.Count -gt 200 -or @($ids | Where-Object { [string]$_ -notmatch '^SP[0-9]{4,8}$' }).Count) { throw 'CMSL ne reconnait pas cette version Windows. Une liste valide de recommandations HPIA est necessaire pour le cache des paquets.' }
+    foreach ($id in $ids) {
+        $exe=Join-Path $Work ($id.ToLowerInvariant()+'.exe')
+        if (Test-Path -LiteralPath $exe) {
+            $signature=Get-AuthenticodeSignature -LiteralPath $exe
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { Remove-Item -LiteralPath $exe -Force }
+        }
+        if (-not (Test-Path -LiteralPath $exe)) {
+            # Acquisition only: no Extract, Install, PostInstallAction or URL
+            # from a client is accepted on the deployment server.
+            & (Get-AtelierHpCmslCommand 'Get-HPSoftpaq') -Number $id.Substring(2) -SaveAs $exe -Quiet -Overwrite skip | Out-Null
+        }
+        $cva=Join-Path $Work ($id.ToLowerInvariant()+'.cva')
+        & (Get-AtelierHpCmslCommand 'Get-HPSoftpaqMetadataFile') -Number $id.Substring(2) -SaveAs $cva -Quiet -Overwrite skip | Out-Null
+        if (-not (Test-Path -LiteralPath $exe -PathType Leaf) -or -not (Test-Path -LiteralPath $cva -PathType Leaf)) { throw ('Telechargement CMSL incomplet : '+$id) }
+    }
+    $cache=Join-Path $Work '.repository\cache';New-Item -ItemType Directory -Path $cache -Force | Out-Null
+    @{schema=1;mode='packages_only';platform=[string]$Job.platform;os=[string]$Job.os;os_version=[string]$Job.os_version;softpaqs=$ids} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $cache 'atelier-softpaq-cache.json') -Encoding UTF8
+    return $ids
 }
 function Get-AtelierHpFreeSpace {
     param([string]$Path)
@@ -57,17 +91,23 @@ function Sync-AtelierHpRepository {
         # them. Published snapshots never point into this mutable directory.
         $metadata=Join-Path $work '.repository'
         if (Test-Path $metadata) { Remove-Item -LiteralPath $metadata -Recurse -Force }
-        & (Get-AtelierHpCmslCommand 'Initialize-HPRepository') | Out-Null
-        & (Get-AtelierHpCmslCommand 'Set-HPRepositoryConfiguration') -Setting OfflineCacheMode -CacheValue Enable | Out-Null
-        & (Get-AtelierHpCmslCommand 'Add-HPRepositoryFilter') -Platform $Job.platform -Os $Job.os -OsVer $Job.os_version -Category @('Bios','Firmware','Driver','Software','Manageability','Diagnostic','Utility','Dock','UWPPack') | Out-Null
-        & (Get-AtelierHpCmslCommand 'Invoke-HPRepositorySync') -Quiet | Out-Null
-        Assert-AtelierHpTree $work
-        & (Get-AtelierHpCmslCommand 'Invoke-HPRepositoryCleanup') | Out-Null
+        $packageCache=-not (Test-AtelierHpCmslOsVersion ([string]$Job.os_version))
+        $selected=@()
+        if ($packageCache) { $selected=@(Save-AtelierHpSelectedPackages -Work $work -Job $Job) }
+        else {
+            & (Get-AtelierHpCmslCommand 'Initialize-HPRepository') | Out-Null
+            & (Get-AtelierHpCmslCommand 'Set-HPRepositoryConfiguration') -Setting OfflineCacheMode -CacheValue Enable | Out-Null
+            & (Get-AtelierHpCmslCommand 'Add-HPRepositoryFilter') -Platform $Job.platform -Os $Job.os -OsVer $Job.os_version -Category @('Bios','Firmware','Driver','Software','Manageability','Diagnostic','Utility','Dock','UWPPack') | Out-Null
+            & (Get-AtelierHpCmslCommand 'Invoke-HPRepositorySync') -Quiet | Out-Null
+            Assert-AtelierHpTree $work
+            & (Get-AtelierHpCmslCommand 'Invoke-HPRepositoryCleanup') | Out-Null
+        }
         Assert-AtelierHpTree $work
         $files=New-Object 'Collections.Generic.List[object]'
         foreach ($file in @(Get-ChildItem -LiteralPath $work -Recurse -Force -File)) {
             $relative=$file.FullName.Substring($work.TrimEnd([char[]]'\/').Length+1).Replace('\','/')
             if (-not (Test-AtelierHpRepositoryFile $relative)) { continue }
+            if ($packageCache -and $relative -notlike '.repository/cache/*' -and [IO.Path]::GetFileNameWithoutExtension($relative).ToUpperInvariant() -notin $selected) { continue }
             if ($relative -match '(?i)\.exe$') {
                 $signature=Get-AuthenticodeSignature -LiteralPath $file.FullName
                 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') {
@@ -79,8 +119,8 @@ function Sync-AtelierHpRepository {
             }
             $files.Add(@{name=$relative;path=$file.FullName;length=$file.Length})
         }
-        if (-not @($files | Where-Object { $_.name -match '(?i)^\.repository/cache/.*/?platformList\.cab$|^\.repository/cache/platformList\.cab$' }).Count -or
-            -not @($files | Where-Object { [IO.Path]::GetFileName($_.name) -like ($Job.platform+'_*.cab') }).Count) { throw 'References HP hors ligne incompletes ; depot non publie.' }
+        if (-not $packageCache -and (-not @($files | Where-Object { $_.name -match '(?i)^\.repository/cache/.*/?platformList\.cab$|^\.repository/cache/platformList\.cab$' }).Count -or
+            -not @($files | Where-Object { [IO.Path]::GetFileName($_.name) -like ($Job.platform+'_*.cab') }).Count)) { throw 'References HP hors ligne incompletes ; depot non publie.' }
         $total=($files | Measure-Object -Property length -Sum).Sum
         if ($total -gt 20GB -or $files.Count -gt 5000) { throw 'Depot HP trop volumineux pour cette plateforme.' }
         if ((Get-AtelierHpFreeSpace $work) -lt ($total+2GB)) { throw 'Depot HP reporte : espace insuffisant pour publier une nouvelle copie.' }

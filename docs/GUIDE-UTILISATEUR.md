@@ -64,6 +64,8 @@ Internet est necessaire pour WinGet, les mises a jour et les portails de garanti
 
 ## En cas de probleme
 
+Pour verifier un poste complet et reunir les bons fichiers depuis .250, consulter [la validation du deploiement et de HPIA](VALIDATION-DEPLOIEMENT.md).
+
 - PXE absent : verifier UEFI, Ethernet, pilotes WinPE et qu un seul serveur PXE repond.
 - HP A verifier avec code 4104 : HPIA utilise une reference Windows generique. IQ-5.3.2 distingue les recommandations des installations reelles et conserve l avertissement de compatibilite. Le fichier Rapports-HP.zip du dossier inventaire contient le detail.
 - HTTP 409 avec Image appliquee : demarrer Windows Boot Manager pour terminer. Si Windows est bloque et doit etre reinstalle, WinPE IQ-5.3.1 propose de recommencer ; confirmer ce choix puis le disque dans l assistant. L historique reste conserve.

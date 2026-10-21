@@ -88,7 +88,7 @@ function Get-AtelierHpRepository {
         $operating=if ([int]$windows.CurrentBuildNumber -ge 22000) { 'win11' } else { 'win10' }
         $result.platform=$platform;$result.os=$operating;$result.os_version=$version
         $required=@($RequiredSoftpaqs | Where-Object { $_ -match '^SP[0-9]{4,8}$' } | Select-Object -Unique)
-        $body=@{platform=$platform;os=$operating;os_version=$version;required_softpaqs=$required} | ConvertTo-Json -Depth 4
+        $body=@{platform=$platform;os=$operating;os_version=$version;required_softpaqs=$required;package_cache=$true} | ConvertTo-Json -Depth 4
         $uri=$config.server_url+'/api/windows/'+[guid]::Parse([string]$config.id).ToString()+'/hp-repository'
         $clock=[Diagnostics.Stopwatch]::StartNew()
         do {
@@ -121,8 +121,32 @@ function Get-AtelierHpRepository {
         if ($drive.Free -and $drive.Free -lt (2*[long]$response.snapshot.size+2GB)) { throw 'Espace insuffisant pour le depot HP local ; utilisation directe de HP.' }
         Receive-AtelierHpArchive -Config $config -Snapshot $response.snapshot -Path $path -OnProgress $OnProgress
         Expand-AtelierHpArchive -Path $path -Destination $destination
-        $result.status='offline';$result.path=$destination;$result.snapshot_id=[string]$response.snapshot.id
-        $result.message='Depot CMSL de .250 copie et verifie ; analyse du poste avant installation des seuls SoftPaq necessaires.'
+        $marker=Join-Path $destination '.repository\cache\atelier-softpaq-cache.json'
+        if (Test-Path -LiteralPath $marker -PathType Leaf) {
+            if ((Get-Item -LiteralPath $marker).Length -gt 64KB) { throw 'Description du cache HP trop grande.' }
+            $cache=Get-Content -LiteralPath $marker -Raw -Encoding UTF8 | ConvertFrom-Json
+            $ids=@($cache.softpaqs)
+            if ($cache.schema -ne 1 -or $cache.mode -ne 'packages_only' -or $cache.platform -ne $platform -or $cache.os -ne $operating -or $cache.os_version -ne $version -or
+                -not $ids.Count -or $ids.Count -gt 200 -or @($ids | Where-Object { [string]$_ -notmatch '^SP[0-9]{4,8}$' }).Count -or @($required | Where-Object { $_ -notin $ids }).Count) { throw 'Cache SoftPaq associe a une autre demande HP.' }
+            $downloads=Join-Path $DataPath 'HP-SoftPaqs';New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+            foreach ($id in $required) {
+                $file=Join-Path $destination ($id.ToLowerInvariant()+'.exe')
+                $signature=Get-AuthenticodeSignature -LiteralPath $file
+                if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw ('Signature du SoftPaq en cache refusee : '+$id) }
+                foreach ($extension in @('.exe','.cva')) {
+                    $source=Join-Path $destination ($id.ToLowerInvariant()+$extension)
+                    $target=Join-Path $downloads ($id.ToLowerInvariant()+$extension)
+                    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw ('Fichier HP en cache absent : '+$id+$extension) }
+                    Copy-Item -LiteralPath $source -Destination ($target+'.partial') -Force
+                    Move-Item -LiteralPath ($target+'.partial') -Destination $target -Force
+                }
+            }
+            $result.status='package_cache';$result.path=$downloads;$result.snapshot_id=[string]$response.snapshot.id
+            $result.message='SoftPaq recommandes recuperes sur .250. Metadonnees et analyse HP par Internet ; aucune reference d une autre version Windows utilisee.'
+        } else {
+            $result.status='offline';$result.path=$destination;$result.snapshot_id=[string]$response.snapshot.id
+            $result.message='Depot CMSL de .250 copie et verifie ; analyse du poste avant installation des seuls SoftPaq necessaires.'
+        }
     } catch { $result.message=$_.Exception.Message }
     $result | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $DataPath 'hp-repository-state.json') -Encoding UTF8
     & $OnProgress $result.message | Out-Null
