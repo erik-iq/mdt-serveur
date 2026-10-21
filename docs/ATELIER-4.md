@@ -2,6 +2,12 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a ete adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise a jour.
 
+## IQ-5.4 : maintenance mensuelle des WIM sur .250
+
+La console serveur IQ-5.4 ajoute la sauvegarde verifiee du WIM, la recherche des correctifs Microsoft stables et de leurs checkpoints, l integration DISM sur une copie, les profils TEST et une publication apres deploiement Windows reussi pour chaque index utilise. La tache mensuelle du 15 a 02:00 ne change jamais les profils de production. Les erreurs conservent l image actuelle. Les scripts HPIA et le WinPE IQ-5.3.2 ne changent pas dans cette revision.
+
+Consulter [la procedure de maintenance des images Windows](MAINTENANCE-IMAGES-WINDOWS.md) pour lancer la premiere preparation, retrouver les journaux, enregistrer un candidat et publier apres test. Cette fonction seule se met a jour avec Update-Console.ps1 sans reconstruire WinPE. La validation native sur .250 et le premier demarrage du PC de test restent a effectuer.
+
 ## IQ-5.3.2 : HPIA 4104 et rapports sans installation
 
 Le rapport du HP 840 G5 sous Windows 11 26H2 indiquait Analyze Action List, LastOperation EndAnalyze, un code global 4104 et onze recommandations avec Remediation vide. Le journal du passage Installation ne contenait pas de resultat d installation des SoftPaq. Atelier traitait a tort ces recommandations comme des tentatives dont le resultat etait inconnu, puis remplacait le diagnostic 4104 par un avertissement generique sur les paquets.

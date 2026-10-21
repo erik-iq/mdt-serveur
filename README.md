@@ -8,6 +8,8 @@ Le dossier **C:\IQ_** classe les outils par categorie. Les rapports PDF se trouv
 
 **Commencer ici :** [guide utilisateur](docs/GUIDE-UTILISATEUR.md) et [mise a jour ATELIER-4, limites et nettoyage](docs/ATELIER-4.md). La mise a jour utilise `scripts/Upgrade-Atelier4.ps1` depuis l archive d une revision publiee sur `codex/atelier-2`. Les anciennes images WinPE sont refusees avant tout effacement. Le WIM est reconstruit sur Windows avec l ADK, les pilotes et le certificat du serveur.
 
+La console serveur **IQ-5.4** ajoute une [maintenance mensuelle des images Windows](docs/MAINTENANCE-IMAGES-WINDOWS.md) : sauvegarde du WIM, correctifs Microsoft et .NET Framework sur une copie, profils TEST puis publication seulement apres deploiements Windows reussis. La preparation automatique ne remplace pas l image de production. Cette fonction serveur seule ne demande pas de reconstruire WinPE.
+
 Les tests automatises ne remplacent pas un deploiement reel sur Server 2025/WinPE : ce controle doit etre effectue sur un poste de laboratoire.
 
 ![Console Atelier PXE avec des données synthétiques de test](docs/console.png)

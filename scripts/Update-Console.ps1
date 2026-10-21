@@ -23,6 +23,9 @@ foreach ($base in @($source,$installed)) {
 if (Test-Path -LiteralPath $backup) { throw 'Le dossier de sauvegarde existe deja. Choisissez un nouveau chemin.' }
 $files = @('README.md','.gitignore','.env.example','requirements.txt','requirements-dev.txt','requirements-browser.txt','constraints.txt')
 $folders = @('app','scripts','docs','tests')
+foreach ($name in @('Update-WindowsImage.ps1','Enable-WindowsImageMaintenance.ps1','Windows-ImageServicing.ps1','windows_update_catalog.py','windows_image_profiles.py')) {
+    if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $source 'scripts') $name))) { throw ('Archive incomplete : scripts\'+$name+' absent.') }
+}
 foreach ($name in @('scripts\WinPE-IntelDrivers.ps1','scripts\WinPE-NetworkRecovery.ps1','app\identity.py','app\hp_repository.py','scripts\Enable-HPRepository.ps1','scripts\HP-RepositoryWorker.ps1','scripts\HP-ClientRepository.ps1','scripts\HP-Reports.ps1','scripts\HP-Repository.ps1','scripts\Finalization.ps1','scripts\HP-ImageAssistant.ps1','app\computers.py','scripts\Timings.ps1','scripts\Set-AtelierDefaults.ps1','scripts\Upgrade-Atelier4.ps1','scripts\Start-Preparation.ps1','scripts\IQ-Paths.ps1','scripts\Theme.ps1','scripts\brand-logo.png','scripts\theme.json','scripts\Clear-AtelierObsolete.ps1','app\main.py','app\inventories.py','scripts\Client-Software.ps1','scripts\Inventory-Transfer.ps1','scripts\Upgrade-Atelier3.ps1','scripts\Enable-Atelier3.ps1','scripts\Remove-OldAtelierWinPE.ps1','app\software_jobs.py','scripts\Enable-SoftwareSync.ps1','scripts\Software-Worker.ps1','scripts\Console-Installation.ps1','scripts\Export-Inventaire.ps1','scripts\Sync-Applications.ps1','scripts\software-sources.json','app\reports.py','scripts\Reporting.ps1','scripts\New-DeploymentReport.ps1','scripts\Test-Materiel.ps1','scripts\Tests-Materiel.html','scripts\Verifier-Garantie.ps1','scripts\serve.py','scripts\Wizard.ps1','scripts\FirstLogon.ps1','scripts\Unattend.ps1','scripts\WinPE-Session.ps1','scripts\Partitions.ps1','scripts\atelier.cmd') + $files + $folders) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Archive incomplete : $name absent." }
 }
@@ -61,7 +64,13 @@ $softwareTask = Get-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' -ErrorActi
 $softwareWasRunning = $softwareTask -and $softwareTask.State -eq 'Running'
 $hpTask = Get-ScheduledTask -TaskName 'AtelierPXE-HpRepository' -ErrorAction SilentlyContinue
 $hpWasRunning = $hpTask -and $hpTask.State -eq 'Running'
+$imageMaintenanceLock=$null
 try {
+    $maintenanceRoot=Join-Path $config.data_dir 'windows-servicing'
+    if (Test-Path -LiteralPath $maintenanceRoot -PathType Container) {
+        # A running DISM operation must finish before replacing its scripts.
+        $imageMaintenanceLock=[IO.File]::Open((Join-Path $maintenanceRoot 'maintenance.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    }
     Stop-ScheduledTask -TaskName 'AtelierPXE-Console'
     $stopped = $true
     $deadline = (Get-Date).AddSeconds(15)
@@ -108,7 +117,7 @@ try {
     $deadline = (Get-Date).AddSeconds(20)
     do {
         try { $health = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $config.port + '/health') -TimeoutSec 2 } catch { $health = $null }
-        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '4.0' -and $health.ui_revision -eq 'IQ-5.3.2') { $updated = $true; break }
+        if ($health.status -eq 'ok' -and $health.version -eq '0.2.0' -and $health.release -eq 'ATELIER-2' -and $health.revision -eq '4.0' -and $health.ui_revision -eq 'IQ-5.4') { $updated = $true; break }
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
     if (-not $updated) { throw 'La console 0.2.0 ne repond pas. Consultez data\logs\console.log et la sauvegarde.' }
@@ -116,11 +125,13 @@ try {
     Write-Host "Sauvegarde privee : $backup"
     if ($softwareWasRunning) { Start-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' }
     if ($hpWasRunning) { Start-ScheduledTask -TaskName 'AtelierPXE-HpRepository' }
-    Write-Host 'Pour appliquer les changements aux prochains postes, reconstruire WinPE avec Upgrade-Atelier4.ps1.'
+    Write-Host 'Pour les changements de scripts clients, reconstruire WinPE avec Upgrade-Atelier4.ps1. La maintenance WIM seule ne le necessite pas.'
 } catch {
     if ($stopped -and -not $updated) {
         Stop-ScheduledTask -TaskName 'AtelierPXE-Console' -ErrorAction SilentlyContinue
         Write-Warning "Console arretee pour diagnostic. Sauvegarde : $backup. Procedure de reprise : docs\ASSISTANT-PXE.md."
     }
     throw
+} finally {
+    if ($imageMaintenanceLock) { $imageMaintenanceLock.Dispose() }
 }

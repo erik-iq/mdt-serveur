@@ -15,6 +15,7 @@ $base=if ($config.port) { 'http://127.0.0.1:' + $config.port } else { [string]$c
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $state=Invoke-RestMethod -Uri ($base + '/api/state') -Headers $headers
 foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
+    if ($asset.image_validation -eq 'testing') { continue }
     $path=Join-Path (Join-Path $config.data_dir 'artifacts') $asset.filename
     $template=@($state.profiles | Where-Object { $_.asset_id -eq $asset.id } | Select-Object -First 1)
     if (-not $template.Count) { Write-Warning ('Creer d abord un profil avec la langue et les parametres corrects : ' + $asset.filename);continue }

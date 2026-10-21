@@ -54,6 +54,8 @@ L outil de tests utilise le navigateur local : images webcam et son ne sont pas 
 
 ## Mises a jour et lenteur
 
+La maintenance mensuelle des images Windows peut integrer les correctifs avant deploiement, sur une copie du WIM sur .250. L administrateur doit tester cette image puis la publier. Les profils TEST ne sont jamais choisis automatiquement ; ne les selectionner que pour une validation. Consulter [la procedure de maintenance](MAINTENANCE-IMAGES-WINDOWS.md).
+
 Windows Update et Microsoft Store ne sont plus lances par la preparation. Effectuer ces operations manuellement depuis Parametres > Windows Update et Microsoft Store > Bibliotheque. Le rapport les indique comme manuels. Cela ne desactive pas les services ni les politiques Windows : Windows peut continuer son propre fonctionnement automatique.
 
 Pour HP Image Assistant, le suivi affiche le traitement SoftPaq en cours puis son resultat. Un paquet incompatible, un BIOS protege ou une installation en echec restent a verifier dans les rapports HP. Les nouveaux deploiements IQ-4.9 enregistrent leur phase avant HPIA. Apres un redemarrage BIOS, une nouvelle analyse installe les mises a jour restantes ; les logiciels deja verifies ne sont pas reinstalles. Pendant le meme demarrage, aucun flash n est tue et aucune deuxieme execution n est lancee. Si le suivi reste en attente apres une interruption, verifier les processus avant de redemarrer. Apres trois reprises, un probleme persistant reste A verifier.

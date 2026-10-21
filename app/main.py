@@ -165,6 +165,12 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
                 asset_id TEXT NOT NULL REFERENCES assets(id), image_index INTEGER NOT NULL,
                 locale TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS windows_image_candidates (
+                run_id TEXT PRIMARY KEY, source_asset_id TEXT NOT NULL REFERENCES assets(id),
+                asset_id TEXT NOT NULL UNIQUE REFERENCES assets(id), source_sha256 TEXT NOT NULL,
+                status TEXT NOT NULL, mappings_json TEXT NOT NULL, created_at TEXT NOT NULL, published_at TEXT);
+            CREATE TABLE IF NOT EXISTS windows_image_test_profiles (
+                profile_id TEXT PRIMARY KEY REFERENCES profiles(id), run_id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS deployments (
                 id TEXT PRIMARY KEY, machine_id TEXT NOT NULL REFERENCES machines(id),
                 profile_id TEXT NOT NULL REFERENCES profiles(id), disk_number INTEGER NOT NULL,
@@ -382,7 +388,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.3.2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4"}
 
     @api.get('/api/session')
     def session_options():
@@ -394,6 +400,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result = {name: [dict(r) for r in con.execute(f"SELECT * FROM {name} ORDER BY created_at DESC")]
                       for name in ("machines", "assets", "applications")}
             result['machines']=[public_machine(m) for m in result['machines']]
+            validations = {r['asset_id']: r['status'] for r in con.execute('SELECT asset_id,status FROM windows_image_candidates')}
+            for asset in result['assets']:
+                asset['image_validation'] = validations.get(asset['id'])
             result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
             result['bundles'] = [bundle_public(r) for r in con.execute('SELECT * FROM bundles ORDER BY created_at DESC')]
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
@@ -477,6 +486,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 asset = row(con, "assets", body.asset_id)
                 if asset["kind"] != "windows":
                     raise HTTPException(400, "Le profil necessite une image Windows")
+                if con.execute("SELECT 1 FROM windows_image_candidates WHERE asset_id=? AND status!='published'", (asset['id'],)).fetchone():
+                    raise HTTPException(409, 'Image en validation : utiliser les profils TEST fournis, puis publier apres les tests')
                 asset_path(asset)
                 settings = body.settings.model_dump() if body.settings else defaults_for_locale(body.locale)
                 resolved_settings(con, settings)
@@ -624,7 +635,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                     identifier=str(uuid.uuid4())
                     hostname=('PC-'+uuid.uuid4().hex[:12].upper()) if body.serial_number else ('PC-'+macs[0].replace(':',''))
                     machine={'id':identifier,'hostname':hostname,'mac':macs[0] if macs else '', 'serial_number':body.serial_number or None}
-                profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
+                profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles WHERE id NOT IN (SELECT profile_id FROM windows_image_test_profiles) ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
                 if not profiles:
                     raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les editions sur le serveur')
                 profile = profiles[0]
