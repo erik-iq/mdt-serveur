@@ -21,6 +21,17 @@ def test_unrecognized_os_uses_exact_recommended_packages_without_faking_version_
 $ErrorActionPreference='Stop'
 . 'LIBRARY'
 $script:downloads=0
+# Enforce real adapted properties, as Windows PowerShell 5.1's measurement
+# requires, rather than PowerShell 7's dictionary-key convenience.
+function Measure-Object {
+ [CmdletBinding()]param([Parameter(ValueFromPipeline)]$InputObject,[string]$Property,[switch]$Sum)
+ begin{$items=New-Object 'Collections.Generic.List[object]'}
+ process{
+  if(-not $InputObject.PSObject.Properties[$Property]){throw 'A real measured property is required in Windows PowerShell 5.1'}
+  $items.Add($InputObject)
+ }
+ end{$items | Microsoft.PowerShell.Utility\Measure-Object -Property $Property -Sum:$Sum}
+}
 function Add-HPRepositoryFilter {param([ValidateSet('24H2','25H2')][string]$OsVer);throw 'An unsupported OS must never use a substitute filter'}
 function Get-AtelierHpCmslCommand {param($Name);if($Name -eq 'Add-HPRepositoryFilter'){return Get-Command Add-HPRepositoryFilter};return $Name}
 function Get-HPSoftpaq {

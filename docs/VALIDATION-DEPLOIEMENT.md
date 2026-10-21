@@ -49,6 +49,22 @@ Si CMSL refuse OsVer, .250 conserve la vraie version du poste et acquiert seulem
 
 La premiere machine peut utiliser directement HP si le cache serveur n est pas encore pret ; le traitement .250 continue pour les machines suivantes. La presence d un paquet dans ce cache ne certifie pas sa compatibilite avec une version Windows sans reference HP dediee. HPIA et ses controles restent responsables de l installation.
 
-Cette correction doit etre mise a jour sur .250 et integree a un nouveau WinPE IQ-5.4.1 pour un nouveau test. Une mise a jour du serveur seule ne relance pas HPIA sur un Windows deja termine dont le payload a ete nettoye. La validation physique finale n a pas ete executee depuis l environnement de developpement.
+Cette correction doit etre mise a jour sur .250 et integree a un nouveau WinPE pour les prochains deploiements. Une mise a jour du serveur seule ne relance pas HPIA sur un Windows deja termine dont le payload a ete nettoye. La validation physique finale n a pas ete executee depuis l environnement de developpement.
+
+## Retest HPIA sans redeployer Windows - IQ-5.4.2
+
+Les rapports du 21 octobre montrent que la reprise SPList a bien fonctionne, mais que les deux commandes avec AutoReport se sont terminees comme Analyze Action List, sans resultat de remediation pour les onze recommandations. Ignorer 4104 ne suffit donc pas. La nouvelle commande retire AutoReport du passage d installation, selectionne explicitement InstallType:AutoInstallable et conserve Action:Install et IgnoreGenericOsError. Ce changement doit encore etre valide avec le vrai executable HP ; les simulations ne prouvent pas le comportement de sa version 5.3.6 sur ce poste.
+
+Une reference generique reste indiquee dans le resultat mais ne transforme plus une installation confirmee en echec. Tous les SoftPaq recommandes doivent avoir un resultat confirme. Des resultats absents, des paquets manuels et des erreurs d installation restent A verifier. Les pilotes incompatibles ne sont pas forces et aucun Force n est ajoute.
+
+Sur un HP Windows deja installe, ouvrir **Tester-HPIA.cmd** dans le dossier contenant Test-HPIA.ps1, HP-ImageAssistant.ps1 et Unattend.ps1. Accepter la demande administrateur. Le lanceur cree la tache **AtelierPXE-HpiaTest** sous SYSTEM, comme la preparation reelle. Aucune commande PowerShell ne doit etre saisie sur le PC. Les futurs deploiements fournissent aussi ce lanceur dans `C:\IQ_\Constructeur`.
+
+Le test utilise le HPIA signe deja present dans Program Files et uniquement les serveurs HP par Internet. Il ne reutilise pas les identifiants temporaires ni le resultat termine d un ancien deploiement et ne valide donc pas le cache .250. Il ne reinstalle ni Windows ni les autres applications et ne modifie pas le statut historique du deploiement sur le site.
+
+Une mise a jour BIOS peut redemarrer le poste : la tache de demarrage et le checkpoint prive sont crees avant le lancement, puis HPIA reprend apres changement du demarrage Windows. La limite de trois reprises et le refus des installations concurrentes restent actifs. Un redemarrage demande par un pilote ordinaire reste manuel. La tache est retiree a la fin d un resultat terminal ; une execution interrompue n est pas relancee dans le meme demarrage.
+
+Les rapports de chaque test et l archive ZIP se trouvent dans `C:\IQ_\Rapports\HPImageAssistant\Tests\IDENTIFIANT`. Le ZIP voisin `IDENTIFIANT.zip` contient hpia-result.json et les rapports natifs HP des passages successifs. L etat et les paquets temporaires sont conserves dans `C:\ProgramData\AtelierPXE-HpiaTest` pour diagnostic et reprise ; ils ne contiennent aucun jeton de deploiement. Une nouvelle execution terminee est conservee separement et ne remplace pas les preuves precedentes.
+
+Le meme envoi indique un echec du cache serveur avec un argument Property invalide. Le constructeur d archive utilise maintenant des objets a proprietes reelles pour Measure-Object et Sort-Object sous Windows PowerShell 5.1. Le journal worker.log inclut aussi l emplacement et la pile en cas d autre erreur CMSL. La prochaine synchronisation sur .250 doit confirmer la resolution ; un echec du depot reste distinct du traitement HPIA sur le poste.
 
 Sources : [guide officiel HPIA, Action et SPList](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/whitepapers/HPIAUserGuide.pdf), [CMSL et acquisition des SoftPaq](https://developers.hp.com/hp-client-management/doc/client-management-script-library), [bibliotheque HPCMSL 1.9.0](https://www.powershellgallery.com/packages/HPCMSL/1.9.0).

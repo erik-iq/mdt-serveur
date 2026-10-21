@@ -33,7 +33,7 @@ def test_analysis_recommendations_are_not_installation_results_and_french_csv_is
     assert result['csv'][0]['code'] is None and result['csv'][0]['category']=='Software'
 
 
-@pytest.mark.parametrize('case',['installed','restart','failure','analysis_only','still_4104'])
+@pytest.mark.parametrize('case',['installed','installed_4104','restart','failure','analysis_only','still_4104'])
 def test_generic_reference_keeps_actual_installation_exit_and_never_invents_success(tmp_path,case):
     program=tmp_path/'Program Files';exe=program/'AtelierPXE/Tools/HPImageAssistant/HPImageAssistant.exe'
     exe.parent.mkdir(parents=True);exe.write_bytes(b'fixture binary - never executed')
@@ -57,7 +57,7 @@ function Invoke-AtelierHpiaProcess {
   $fixture | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $Directory 'HPIA.json')
   return 4104
  }
- if ($Arguments -notlike '*/Action:Install*' -or $Arguments -notlike '*/IgnoreGenericOsError*' -or $Arguments -like '*/Force*') {throw 'Unexpected HPIA command'}
+ if ($Arguments -notlike '*/Action:Install*' -or $Arguments -notlike '*/IgnoreGenericOsError*' -or $Arguments -like '*/Force*' -or $Arguments -like '*/AutoReport*') {throw 'Unexpected HPIA command'}
  if ('CASE' -notin @('analysis_only','still_4104')) {
   $fixture.HPIA.HPIAOperation='Analyze Action Install'
   foreach ($item in $fixture.HPIA.Recommendations) { $item.Remediation=[pscustomobject]@{ReturnCode=0;ReturnDescription='Applied'} }
@@ -67,7 +67,7 @@ function Invoke-AtelierHpiaProcess {
  $fixture | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $Directory 'HPIA.json')
  if ('CASE' -eq 'failure') {return 3020}
  if ('CASE' -eq 'restart') {return 3010}
- if ('CASE' -eq 'still_4104') {return 4104}
+ if ('CASE' -in @('still_4104','installed_4104')) {return 4104}
  return 0
 }
 $first=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
@@ -76,8 +76,8 @@ $second=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
 '''.replace('CASE',case))
     state=result['first']
     assert result['calls']==2 and state['analysis_exit_code']==4104
-    assert state['status']=='needs_attention' and state['generic_os_reference']
-    assert state['exit_code']==result['second_exit']==({'failure':3020,'restart':3010,'still_4104':4104}.get(case,0))
+    assert state['status']==('completed' if case in {'installed','installed_4104','restart'} else 'needs_attention') and state['generic_os_reference']
+    assert state['exit_code']==result['second_exit']==({'failure':3020,'restart':3010,'still_4104':4104,'installed_4104':4104}.get(case,0))
     assert state['reboot_required']==(case=='restart')
     if case in {'analysis_only','still_4104'}:
         assert state['packages']==[] and 'Un ou plusieurs SoftPaq' not in state['message']

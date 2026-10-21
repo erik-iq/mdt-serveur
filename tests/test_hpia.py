@@ -72,7 +72,8 @@ $second=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'TOOLS'
     calls=Path(str(tool)+'.calls')
     if case in {'success','powershell51_tools','package_restart','package_failure'}:
         args=json.loads(calls.read_text())
-        assert all(arg in args for arg in ['/Operation:Analyze','/Category:All','/Selection:All','/Action:Install','/Silent','/AutoReport','/IgnoreGenericOsError'])
+        assert all(arg in args for arg in ['/Operation:Analyze','/Category:All','/Selection:All','/Action:Install','/Silent','/InstallType:AutoInstallable','/IgnoreGenericOsError'])
+        assert '/AutoReport' not in args
         assert any(arg.startswith('/SoftpaqDownloadFolder:') for arg in args)
         assert '/Noninteractive' not in args and not any(arg.lower().startswith('/force') for arg in args)
         assert result['first']['reboot_required']==(case=='package_restart')

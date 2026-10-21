@@ -49,7 +49,7 @@ if '/Action:List' in args:
  if 'CASE'=='analysis_network_failure':sys.exit(12)
  report={'HPIA':{'Recommendations':([] if 'CASE'=='no_updates' else [{'SoftPaqID':'SP12345','Name':'Network driver'}]),'InstalledSoftware':[{'SoftPaqID':'SP77777'}]}}
 else:
- assert '/Action:Install' in args and '/AutoReport' in args and '/IgnoreGenericOsError' in args
+ assert '/Action:Install' in args and '/AutoReport' not in args and '/IgnoreGenericOsError' in args
  offline=[a for a in args if a.startswith('/OfflineMode:')]
  expected='CASE' not in {'pending','failed_sync','failed_worker_offline','bad_archive','agent_unavailable','no_updates','package_cache','bad_cache_signature'}
  assert bool(offline)==expected,(args,expected)

@@ -10,7 +10,7 @@ from test_hpia_generic_reference import ROOT, PWSH, run_ps
 pytestmark = pytest.mark.skipif(not PWSH, reason='PowerShell required')
 
 
-@pytest.mark.parametrize('case', ['selected_success', 'selected_failure', 'still_analysis', 'not_ssm', 'unknown_result', 'numeric_csv'])
+@pytest.mark.parametrize('case', ['selected_success', 'selected_failure', 'partial_results', 'still_analysis', 'not_ssm', 'unknown_result', 'numeric_csv'])
 def test_single_explicit_retry_only_after_proven_analysis_and_for_ssm_recommendations(tmp_path, case):
     program = tmp_path / 'Program Files'
     exe = program / 'AtelierPXE/Tools/HPImageAssistant/HPImageAssistant.exe'
@@ -33,6 +33,7 @@ function Invoke-AtelierHpiaProcess {
  foreach ($item in $fixture.HPIA.Recommendations) { $item | Add-Member NoteProperty SSMCompliant $('CASE' -ne 'not_ssm') }
  if ('CASE' -eq 'unknown_result') { $fixture.HPIA.HPIAOperation='Unknown';$fixture.HPIA.LastOperation='Unknown' }
  if ($Arguments -like '*/Force*') { throw 'Force is forbidden' }
+ if ($Arguments -like '*/AutoReport*' -or $Arguments -notlike '*/Action:Install*' -or $Arguments -notlike '*/InstallType:AutoInstallable*') { throw 'Installation must not be replaced by the reporting operation' }
  if ($script:calls -eq 2) {
   $list=[regex]::Match($Arguments,'/SPList:"([^"]+)"')
   if (-not $list.Success) { throw 'An explicit HP SPList is required' }
@@ -42,6 +43,7 @@ function Invoke-AtelierHpiaProcess {
    $fixture.HPIA.HPIAOperation='Analyze Action Install';$fixture.HPIA.LastOperation='EndInstall'
    foreach ($item in $fixture.HPIA.Recommendations) { $item.Remediation=[pscustomobject]@{ReturnCode=0;ReturnDescription='Applied fixture'} }
    if ('CASE' -eq 'selected_failure') { $fixture.HPIA.Recommendations[0].Remediation.ReturnCode=1603 }
+   if ('CASE' -eq 'partial_results') { $fixture.HPIA.Recommendations[0].Remediation=[pscustomobject]@{} }
   }
  }
  $fixture | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $Directory 'HPIA.json')
@@ -53,7 +55,7 @@ $first=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
 $second=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
 @{first=$first;calls=$script:calls;ids=$script:ids;second=$second} | ConvertTo-Json -Depth 12 -Compress
 '''.replace('CASE', case))
-    retried = case in {'selected_success', 'selected_failure', 'still_analysis'}
+    retried = case in {'selected_success', 'selected_failure', 'partial_results', 'still_analysis'}
     assert result['calls'] == (2 if retried else 1), result
     state = result['first']
     if retried:
@@ -64,6 +66,8 @@ $second=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
         assert len(state['packages']) == 11 and state['status'] == 'completed'
     elif case == 'selected_failure':
         assert state['status'] == 'needs_attention' and state['exit_code'] == 3020
+    elif case == 'partial_results':
+        assert state['status'] == 'needs_attention' and len(state['unconfirmed_softpaqs']) == 1
     elif case == 'still_analysis':
         assert state['status'] == 'needs_attention' and not state['packages']
     assert result['second']['status'] == state['status']

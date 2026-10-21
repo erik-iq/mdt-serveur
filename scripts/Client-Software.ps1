@@ -156,6 +156,11 @@ function New-AtelierHpiaLauncher {
 powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath (Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant\HPImageAssistant.exe') -Verb RunAs"
 '@
     [IO.File]::WriteAllText((Join-Path $directory 'HP-ImageAssistant.cmd'),$launcher,[Text.Encoding]::ASCII)
+    if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Test-HPIA.ps1')) {
+        foreach ($name in @('Test-HPIA.ps1','Tester-HPIA.cmd','HP-ImageAssistant.ps1','Unattend.ps1')) {
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $directory $name) -Force
+        }
+    }
 }
 function Install-AtelierClientSoftware {
     param([string]$DataPath,[string[]]$Packages,[scriptblock]$OnProgress)

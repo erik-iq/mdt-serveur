@@ -50,6 +50,8 @@ try {
             }
         } catch {
             $message=$_.Exception.Message.Replace($secret,'[REDACTED]');Write-HpWorkerLog $message
+            Write-HpWorkerLog ([string]$_.InvocationInfo.PositionMessage)
+            Write-HpWorkerLog ([string]$_.ScriptStackTrace)
             if ($child -and $child.State -in @('Running','NotStarted')) { Stop-Job $child -ErrorAction SilentlyContinue }
             if ($job) {
                 try {

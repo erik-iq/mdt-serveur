@@ -117,7 +117,9 @@ function Sync-AtelierHpRepository {
                     throw ('Signature SoftPaq invalide : '+$file.Name+' ; copie de travail retiree pour une prochaine tentative.')
                 }
             }
-            $files.Add(@{name=$relative;path=$file.FullName;length=$file.Length})
+            # Use real properties for Measure-Object/Sort-Object in Windows
+            # PowerShell 5.1; dictionary keys are not portable properties.
+            $files.Add([pscustomobject]@{name=$relative;path=$file.FullName;length=$file.Length})
         }
         if (-not $packageCache -and (-not @($files | Where-Object { $_.name -match '(?i)^\.repository/cache/.*/?platformList\.cab$|^\.repository/cache/platformList\.cab$' }).Count -or
             -not @($files | Where-Object { [IO.Path]::GetFileName($_.name) -like ($Job.platform+'_*.cab') }).Count)) { throw 'References HP hors ligne incompletes ; depot non publie.' }

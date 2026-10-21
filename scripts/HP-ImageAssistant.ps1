@@ -207,10 +207,10 @@ function Read-AtelierHpiaAutoReport {
 }
 
 function Invoke-AtelierHpia {
-    param([string]$DataPath,[string]$ToolsPath='C:\IQ_',[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,10800)][int]$TimeoutSeconds=2700)
+    param([string]$DataPath,[string]$ToolsPath='C:\IQ_',[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,10800)][int]$TimeoutSeconds=2700,[string]$ReportRoot)
     $resultPath=Join-Path $DataPath 'hpia-result.json'
     $process=$null;$timing=''
-    $result=@{status='needs_attention';message='Traitement HP non execute.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null}
+    $result=@{status='needs_attention';message='Traitement HP non execute.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null;script_revision='IQ-5.4.2'}
     try {
         $payload=$null;$allowResume=$false;$boot='';$resume=$false;$previous=$null
         $payloadPath=Join-Path $DataPath 'personalization.json'
@@ -263,7 +263,7 @@ function Invoke-AtelierHpia {
                 if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $tool.sha256) { throw 'Empreinte de HP Image Assistant invalide.' }
                 $signature=Get-AuthenticodeSignature -LiteralPath $exe
                 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature HP Image Assistant invalide ou editeur HP non reconnu.' }
-                $reports=Join-Path (Join-Path $ToolsPath 'Rapports') 'HPImageAssistant'
+                $reports=if ($ReportRoot) { $ReportRoot } else { Join-Path (Join-Path $ToolsPath 'Rapports') 'HPImageAssistant' }
                 $downloads=Join-Path $DataPath 'HP-SoftPaqs'
                 $payloadPath=Join-Path $DataPath 'personalization.json'
                 $useRepository=$false
@@ -299,7 +299,10 @@ function Invoke-AtelierHpia {
                     # HP documents this switch to expose the actual installation
                     # return code instead of letting generic-reference code 4104
                     # hide e.g. 3010 (reboot) or 3020 (installation failure).
-                    $arguments='/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /AutoReport /IgnoreGenericOsError /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'"'
+                    # AutoReport is a separate reporting operation: the supplied
+                    # 5.3.6 logs ended as Analyze Action List even with Install.
+                    # Use the installation operation alone, with its own reports.
+                    $arguments='/Operation:Analyze /Category:All /Selection:All /InstallType:AutoInstallable /Silent /IgnoreGenericOsError /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'" /Action:Install'
                     if ($repository -and $repository.status -eq 'offline') { $arguments+=' /OfflineMode:"'+$repository.path+'"' }
                     # HPIA manages its supported packages. Never force unsupported firmware.
                     $sourceText=if ($result.source -eq 'depot_250') { 'depot local .250' } else { 'serveurs HP par Internet' }
@@ -342,10 +345,18 @@ function Invoke-AtelierHpia {
                     } elseif ($result.status -eq 'completed' -and -not $result.packages.Count -and @(Get-AtelierHpiaRecommendedSoftpaqs $reports).Count) {
                         $result.status='needs_attention';$result.message='Recommandations HP presentes, mais aucun resultat d installation confirme. Consulter le journal HPIA.'
                     }
+                    $confirmed=@($result.packages | Where-Object { $null -ne $_.code } | ForEach-Object { $_.softpaq_id })
+                    $missing=@(Get-AtelierHpiaRecommendedSoftpaqs $reports | Where-Object { $_ -notin $confirmed })
+                    if ($result.exit_code -eq 4104 -and $result.packages.Count -and -not $missing.Count -and -not @($result.packages | Where-Object { $null -eq $_.code -or $_.manual -or $_.code -notin @(0,3010,1641) }).Count) {
+                        $result.status='completed';$result.message='Installation HP confirmee par les resultats SoftPaq.'
+                    }
+                    if ($result.status -eq 'completed' -and $missing.Count) {
+                        $result.status='needs_attention';$result.unconfirmed_softpaqs=$missing
+                        $result.message='Installation non confirmee pour '+$missing.Count+' SoftPaq recommandes : '+($missing -join ', ')+'. Consulter les rapports HP.'
+                    }
                     $result.generic_os_reference=$result.analysis_exit_code -eq 4104 -or $result.initial_install_exit_code -eq 4104 -or $result.exit_code -eq 4104
-                    if ($result.generic_os_reference -and $result.exit_code -ne 4104) {
-                        $result.message+=' Reference HP generique : cette version de Windows ne dispose pas d une reference HP dediee. Compatibilite a verifier.'
-                        if ($result.status -eq 'completed') { $result.status='needs_attention' }
+                    if ($result.generic_os_reference) {
+                        $result.message+=' Reference HP generique : avertissement de version ignore pour poursuivre l installation ; les resultats des SoftPaq restent controles.'
                     }
                     $biosRestart=@($result.packages | Where-Object { $_.code -in @(3010,1641) -and ($_.category -match '^(?i)BIOS$' -or $_.name -match '(?i)\bBIOS\b') }).Count -gt 0
                     if ($allowResume -and $biosRestart) {
