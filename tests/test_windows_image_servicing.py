@@ -18,7 +18,7 @@ def test_source_and_backup_protected_and_partial_candidates_never_ready(tmp_path
     runtime = tmp_path / 'fake-python.ps1'
     runtime.write_text(r'''
 $script:LASTEXITCODE=0;$global:LASTEXITCODE=0
-if ('CASE' -eq 'download_failure') { $global:LASTEXITCODE=1;return }
+if ('CASE' -eq 'download_failure') { Write-Error 'Fixture Microsoft catalog connection failed';$global:LASTEXITCODE=1;return }
 $output=$args[[array]::IndexOf($args,'--output')+1]
 $file='WORK/update.msu';Set-Content -LiteralPath $file -Value 'fixture update'
 $hash=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
@@ -86,6 +86,13 @@ $reports=@(Get-ChildItem $root -Recurse -Filter report.json | ForEach-Object { G
     elif result['reports']:
         assert result['reports'][0]['status'] == ('failed_cleanup_required' if case == 'discard_failure' else 'failed')
         assert result['candidates'] == (1 if case == 'discard_failure' else 0)
+        if case == 'download_failure':
+            assert 'Fixture Microsoft catalog connection failed' in result['message']
+            assert 'catalog-index-1.log' in result['reports'][0]['error']
+            logs = list((tmp_path / 'maintenance with spaces' / 'runs').glob('*/catalog-index-1.log'))
+            assert len(logs) == 1 and 'Fixture Microsoft catalog connection failed' in logs[0].read_text(encoding='utf-8-sig')
+            context = json.loads(logs[0].with_name('catalog-input-index-1.json').read_text(encoding='utf-8-sig'))
+            assert context == {'family': '11', 'release': '26H2', 'architecture': 'x64', 'dotnet': '4.8.1', 'build': 26300}
 
 
 @pytest.mark.parametrize('case', ['schedule', 'run_now', 'already_running', 'register_failure', 'start_failure'])

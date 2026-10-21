@@ -33,6 +33,8 @@ Le dossier `<data_dir>\windows-servicing`, soit normalement `D:\AtelierPXE\data\
 | runs\DATE-IDENTIFIANT\candidate.wim | Copie maintenue, jamais le fichier de production. |
 | runs\DATE-IDENTIFIANT\report.json | Etat global, source, sauvegarde, index, correctifs et erreur eventuelle. |
 | runs\DATE-IDENTIFIANT\updates-index-N.json | Titres, KB, URL Microsoft, taille et empreintes de chaque fichier. |
+| runs\DATE-IDENTIFIANT\catalog-index-N.log | Sortie Python et erreur precise du catalogue ou du telechargement Microsoft, egalement reprises dans la transcription. |
+| runs\DATE-IDENTIFIANT\catalog-input-index-N.json | Version, build, architecture et .NET lus dans cet index du WIM avant la recherche. |
 | runs\DATE-IDENTIFIANT\packages-index-N.csv | Etat des paquets apres integration. InstallPending demande un premier demarrage de test. |
 | runs\DATE-IDENTIFIANT\dism-index-N.log | Journal DISM ; le fichier .console.log contient aussi sa sortie texte. |
 | maintenance-DATE-IDENTIFIANT.log | Journal de l execution de la tache, y compris les erreurs avant creation d un rapport. |

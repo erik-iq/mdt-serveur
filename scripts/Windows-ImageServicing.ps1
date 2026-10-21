@@ -131,8 +131,25 @@ function New-AtelierServicedWindowsImage {
             $dotnet=if ($version.dotnet) { $version.dotnet } else { 'none' }
             $planKey=$version.family+'-'+$version.release+'-'+$arch+'-'+$dotnet
             if (-not $plans.ContainsKey($planKey)) {
-                & $PythonPath (Join-Path $PSScriptRoot 'windows_update_catalog.py') --family $version.family --release $version.release --arch $arch --dotnet $dotnet --cache (Join-Path $root 'packages') --output $planPath | Out-Host
-                if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $planPath)) { throw 'Telechargement ou selection des correctifs Microsoft en echec.' }
+                $catalogLog=Join-Path $run ('catalog-index-'+$index+'.log')
+                Write-AtelierServicingJson @{family=$version.family;release=$version.release;architecture=$arch;dotnet=$dotnet;build=$version.build} (Join-Path $run ('catalog-input-index-'+$index+'.json'))
+                Write-Host ('Catalogue Microsoft : Windows '+$version.family+' '+$version.release+' '+$arch+' ; .NET '+$dotnet+'. Journal : '+$catalogLog)
+                $savedPreference=$ErrorActionPreference
+                try {
+                    # PS 5.1 surfaces native stderr as error records. Preserve it
+                    # as text without interrupting Python before its exit code.
+                    $ErrorActionPreference='Continue'
+                    & $PythonPath (Join-Path $PSScriptRoot 'windows_update_catalog.py') --family $version.family --release $version.release --arch $arch --dotnet $dotnet --cache (Join-Path $root 'packages') --output $planPath 2>&1 | ForEach-Object {
+                        $line=[string]$_
+                        Add-Content -LiteralPath $catalogLog -Value $line -Encoding UTF8 -ErrorAction Stop
+                        Write-Host $line
+                    }
+                    $catalogExitCode=$LASTEXITCODE
+                } finally { $ErrorActionPreference=$savedPreference }
+                if ($catalogExitCode -ne 0 -or -not (Test-Path -LiteralPath $planPath)) {
+                    $detail=if (Test-Path -LiteralPath $catalogLog) { (Get-Content -LiteralPath $catalogLog -Encoding UTF8 -Tail 8) -join ' ' } else { 'Aucune sortie Python.' }
+                    throw ('Telechargement ou selection des correctifs Microsoft en echec (code '+$catalogExitCode+'). '+$detail+' Journal : '+$catalogLog)
+                }
                 $plans[$planKey]=Get-Content -LiteralPath $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
             } else { Write-AtelierServicingJson $plans[$planKey] $planPath }
             $plan=$plans[$planKey]
