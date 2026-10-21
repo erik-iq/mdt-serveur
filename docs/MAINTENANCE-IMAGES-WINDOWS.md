@@ -12,6 +12,8 @@ Mettre la console a jour avec les sources IQ-5.4 et `Update-Console.ps1`. Cette 
 
 La tache `AtelierPXE-WindowsImageMaintenance` demarre en arriere-plan. Elle prepare ensuite les images le **15 de chaque mois a 02:00, heure locale du serveur** (apres le deuxieme mardi du mois). Elle reprend a la prochaine disponibilite du serveur s il etait arrete. Une seconde execution est ignoree lorsqu une preparation fonctionne deja. Ne pas arreter de force la tache, redemarrer .250 ou demonter manuellement un WIM pendant DISM.
 
+Si une premiere installation affiche `0x80041318` et `LogonType:ServiceAccount`, la tache n a pas ete creee et la maintenance n a pas demarre. Utiliser le script corrige puis relancer la meme commande `-RunNow` ; aucune reconstruction WinPE n est necessaire. Le compte SYSTEM est declare par son SID `S-1-5-18`, sans element XML LogonType. Un echec de creation ou de demarrage arrete le script sans annoncer une planification reussie.
+
 Pour preparer manuellement, sans nouvelle planification :
 
 ```powershell

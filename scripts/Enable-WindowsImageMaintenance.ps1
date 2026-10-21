@@ -29,16 +29,18 @@ $startBoundary=$next.ToString('yyyy-MM-ddTHH:mm:ss')
 # The 15th follows the second Tuesday, including months when it is the 14th.
 # PT0S avoids forcibly killing DISM mid-servicing. Its private lock also covers
 # manual invocations. Tasks only prepare; they never register or publish images.
+# SYSTEM is identified by its SID. ServiceAccount is an API enum value, not a
+# valid XML LogonType; omit that optional element for this built-in account.
 $xml=@"
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Prepare les images Windows avec les correctifs Microsoft ; publication apres test uniquement.</Description></RegistrationInfo>
   <Triggers><CalendarTrigger><StartBoundary>$startBoundary</StartBoundary><Enabled>true</Enabled><ScheduleByMonth><DaysOfMonth><Day>15</Day></DaysOfMonth><Months><January/><February/><March/><April/><May/><June/><July/><August/><September/><October/><November/><December/></Months></ScheduleByMonth></CalendarTrigger></Triggers>
-  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><LogonType>ServiceAccount</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable><Enabled>true</Enabled><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>
   <Actions Context="Author"><Exec><Command>$commandXml</Command><Arguments>$argumentsXml</Arguments><WorkingDirectory>$directoryXml</WorkingDirectory></Exec></Actions>
 </Task>
 "@
-Register-ScheduledTask -TaskName $taskName -Xml $xml -Force | Out-Null
-if ($RunNow) { Start-ScheduledTask -TaskName $taskName }
+Register-ScheduledTask -TaskName $taskName -Xml $xml -Force -ErrorAction Stop | Out-Null
+if ($RunNow) { Start-ScheduledTask -TaskName $taskName -ErrorAction Stop }
 Write-Host 'Maintenance Windows planifiee le 15 de chaque mois a 02:00. Aucune publication automatique.'
 Write-Host ('Rapports et sauvegardes : '+$root)

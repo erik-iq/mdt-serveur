@@ -88,7 +88,7 @@ $reports=@(Get-ChildItem $root -Recurse -Filter report.json | ForEach-Object { G
         assert result['candidates'] == (1 if case == 'discard_failure' else 0)
 
 
-@pytest.mark.parametrize('case', ['schedule', 'run_now', 'already_running'])
+@pytest.mark.parametrize('case', ['schedule', 'run_now', 'already_running', 'register_failure', 'start_failure'])
 def test_monthly_task_only_prepares_and_never_interrupts_running_dism(tmp_path, case):
     local = tmp_path / 'scripts'
     local.mkdir()
@@ -109,27 +109,46 @@ function Get-ScheduledTask { param($TaskName,$ErrorAction)
  if ('CASE' -eq 'already_running') { return [pscustomobject]@{State='Running';Actions=@()} }
  return $null
 }
-function Register-ScheduledTask { param($TaskName,$Xml,[switch]$Force) $global:AtelierTestScheduleXml=$Xml }
-function Start-ScheduledTask { param($TaskName) $global:AtelierTestScheduleStarts++ }
+function Register-ScheduledTask {
+ [CmdletBinding()]param($TaskName,$Xml,[switch]$Force)
+ $global:AtelierTestScheduleXml=$Xml
+ if ('CASE' -eq 'register_failure') { Write-Error 'Mock task registration failed';return }
+}
+function Start-ScheduledTask {
+ [CmdletBinding()]param($TaskName)
+ $global:AtelierTestScheduleStarts++
+ if ('CASE' -eq 'start_failure') { Write-Error 'Mock task start failed' }
+}
 $failed=$false;$message=''
-try { & 'WORK/scripts/Enable-WindowsImageMaintenance.ps1' -InstallPath 'INSTALL' -RunNow:('CASE' -eq 'run_now') }
+# Exercise CIM-style nonterminating errors even when the caller continues.
+try { & 'WORK/scripts/Enable-WindowsImageMaintenance.ps1' -InstallPath 'INSTALL' -RunNow:('CASE' -in @('run_now','register_failure','start_failure')) -ErrorAction Continue }
 catch { $failed=$true;$message=$_.Exception.Message }
 @{failed=$failed;message=$message;xml=$global:AtelierTestScheduleXml;starts=$global:AtelierTestScheduleStarts} | ConvertTo-Json -Compress
 '''.replace('CASE', case).replace('WORK', str(tmp_path)).replace('INSTALL', str(install)))
     run = subprocess.run([PWSH, '-NoProfile', '-File', str(script)], capture_output=True, text=True, timeout=45)
     assert run.returncode == 0, run.stdout + run.stderr
     result = json.loads(run.stdout.splitlines()[-1])
-    assert result['failed'] == (case == 'already_running'), result
-    if not result['failed']:
+    assert result['failed'] == (case in {'already_running', 'register_failure', 'start_failure'}), result
+    if case != 'already_running':
         from xml.etree import ElementTree as ET
         task = ET.fromstring(result['xml'])
         ns = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+        principal = task.find('.//t:Principal', ns)
+        assert principal.find('t:UserId', ns).text == 'S-1-5-18'
+        assert principal.find('t:LogonType', ns) is None
+        assert principal.find('t:RunLevel', ns).text == 'HighestAvailable'
         assert task.find('.//t:ScheduleByMonth/t:DaysOfMonth/t:Day', ns).text == '15'
         assert len(task.find('.//t:Months', ns)) == 12
         assert task.find('.//t:MultipleInstancesPolicy', ns).text == 'IgnoreNew'
         assert task.find('.//t:ExecutionTimeLimit', ns).text == 'PT0S'
         assert 'Publish' not in task.find('.//t:Arguments', ns).text
         assert str(install) in task.find('.//t:Arguments', ns).text
-        assert result['starts'] == (case == 'run_now')
+        assert result['starts'] == (case in {'run_now', 'start_failure'})
     else:
         assert not result['xml'] and not result['starts']
+    if result['failed']:
+        assert 'Maintenance Windows planifiee' not in run.stdout
+    if case == 'register_failure':
+        assert 'Mock task registration failed' in result['message']
+    if case == 'start_failure':
+        assert 'Mock task start failed' in result['message']
