@@ -4,6 +4,7 @@ import hashlib
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs
+from urllib.request import Request
 import json
 
 import pytest
@@ -76,10 +77,11 @@ class Response(BytesIO):
         self.url = url
 
 
-def test_download_hash_verification_reuse_repair_and_partial_cleanup(tmp_path):
+@pytest.mark.parametrize('host', ['download.windowsupdate.com', 'catalog.sf.dl.delivery.mp.microsoft.com'])
+def test_download_hash_verification_reuse_repair_and_partial_cleanup(tmp_path, host):
     content = b'trusted fixture payload'
     name = 'windows11.0-kb5127648-x64_' + hashlib.sha256(content).hexdigest() + '.msu'
-    item = catalog.download_links("downloadInformation[0].files[0].url = 'http://download.windowsupdate.com/" + name + "';")[0]
+    item = catalog.download_links("downloadInformation[0].files[0].url = 'http://" + host + "/" + name + "';")[0]
     class Opener:
         count = 0
         def open(self, request, timeout):
@@ -96,6 +98,27 @@ def test_download_hash_verification_reuse_repair_and_partial_cleanup(tmp_path):
     with pytest.raises(ValueError, match='Empreinte'):
         catalog.download(opener, bad, tmp_path)
     assert not list(tmp_path.glob('*.partial')) and not (tmp_path / bad['filename']).exists()
+
+
+def test_catalog_delivery_url_and_redirect_remain_scoped_to_microsoft():
+    url = ('https://catalog.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/'
+           'c1521a9e-28f5-4040-8a13-b8df59c3b2a8/public/'
+           'windows11.0-kb5127694-x64-ndp481_a1a6f6d3c61e46a77278881fc5f7245bcf09ce3f.msu')
+    item, = catalog.download_links("downloadInformation[0].files[0].url = '" + url + "';")
+    assert item['url'] == url
+    assert item['algorithm'] == 'sha1'
+    assert item['expected_hash'] == 'a1a6f6d3c61e46a77278881fc5f7245bcf09ce3f'
+    redirect = catalog.MicrosoftRedirect()
+    request = Request('https://download.windowsupdate.com/update.msu')
+    assert redirect.redirect_request(request, None, 302, 'Found', {}, url).full_url == url
+    for unsafe in (url.replace('.com/', '.com.evil.test/'),
+                   url.replace('https://', 'http://'),
+                   url.replace('https://', 'https://user:password@'),
+                   url.replace('.com/', '.com:8443/')):
+        with pytest.raises(ValueError, match='non autorisee'):
+            redirect.redirect_request(request, None, 302, 'Found', {}, unsafe)
+    with pytest.raises(ValueError, match='non autorisee'):
+        catalog.safe_url(url, catalog=True)
 
 
 def test_prepare_downloads_every_checkpoint_in_isolated_directory(tmp_path, monkeypatch):

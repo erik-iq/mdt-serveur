@@ -22,7 +22,7 @@ import uuid
 CATALOG = 'https://www.catalog.update.microsoft.com'
 GUID = r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
 DOWNLOAD_HOSTS = {'download.windowsupdate.com', 'catalog.s.download.windowsupdate.com',
-                  'download.microsoft.com'}
+                  'download.microsoft.com', 'catalog.sf.dl.delivery.mp.microsoft.com'}
 
 
 def safe_url(url, catalog=False):
