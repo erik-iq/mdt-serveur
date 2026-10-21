@@ -44,7 +44,9 @@ if (@($task.Actions).Count -ne 1 -or $task.Actions[0].Arguments -notlike ('*"'+$
     throw 'La tache ne correspond pas a cette console. Aucun processus arrete.'
 }
 Get-AtelierCandidateMount | Out-Null
-$active=Get-AtelierCandidateDism
+# CIM can return a single scalar without a usable Count property in PS 5.1.
+# Count the collection, not a property on the native process object.
+$active=@(Get-AtelierCandidateDism)
 if ($task.State -eq 'Running' -and -not $active.Count) {
     throw 'Aucun DISM actif ne correspond a cette execution. Relire le journal pour identifier l execution courante avant de l annuler.'
 }

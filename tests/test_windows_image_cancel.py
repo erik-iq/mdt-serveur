@@ -12,7 +12,7 @@ PWSH = os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark = pytest.mark.skipif(not PWSH, reason='PowerShell required')
 
 
-@pytest.mark.parametrize('case', ['success', 'already_stopped', 'discard_failure', 'foreign_mount',
+@pytest.mark.parametrize('case', ['success', 'single_cim', 'unquoted_cim', 'already_stopped', 'discard_failure', 'foreign_mount',
     'foreign_task', 'wrong_candidate', 'wrong_run', 'no_matching_dism', 'ready_candidate', 'pid_reused', 'lock_busy'])
 def test_cancel_protects_production_and_targets_only_candidate(tmp_path, case):
     scripts = tmp_path / 'scripts'
@@ -58,6 +58,9 @@ function Stop-ScheduledTask { [CmdletBinding()]param($TaskName);$global:cancelSt
 function Get-CimInstance {
  [CmdletBinding()]param($ClassName,$Filter)
  $process=[pscustomobject]@{ProcessId=701;CreationDate='original';CommandLine='dism.exe /Unmount-Image /MountDir:"MOUNT" /Commit'}
+ # PS 5.1 CIM adapters do not expose the scalar .Count used by PSCustomObject.
+ if ('CASE' -in @('single_cim','unquoted_cim')) { $process | Add-Member NoteProperty Count $null }
+ if ('CASE' -eq 'unquoted_cim') { $process.CommandLine=$process.CommandLine.Replace('"MOUNT"','MOUNT') }
  if ($Filter -like 'ProcessId=*') {
   if ('CASE' -eq 'pid_reused') { $process.CreationDate='new owner';$process.CommandLine='unrelated command' }
   return $process
@@ -91,15 +94,15 @@ finally { if ($lock) { $lock.Dispose() } }
     result = subprocess.run([PWSH, '-NoProfile', '-File', str(wrapper)], capture_output=True, text=True, timeout=45)
     assert result.returncode == 0, result.stdout + result.stderr
     state = json.loads(result.stdout.splitlines()[-1])
-    assert state['failed'] == (case not in {'success', 'already_stopped'}), state
+    assert state['failed'] == (case not in {'success', 'single_cim', 'unquoted_cim', 'already_stopped'}), state
     assert source.read_bytes() == backup.read_bytes() == b'production unchanged'
     assert candidate.read_bytes() == b'disposable candidate'
     assert 702 not in state['killed']
     if case in {'foreign_mount', 'foreign_task', 'wrong_candidate', 'wrong_run', 'no_matching_dism', 'ready_candidate'}:
         assert not state['disabled'] and not state['stopped'] and not state['killed'] and not state['unmounted']
-    if case in {'success', 'discard_failure'}:
+    if case in {'success', 'single_cim', 'unquoted_cim', 'discard_failure'}:
         assert state['disabled'] and state['stopped'] and state['killed'] == [701]
-    if case in {'success', 'already_stopped'}:
+    if case in {'success', 'single_cim', 'unquoted_cim', 'already_stopped'}:
         assert state['unmounted']
         assert json.loads((run / 'report.json').read_text())['status'] == 'cancelled'
     elif case in {'discard_failure', 'pid_reused'}:
