@@ -10,7 +10,7 @@ Mettre la console a jour avec les sources IQ-5.4 et `Update-Console.ps1`. Cette 
 & 'C:\AtelierPXE\console\scripts\Enable-WindowsImageMaintenance.ps1' -RunNow
 ```
 
-La tache `AtelierPXE-WindowsImageMaintenance` demarre en arriere-plan. Elle prepare ensuite les images le **15 de chaque mois a 02:00, heure locale du serveur** (apres le deuxieme mardi du mois). Elle reprend a la prochaine disponibilite du serveur s il etait arrete. Une seconde execution est ignoree lorsqu une preparation fonctionne deja. Ne pas arreter de force la tache, redemarrer .250 ou demonter manuellement un WIM pendant DISM.
+La tache `AtelierPXE-WindowsImageMaintenance` demarre en arriere-plan. Elle prepare ensuite les images le **15 de chaque mois a 02:00, heure locale du serveur** (apres le deuxieme mardi du mois). Elle reprend a la prochaine disponibilite du serveur s il etait arrete. Une seconde execution est ignoree lorsqu une preparation fonctionne deja. Pour conserver le travail en cours, laisser DISM terminer. Pour abandonner volontairement la copie candidate, utiliser la procedure d annulation ci-dessous ; ne pas tuer tous les processus DISM, redemarrer .250 ou supprimer un dossier encore monte.
 
 Si une premiere installation affiche `0x80041318` et `LogonType:ServiceAccount`, la tache n a pas ete creee et la maintenance n a pas demarre. Utiliser le script corrige puis relancer la meme commande `-RunNow` ; aucune reconstruction WinPE n est necessaire. Le compte SYSTEM est declare par son SID `S-1-5-18`, sans element XML LogonType. Un echec de creation ou de demarrage arrete le script sans annoncer une planification reussie.
 
@@ -22,7 +22,24 @@ Pour preparer manuellement, sans nouvelle planification :
 
 Par defaut tous les WIM references par les profils de production sont prepares. `-AssetId 'identifiant-du-fichier'` limite une execution manuelle a une image. **Seuls Windows Famille (EditionId Core) et Windows Pro (EditionId Professional) sont maintenus.** Les numeros d index sont detectes dans le WIM : ils ne sont pas supposes etre 1 et 6. Les editions N, Single Language, Education et Pro for Workstations sont ignorees. Elles restent dans le fichier, avec leur numerotation initiale, sans integration de correctifs. Le rapport indique selected_indexes, skipped_indexes et les index effectivement termines. Un WIM sans Famille ni Pro est refuse. La sauvegarde et la copie restent celles du WIM complet ; seuls deux index au maximum dans un WIM standard sont montes et mis a jour, ce qui evite les integrations inutiles. Ce travail ne se repete pas sur chaque poste deploye.
 
-Cette restriction s applique aux nouvelles executions. Une tache deja lancee a charge l ancien code et continue son traitement ; remplacer le fichier sur disque ne change pas cette execution. Ne pas arreter DISM pendant une integration ou une validation du WIM. La derniere transcription maintenance-*.log indique l index et la KB en cours ; le journal dism-index-N.log.console.log du meme dossier runs donne la sortie DISM. Les profils utilisant une edition ignoree ne peuvent pas etre publies comme mis a jour : la verification des index prepares reste obligatoire.
+Cette restriction s applique aux nouvelles executions. Une tache deja lancee a charge l ancien code et continue son traitement ; remplacer le fichier sur disque ne change pas cette execution. La derniere transcription maintenance-*.log indique l index et la KB en cours ; le journal dism-index-N.log.console.log du meme dossier runs contient sa sortie DISM une fois la commande terminee. Les profils utilisant une edition ignoree ne peuvent pas etre publies comme mis a jour : la verification des index prepares reste obligatoire.
+
+## Annuler une preparation trop longue
+
+L annulation abandonne la copie candidate, y compris les editions deja traitees dans cette copie. L image originale utilisee par PXE, sa sauvegarde, les correctifs en cache et les journaux restent conserves. Ce n est pas une reprise de la preparation ; aucune image annulee ne peut etre enregistree pour test ou publiee.
+
+Si une fenetre PowerShell attend la fin de la maintenance pour lancer une mise a jour de la console, interrompre d abord cette attente avec Ctrl+C dans cette fenetre. Dans une autre fenetre PowerShell administrateur sur .250, utiliser le RunId du journal :
+
+```powershell
+& 'C:\AtelierPXE\console\scripts\Stop-WindowsImageMaintenance.ps1' `
+    -InstallPath 'C:\AtelierPXE\console' -RunId '20261021-103851-f52d8739'
+```
+
+Le script verifie le rapport, la tache et l appartenance du montage au candidate.wim prive. Il desactive les prochains declenchements, arrete la tache puis uniquement les DISM dont les arguments correspondent exactement a cette copie. Il ne tue pas les WimServ ou les DISM etrangers. Il demande ensuite le demontage avec abandon des changements, verifie la disparition du montage et la liberation du candidat, et marque le rapport cancelled. Le temps de liberation du montage depend de Windows ; il ne peut pas etre garanti instantane. Aucun fichier WIM ni dossier de montage n est supprime par cet outil.
+
+Un echec de recuperation laisse le rapport cancelled_cleanup_required et tous les fichiers conserves. Ne pas lancer une nouvelle preparation ou mise a jour de console avant resolution. Si la tache active ne correspond plus au RunId indique, le script refuse l arret : relire la transcription plutot que reutiliser un ancien PID.
+
+Apres le message Maintenance annulee et montage libere, la mise a jour de la console et la reconstruction WinPE peuvent reprendre. La maintenance WIM reste en pause. Quand l operateur souhaite la reactiver, `Enable-WindowsImageMaintenance.ps1` sans RunNow retablit la planification ; ajouter RunNow lance une nouvelle preparation Famille/Pro avec les scripts recents.
 
 ## Sauvegardes et correctifs
 

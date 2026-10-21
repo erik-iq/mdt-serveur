@@ -129,5 +129,19 @@ def test_tampered_candidate_never_registers_and_missing_database_is_not_created(
     assert not (tmp_path / 'missing' / 'deployment.sqlite3').exists()
 
 
+@pytest.mark.parametrize('status', ['cancelled', 'cancelled_cleanup_required'])
+def test_cancelled_preparations_never_create_test_profiles_or_replace_production(automatic, status):
+    _, data, pro, _ = automatic
+    path = candidate(data, pro['asset_id'])
+    report = json.loads(path.read_text())
+    report['status'] = status
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match='non prete'):
+        workflow.register_test(data, path)
+    with workflow.database(data) as con:
+        assert con.execute('SELECT COUNT(*) FROM windows_image_candidates').fetchone()[0] == 0
+        assert con.execute('SELECT asset_id FROM profiles WHERE id=?', (pro['id'],)).fetchone()[0] == pro['asset_id']
+
+
 # Helper name must not be collected as a test.
 test_job.__test__ = False
