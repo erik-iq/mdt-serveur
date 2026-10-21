@@ -88,7 +88,14 @@ function New-AtelierServicedWindowsImage {
         if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'Le WIM source a change depuis son enregistrement. Ne pas maintenir un fichier modifie.' }
         $summaries=@(Get-WindowsImage -ImagePath $source)
         if (-not $summaries.Count) { throw 'Aucun index Windows dans le WIM.' }
-        $indexes=@($summaries | ForEach-Object { Get-WindowsImage -ImagePath $source -Index $_.ImageIndex })
+        $allIndexes=@($summaries | ForEach-Object { Get-WindowsImage -ImagePath $source -Index $_.ImageIndex })
+        # Match Windows edition IDs, not translated names or unstable WIM positions.
+        # N, Single Language, Education and Workstations are separate editions.
+        $indexes=@($allIndexes | Where-Object { $_.EditionId -in @('Core','Professional') })
+        $skipped=@($allIndexes | Where-Object { $_.EditionId -notin @('Core','Professional') })
+        if (-not $indexes.Count) { throw 'Aucun index Windows Famille (Core) ou Pro (Professional) dans ce WIM.' }
+        Write-Host ('Maintenance limitee a Famille et Pro : '+$indexes.Count+' index sur '+$allIndexes.Count+'.')
+        foreach ($info in $skipped) { Write-Host ('Index ignore '+$info.ImageIndex+' : '+$info.ImageName+' ('+$info.EditionId+').') }
         if (@($indexes | Where-Object { [int]$_.Architecture -notin @(9,12) }).Count) { throw 'Seules les images Windows x64 ou ARM64 sont prises en charge.' }
         $maxBuild=($indexes | ForEach-Object { ([version]$_.Version).Build } | Measure-Object -Maximum).Maximum
         $dism=Get-AtelierServicingDism -Build $maxBuild
@@ -112,7 +119,7 @@ function New-AtelierServicedWindowsImage {
         $run=Join-Path (Join-Path $root 'runs') $id
         New-Item -ItemType Directory -Path $run -Force | Out-Null
         $candidate=Join-Path $run 'candidate.wim';$mount=Join-Path $run 'mount'
-        $report=[ordered]@{schema=1;run_id=$id;status='preparing';source_asset_id=$SourceAssetId;source_path=$source;source_sha256=$actual;backup_path=$backup;candidate_path=$candidate;started_at=[DateTime]::UtcNow.ToString('o');indexes=@();error=$null}
+        $report=[ordered]@{schema=1;run_id=$id;status='preparing';source_asset_id=$SourceAssetId;source_path=$source;source_sha256=$actual;backup_path=$backup;candidate_path=$candidate;started_at=[DateTime]::UtcNow.ToString('o');selected_indexes=@($indexes | ForEach-Object { @{index=[int]$_.ImageIndex;edition=[string]$_.EditionId;name=[string]$_.ImageName} });skipped_indexes=@($skipped | ForEach-Object { @{index=[int]$_.ImageIndex;edition=[string]$_.EditionId;name=[string]$_.ImageName} });indexes=@();error=$null}
         Write-AtelierServicingJson $report (Join-Path $run 'report.json')
         Copy-Item -LiteralPath $backup -Destination $candidate
         (Get-Item -LiteralPath $candidate).IsReadOnly=$false
@@ -173,7 +180,7 @@ function New-AtelierServicedWindowsImage {
             Write-AtelierServicingJson $report (Join-Path $run 'report.json')
         }
         # Read back the committed WIM. Source and its recorded hash stay intact.
-        if (@(Get-WindowsImage -ImagePath $candidate).Count -ne $indexes.Count) { throw 'Le WIM final ne contient plus tous ses index.' }
+        if (@(Get-WindowsImage -ImagePath $candidate).Count -ne $allIndexes.Count) { throw 'Le WIM final ne contient plus tous ses index.' }
         $report['candidate_sha256']=(Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
         $report['finished_at']=[DateTime]::UtcNow.ToString('o')
         $report.status='ready_for_test'

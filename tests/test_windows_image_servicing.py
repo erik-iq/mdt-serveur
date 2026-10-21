@@ -13,7 +13,7 @@ pytestmark = pytest.mark.skipif(not PWSH, reason='PowerShell required')
 
 
 @pytest.mark.parametrize('case', ['success', 'source_changed', 'backup_corrupt', 'locked', 'mount_failure',
-    'download_failure', 'package_tampered', 'package_failure', 'commit_failure', 'bad_package_state', 'discard_failure'])
+    'download_failure', 'package_tampered', 'package_failure', 'commit_failure', 'bad_package_state', 'discard_failure', 'no_target_edition'])
 def test_source_and_backup_protected_and_partial_candidates_never_ready(tmp_path, case):
     runtime = tmp_path / 'fake-python.ps1'
     runtime.write_text(r'''
@@ -34,8 +34,11 @@ $expected=(Get-FileHash $source -Algorithm SHA256).Hash
 $root='WORK/maintenance with spaces'
 $script:commands=New-Object Collections.Generic.List[string]
 function Get-WindowsImage { param($ImagePath,$Index)
- if ($Index) { return [pscustomobject]@{ImageIndex=$Index;ImageName='Windows';EditionId='Professional';Architecture=9;Version='10.0.26300.1'} }
- return @([pscustomobject]@{ImageIndex=1},[pscustomobject]@{ImageIndex=2})
+ if ($Index) {
+  $edition=if ('CASE' -eq 'no_target_edition') {'Education'} else {@('Core','CoreN','CoreSingleLanguage','Professional','ProfessionalN','Education')[$Index-1]}
+  return [pscustomobject]@{ImageIndex=$Index;ImageName=('Windows '+$edition);EditionId=$edition;Architecture=9;Version='10.0.26300.1'}
+ }
+ return @(1..6 | ForEach-Object { [pscustomobject]@{ImageIndex=$_} })
 }
 function Get-AtelierServicingDism { param($Build) return 'mock-dism' }
 function Get-PSDrive { param($Name) return $null }
@@ -76,13 +79,21 @@ $reports=@(Get-ChildItem $root -Recurse -Filter report.json | ForEach-Object { G
     assert 'updated' not in result['source']
     if case != 'source_changed':
         assert result['source'] == 'original immutable WIM fixture'
-    if case not in {'backup_corrupt', 'locked', 'source_changed'}:
+    if case not in {'backup_corrupt', 'locked', 'source_changed', 'no_target_edition'}:
         assert result['backups'] == ['original immutable WIM fixture']
     if case == 'success':
         assert result['reports'][0]['status'] == 'ready_for_test'
         assert len(result['reports'][0]['indexes']) == 2
+        assert [i['index'] for i in result['reports'][0]['indexes']] == [1, 4]
+        assert {i['edition'] for i in result['reports'][0]['selected_indexes']} == {'Core', 'Professional'}
+        assert {i['index'] for i in result['reports'][0]['skipped_indexes']} == {2, 3, 5, 6}
+        mounts = [c for c in result['commands'] if '/Mount-Image' in c]
+        assert len(mounts) == 2 and '/Index:1|' in mounts[0] and '/Index:4|' in mounts[1]
         assert result['candidates'] == 1
         assert all('/IgnoreCheck' not in command and '/Online' not in command for command in result['commands'])
+    elif case == 'no_target_edition':
+        assert 'Aucun index Windows Famille' in result['message']
+        assert not result['commands'] and not result['backups'] and not result['reports']
     elif result['reports']:
         assert result['reports'][0]['status'] == ('failed_cleanup_required' if case == 'discard_failure' else 'failed')
         assert result['candidates'] == (1 if case == 'discard_failure' else 0)

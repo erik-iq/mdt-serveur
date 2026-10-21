@@ -20,7 +20,9 @@ Pour preparer manuellement, sans nouvelle planification :
 & 'C:\AtelierPXE\console\scripts\Update-WindowsImage.ps1'
 ```
 
-Par defaut tous les WIM references par les profils de production sont prepares. `-AssetId 'identifiant-du-fichier'` limite une execution manuelle a une image. Chaque index du WIM est maintenu ; aucun index Pro/Famille ni langue n est retire. Une image avec beaucoup d index peut prendre plusieurs heures. Ce travail ne se repete pas sur chaque poste deploye.
+Par defaut tous les WIM references par les profils de production sont prepares. `-AssetId 'identifiant-du-fichier'` limite une execution manuelle a une image. **Seuls Windows Famille (EditionId Core) et Windows Pro (EditionId Professional) sont maintenus.** Les numeros d index sont detectes dans le WIM : ils ne sont pas supposes etre 1 et 6. Les editions N, Single Language, Education et Pro for Workstations sont ignorees. Elles restent dans le fichier, avec leur numerotation initiale, sans integration de correctifs. Le rapport indique selected_indexes, skipped_indexes et les index effectivement termines. Un WIM sans Famille ni Pro est refuse. La sauvegarde et la copie restent celles du WIM complet ; seuls deux index au maximum dans un WIM standard sont montes et mis a jour, ce qui evite les integrations inutiles. Ce travail ne se repete pas sur chaque poste deploye.
+
+Cette restriction s applique aux nouvelles executions. Une tache deja lancee a charge l ancien code et continue son traitement ; remplacer le fichier sur disque ne change pas cette execution. Ne pas arreter DISM pendant une integration ou une validation du WIM. La derniere transcription maintenance-*.log indique l index et la KB en cours ; le journal dism-index-N.log.console.log du meme dossier runs donne la sortie DISM. Les profils utilisant une edition ignoree ne peuvent pas etre publies comme mis a jour : la verification des index prepares reste obligatoire.
 
 ## Sauvegardes et correctifs
 
