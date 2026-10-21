@@ -117,7 +117,8 @@ def computer_routes(api,db,admin,windows_agent,now):
             total=con.execute('SELECT COUNT(*) FROM deployments WHERE machine_id=?',(identifier,)).fetchone()[0]
             history=[dict(r) for r in con.execute('''SELECT d.id,d.status,d.windows_status,d.windows_message,d.created_at,d.updated_at,d.selection_json,p.name AS profile_name,
                 EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report,
-                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory
+                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory,
+                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id AND i.kind='hp_summary') AS has_hp_summary
                 FROM deployments d JOIN profiles p ON p.id=d.profile_id WHERE d.machine_id=? ORDER BY d.created_at DESC,d.id LIMIT ? OFFSET ?''',(identifier,limit,offset))]
             for item in history:
                 item['hostname']=json.loads(item.pop('selection_json')).get('hostname',machine['hostname'])

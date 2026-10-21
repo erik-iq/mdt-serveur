@@ -51,6 +51,20 @@ La premiere machine peut utiliser directement HP si le cache serveur n est pas e
 
 Cette correction doit etre mise a jour sur .250 et integree a un nouveau WinPE pour les prochains deploiements. Une mise a jour du serveur seule ne relance pas HPIA sur un Windows deja termine dont le payload a ete nettoye. La validation physique finale n a pas ete executee depuis l environnement de developpement.
 
+## Installation automatique et page HP sur le site - IQ-5.4.3
+
+Le test physique du 21 octobre valide maintenant l installation silencieuse des onze SoftPaq recommandes sur le HP : neuf retours zero et deux retours 3010 (Intel Serial IO et HP Hotkey Support), avec redemarrage manuel demande. Le JSON HP confirme Analyze Action Install et les onze remediations INSTALL_COMPLETED. Ce test ne valide pas a lui seul le cache .250, un flash BIOS ni tout le materiel apres redemarrage.
+
+La preparation automatique conserve la commande validee apres le premier demarrage Windows, si HPIA est coche. Elle conserve les avertissements de version comme information et les vraies erreurs comme erreurs. Elle ne reactive ni Windows Update ni Microsoft Store. La chaine de reprise BIOS reste active.
+
+Apres HPIA, le plus recent Readme natif d installation est copie dans le dossier propre au deploiement, sous le nom Rapport-Installation-HP.html, et dans `C:\IQ_\Rapports\Rapport-Installation-HP.html`. La page d analyse avant installation ne peut pas remplacer ce bilan. Les rapports des anciens passages restent conserves. Les tests autonomes conservent leur copie dans leur propre dossier et ne remplacent pas le bilan du deploiement.
+
+Les noms HP comme Readme (20261021 152514).html sont maintenant acceptes dans le ZIP ; l ancien filtre excluait les parentheses. .250 conserve Rapports-HP.zip et extrait une copie du bilan dans `<data_dir>\inventaires\NOM-PC\IDENTIFIANT\Rapport-Installation-HP.html`. Les autorisations sont les memes que pour les inventaires et le PDF. Le bouton Rapport HP (HTML) telecharge la page dans l activite de deploiement et dans la fiche ordinateur. Le HTML recu du poste reste une piece jointe ; il n est pas execute dans l origine de la console.
+
+La reponse serveur contient l empreinte de cette page, verifiee par le poste avant l enregistrement de l accuse de reception. Le nettoyage final verifie encore la presence et les empreintes du ZIP et du HTML sur .250. Un serveur indisponible ou un rapport non confirme conserve les fichiers locaux pour une nouvelle transmission. Un HPIA qui ne produit aucun bilan d installation ne recoit pas un faux rapport de succes.
+
+Mettre la console a jour puis reconstruire et importer WinPE IQ-5.4.3 sur .250 avant le prochain deploiement. Une mise a jour du serveur seule ne remplace pas les scripts embarques dans un ancien boot.wim. Attendre la fin de la maintenance WIM en cours avant de lancer cette mise a niveau.
+
 ## Retest HPIA sans redeployer Windows - IQ-5.4.2
 
 Les rapports du 21 octobre montrent que la reprise SPList a bien fonctionne, mais que les deux commandes avec AutoReport se sont terminees comme Analyze Action List, sans resultat de remediation pour les onze recommandations. Ignorer 4104 ne suffit donc pas. La nouvelle commande retire AutoReport du passage d installation, selectionne explicitement InstallType:AutoInstallable et conserve Action:Install et IgnoreGenericOsError. Ce changement doit encore etre valide avec le vrai executable HP ; les simulations ne prouvent pas le comportement de sa version 5.3.6 sur ce poste.

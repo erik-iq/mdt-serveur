@@ -54,6 +54,8 @@ L outil de tests utilise le navigateur local : images webcam et son ne sont pas 
 
 Pour retester seulement HPIA sur un HP deja installe, utiliser Constructeur/Tester-HPIA.cmd (IQ-5.4.2). Le test silencieux fonctionne sous SYSTEM, reprend apres un redemarrage BIOS et conserve ses rapports dans Rapports/HPImageAssistant/Tests. Il utilise HP Internet, sans reutiliser les identifiants d un ancien deploiement. Consulter [la validation de deploiement](VALIDATION-DEPLOIEMENT.md).
 
+Depuis IQ-5.4.3, le bilan HTML natif de l installation HPIA est conserve sous un nom simple : `C:\IQ_\Rapports\Rapport-Installation-HP.html`. Double-cliquer pour lire la liste des SoftPaq, leurs versions et leurs resultats. Le site propose **Rapport HP (HTML)** dans l activite de deploiement et dans l historique de la fiche ordinateur. Le meme fichier et Rapports-HP.zip sont aussi disponibles dans Dossier inventaire. Le rapport HTML est telecharge comme un fichier, puis ouvert localement dans le navigateur. Les rapports de tous les passages, notamment avant et apres un redemarrage BIOS, restent dans le ZIP.
+
 ## Mises a jour et lenteur
 
 La maintenance mensuelle des images Windows peut integrer les correctifs avant deploiement, sur une copie du WIM sur .250. L administrateur doit tester cette image puis la publier. Les profils TEST ne sont jamais choisis automatiquement ; ne les selectionner que pour une validation. Consulter [la procedure de maintenance](MAINTENANCE-IMAGES-WINDOWS.md).

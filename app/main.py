@@ -388,7 +388,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4.2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4.3"}
 
     @api.get('/api/session')
     def session_options():
@@ -412,7 +412,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,m.serial_number,p.name AS profile_name,
                 d.windows_status,d.windows_progress,d.windows_message,d.windows_updated_at,
                 EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report,
-                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory
+                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory,
+                EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id AND i.kind='hp_summary') AS has_hp_summary
                 FROM deployments d JOIN machines m ON m.id=d.machine_id JOIN profiles p ON p.id=d.profile_id
                 ORDER BY d.created_at DESC LIMIT 100""")]
             for item in result['deployments']:

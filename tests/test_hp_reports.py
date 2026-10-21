@@ -86,14 +86,70 @@ def test_partial_native_reports_are_preserved_as_evidence_without_being_parsed(s
     assert response.status_code==200,response.text
 
 
+@pytest.mark.parametrize('canonical',[False,True])
+def test_installation_page_round_trip_is_an_authenticated_attachment_and_visible_on_computer(system,canonical):
+    client,data,job,headers=setup_reporter(system)
+    stream=io.BytesIO()
+    with zipfile.ZipFile(stream,'w') as z:
+        z.writestr('hpia-result.json','{"status":"completed","exit_code":3010}')
+        z.writestr('Passage-01/Installation/HP Model.html','<html>Pre-install analysis</html>')
+        z.writestr('Passage-01/Installation/Readme (20261021 152514).html','<html>First installation</html>')
+        z.writestr('Passage-02/Installation/Readme (20261021 153000).html','<html>Second installation</html>')
+        if canonical:z.writestr('Rapport-Installation-HP.html','<html>Canonical installation</html>')
+    payload=stream.getvalue()
+    expected=b'<html>Canonical installation</html>' if canonical else b'<html>Second installation</html>'
+    sent=client.post('/api/windows/'+job['id']+'/inventory/hp_reports',headers=headers,content=payload)
+    assert sent.status_code==200,sent.text
+    assert sent.json()['hp_summary']['sha256']==hashlib.sha256(expected).hexdigest()
+    folder=client.get('/api/deployments/'+job['id']+'/inventory',headers=auth()).json()
+    summary=next(f for f in folder['files'] if f['kind']=='hp_summary')
+    assert summary['filename']=='Rapport-Installation-HP.html'
+    assert (Path(folder['server_directory'])/summary['filename']).read_bytes()==expected
+    assert client.get(summary['url']).status_code==401
+    response=client.get(summary['url'],headers=auth())
+    assert response.content==expected and response.headers['content-type']=='application/octet-stream'
+    assert response.headers['content-disposition'].startswith('attachment;')
+    assert response.headers['x-content-type-options']=='nosniff'
+    state=client.get('/api/state',headers=auth()).json()
+    deployment=next(d for d in state['deployments'] if d['id']==job['id'])
+    assert deployment['has_hp_summary']
+    details=client.get('/api/machines/'+deployment['machine_id']+'/details',headers=auth()).json()
+    assert details['deployments'][0]['has_hp_summary']
+    assert client.post('/api/windows/'+job['id']+'/inventory/hp_summary',headers=headers,content=expected).status_code==404
+    replaced=client.post('/api/windows/'+job['id']+'/inventory/hp_reports',headers=headers,content=hp_archive())
+    assert replaced.status_code==200 and replaced.json()['hp_summary'] is None
+    assert client.get(summary['url'],headers=auth()).status_code==404
+    assert not (Path(folder['server_directory'])/summary['filename']).exists()
+
+
+def test_cleanup_waits_for_the_native_html_copy_as_well_as_the_archive(system):
+    client,data,job,headers=setup_reporter(system);route='/api/windows/'+job['id']
+    report=client.post(route+'/report',headers=headers,json=snapshot()).json()
+    proof={'report':report['sha256']}
+    bodies={'xml':b'<InventaireOrdinateur ordinateur="PC-LAB-01"/>','csv':b'Ordinateur;Categorie;Propriete;Valeur\nPC-LAB-01;CPU;Name;Fixture\n','diagnostics':diagnostics_archive(),
+            'hp_reports':hp_archive(('Rapport-Installation-HP.html','<html>Installed HP drivers</html>'))}
+    for kind,body in bodies.items():
+        response=client.post(route+'/inventory/'+kind,headers=headers,content=body)
+        assert response.status_code==200,response.text
+        proof[kind]=response.json()['sha256']
+    assert client.post(route+'/cleanup-ready',headers=headers,json=proof).status_code==200
+    folder=client.get('/api/deployments/'+job['id']+'/inventory',headers=auth()).json()
+    page=Path(folder['server_directory'])/'Rapport-Installation-HP.html'
+    page.write_text('Modified report')
+    assert client.post(route+'/cleanup-ready',headers=headers,json=proof).status_code==409
+    assert client.get(route.replace('/windows/','/deployments/')+'/inventory/hp_summary',headers=auth()).status_code==409
+
+
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('case',['success','bad_receipt','outside','symlink','not_run'])
+@pytest.mark.parametrize('case',['success','bad_receipt','bad_summary_receipt','outside','symlink','not_run'])
 def test_real_report_packaging_is_deterministic_redacts_tokens_and_validates_receipt(tmp_path,case):
     data=tmp_path/'data';data.mkdir();identifier=str(uuid.uuid4())
     iq=tmp_path/'IQ_';reports=iq/'Rapports'/'HPImageAssistant'/identifier
     (reports/'Installation').mkdir(parents=True)
     (reports/'Installation'/'native.log').write_text('HP detail private-fixture-report-token')
     (reports/'Installation'/'native.xml').write_text('<?xml version="1.0" encoding="utf-16"?><Report>Fixture</Report>',encoding='utf-16')
+    (reports/'Installation'/'Readme (20261021 152514).html').write_text('<html>Native installation summary</html>')
+    (reports/'Rapport-Installation-HP.html').write_text('<html>Canonical private-fixture-report-token</html>')
     (reports/'Installation'/'reporting.json').write_text('{"token":"must-not-be-in-zip"}')
     if case=='symlink':(reports/'linked').symlink_to(data,target_is_directory=True)
     if case!='not_run':(data/'hpia-result.json').write_text(json.dumps({'status':'completed','report_directory':str(tmp_path if case=='outside' else reports)}))
@@ -107,7 +163,9 @@ function Invoke-RestMethod {
  Add-Content 'ROOT/calls' 'upload'
  Copy-Item -LiteralPath $InFile -Destination 'ROOT/sent.zip' -Force
  $hash=(Get-FileHash $InFile -Algorithm SHA256).Hash.ToLowerInvariant()
- @{accepted=$true;deployment_id='ID';sha256=$(if('CASE' -eq 'bad_receipt'){'0'*64}else{$hash})}
+ $algorithm=[Security.Cryptography.SHA256]::Create()
+ try{$summaryHash=([BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes('<html>Canonical [REDACTED]</html>')))).Replace('-','').ToLowerInvariant()}finally{$algorithm.Dispose()}
+ @{accepted=$true;deployment_id='ID';sha256=$(if('CASE' -eq 'bad_receipt'){'0'*64}else{$hash});hp_summary=@{sha256=$(if('CASE' -eq 'bad_summary_receipt'){'0'*64}else{$summaryHash})}}
 }
 $config=@{id='ID';token='private-fixture-report-token';server_url='https://atelier.test'}
 try {
@@ -130,6 +188,8 @@ try {
                 assert b'[REDACTED]' in z.read('Installation/native.log')
                 assert 'Installation/reporting.json' not in z.namelist()
                 assert b'encoding="utf-8"' in z.read('Installation/native.xml')
+                assert 'Installation/Readme (20261021 152514).html' in z.namelist()
+                assert z.read('Rapport-Installation-HP.html')==b'<html>Canonical [REDACTED]</html>'
     else:
         assert outcome['status']=='failed',outcome
         assert not (data/'hp-reports-sent.json').exists()

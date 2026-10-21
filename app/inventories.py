@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 MAX_INVENTORY = 32 * 1024 * 1024
 MAX_DIAGNOSTICS = 8 * 1024 * 1024
 DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
+HP_SUMMARY = 'Rapport-Installation-HP.html'
+INVENTORY_FILENAMES = {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip','hp_summary':HP_SUMMARY}
 
 
 class CleanupProof(BaseModel):
@@ -35,7 +37,7 @@ def validate_hp_reports(payload):
             if not 1<=len(entries)<=1024 or sum(e.file_size for e in entries)>128*1024*1024:raise ValueError('Limite rapports HP')
             for entry in entries:
                 name=entry.filename
-                if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. /-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entree HP invalide')
+                if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entree HP invalide')
                 if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privee refusee')
                 names.add(name.casefold());content=archive.read(entry).decode('utf-8-sig')
                 if name.lower()=='hpia-result.json':json.loads(content)
@@ -46,6 +48,23 @@ def validate_hp_reports(payload):
             if 'hpia-result.json' not in names:raise ValueError('Resultat HP absent')
     except (ValueError,UnicodeError,ET.ParseError,zipfile.BadZipFile,RuntimeError,NotImplementedError) as exc:
         raise HTTPException(422,'Archive des rapports HP invalide') from exc
+
+
+def hp_installation_summary(payload):
+    """Select the canonical page or a native Readme from an already validated ZIP.
+
+    Return bytes only. This client HTML is never executed or served inline on
+    the console origin; it remains an authenticated downloadable attachment.
+    """
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        names=archive.namelist()
+        canonical=next((n for n in names if n.casefold()==HP_SUMMARY.casefold()),None)
+        if canonical:return archive.read(canonical)
+        native=[n for n in names if re.fullmatch(r'Readme(?: \([0-9]{8} [0-9]{6}\))?\.html',n.rsplit('/',1)[-1],re.I)]
+        def order(name):
+            passage=re.search(r'(?:^|/)Passage-([0-9]+)(?:/|$)',name,re.I)
+            return (int(passage[1]) if passage else 0,name.casefold())
+        return archive.read(max(native,key=order)) if native else None
 
 
 def validate_diagnostics(payload):
@@ -99,7 +118,7 @@ class Inventories:
     def describe(self, con, identifier):
         files = [dict(r) for r in con.execute('SELECT kind,size,sha256 FROM inventory_files WHERE deployment_id=? ORDER BY kind', (identifier,))]
         for item in files:
-            item['filename'] = {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip'}.get(item['kind'],'Inventaire-Technique.' + item['kind'])
+            item['filename'] = INVENTORY_FILENAMES.get(item['kind'],'Inventaire-Technique.' + item['kind'])
             item['url'] = f"/api/deployments/{identifier}/inventory/{item['kind']}"
         return {'deployment_id': identifier, 'files': files}
 
@@ -124,6 +143,7 @@ class Inventories:
                 raise HTTPException(413, 'Inventaire vide ou trop volumineux')
             if kind=='diagnostics':validate_diagnostics(payload)
             if kind=='hp_reports':validate_hp_reports(payload)
+            summary=hp_installation_summary(payload) if kind=='hp_reports' else None
             try:
                 text = '' if kind in {'diagnostics','hp_reports'} else payload.decode('utf-8-sig')
                 if kind == 'xml':
@@ -143,18 +163,31 @@ class Inventories:
                 raise HTTPException(422, 'Inventaire invalide : ' + str(exc)[:150]) from exc
             folder = self.checked(self.folder(hostname, identifier))
             folder.mkdir(parents=True, exist_ok=True)
-            destination = self.checked(folder / {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip'}.get(kind,'Inventaire-Technique.' + kind))
+            destination = self.checked(folder / INVENTORY_FILENAMES.get(kind,'Inventaire-Technique.' + kind))
             temporary = folder / (uuid.uuid4().hex + '.tmp')
+            summary_path=self.checked(folder/HP_SUMMARY)
+            summary_temporary=folder/(uuid.uuid4().hex+'.tmp')
             try:
                 temporary.write_bytes(payload)
+                if summary is not None:summary_temporary.write_bytes(summary)
                 with self.db(write=True) as con:
                     windows_agent(con, identifier, authorization)
                     os.replace(temporary, destination)
                     con.execute('INSERT OR REPLACE INTO inventory_files VALUES (?,?,?,?,?)',
                                 (identifier, kind, str(destination.relative_to(self.root)), hashlib.sha256(payload).hexdigest(), len(payload)))
+                    if kind=='hp_reports':
+                        if summary is not None:
+                            os.replace(summary_temporary,summary_path)
+                            con.execute('INSERT OR REPLACE INTO inventory_files VALUES (?,?,?,?,?)',
+                                (identifier,'hp_summary',str(summary_path.relative_to(self.root)),hashlib.sha256(summary).hexdigest(),len(summary)))
+                        else:
+                            con.execute("DELETE FROM inventory_files WHERE deployment_id=? AND kind='hp_summary'",(identifier,))
+                            summary_path.unlink(missing_ok=True)
             finally:
                 temporary.unlink(missing_ok=True)
-            return {'accepted': True, 'filename': destination.name,'sha256':hashlib.sha256(payload).hexdigest(),'deployment_id':identifier}
+                summary_temporary.unlink(missing_ok=True)
+            return {'accepted': True, 'filename': destination.name,'sha256':hashlib.sha256(payload).hexdigest(),'deployment_id':identifier,
+                    'hp_summary':{'filename':HP_SUMMARY,'sha256':hashlib.sha256(summary).hexdigest(),'size':len(summary)} if summary is not None else None}
 
         @api.post('/api/windows/{identifier}/cleanup-ready')
         def cleanup_ready(identifier:str,body:CleanupProof,authorization:str=Header(default='')):
@@ -174,6 +207,13 @@ class Inventories:
                     if not record or record['sha256']!=proof[kind]:raise HTTPException(409,'Transmission incomplete ou obsolete')
                     path=self.checked(self.root/record['relative_path'])
                     if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=proof[kind]:raise HTTPException(409,'Archive serveur absente ou modifiee')
+                    if kind=='hp_reports':
+                        summary=hp_installation_summary(path.read_bytes())
+                        if summary is not None:
+                            html=con.execute("SELECT * FROM inventory_files WHERE deployment_id=? AND kind='hp_summary'",(identifier,)).fetchone()
+                            if not html or html['sha256']!=hashlib.sha256(summary).hexdigest():raise HTTPException(409,'Rapport HTML HP pas encore confirme')
+                            html_path=self.checked(self.root/html['relative_path'])
+                            if not html_path.is_file() or hashlib.sha256(html_path.read_bytes()).hexdigest()!=html['sha256']:raise HTTPException(409,'Rapport HTML HP absent ou modifie')
             return {'accepted':True,'cleanup_allowed':True,'deployment_id':identifier,'hashes':proof}
 
         @api.get('/api/deployments/{identifier}/inventory', dependencies=[Depends(admin)])
@@ -193,6 +233,6 @@ class Inventories:
                 if not record:
                     raise HTTPException(404, 'Inventaire pas encore recu')
                 path = self.checked(self.root / record['relative_path'])
-                if not path.is_file() or path.stat().st_size != record['size']:
+                if not path.is_file() or path.stat().st_size != record['size'] or hashlib.sha256(path.read_bytes()).hexdigest()!=record['sha256']:
                     raise HTTPException(409, 'Fichier inventaire absent ou modifie')
             return FileResponse(path, media_type='application/octet-stream', filename=path.name)

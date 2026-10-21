@@ -36,6 +36,7 @@ second='Passage-02' in str(pathlib.Path.cwd())
 code=1603 if 'CASE'=='failure' else (3010 if 'CASE'=='bios' and not second else 0)
 item={'Name':'System BIOS' if 'CASE'=='bios' else 'HP Driver','Category':'BIOS' if 'CASE'=='bios' else 'Driver','SoftPaqID':'SP12345','Remediation':{'ReturnCode':code,'ReturnDescription':'Native fixture'}}
 pathlib.Path('HPIA.json').write_text(json.dumps({'HPIA':{'HPIAOperation':'Analyze Action Install','LastOperation':'EndInstall','Recommendations':[item]}}))
+pathlib.Path('Readme (20261021 152514).html').write_text('<html>Native installation summary</html>')
 '''.replace('CASE', case))
     exe.chmod(0o755)
     old = tmp_path / 'original deployment'
@@ -115,4 +116,5 @@ try {
     archive = tmp_path / 'IQ_/Rapports/HPImageAssistant/Tests' / (result['run_id'] + '.zip')
     with zipfile.ZipFile(archive) as z:
         assert 'hpia-result.json' in z.namelist()
+        assert 'Rapport-Installation-HP.html' in z.namelist()
         assert any(n.endswith('HPIA.json') for n in z.namelist())

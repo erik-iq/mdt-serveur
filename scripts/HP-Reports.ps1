@@ -15,7 +15,7 @@ function Send-AtelierHpReports {
         Assert-AtelierHpTree $root
         foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Recurse)) {
             $relative=$file.FullName.Substring($root.Length+1).Replace('\','/')
-            if ($relative -notmatch '^[A-Za-z0-9_. /-]+\.(json|xml|html|csv|log|txt)$') { continue }
+            if ($relative -notmatch '^[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)$') { continue }
             if ($file.Name -in @('reporting.json','personalization.json','data-runtime.json')) { continue }
             if ($file.Length -gt 16MB) { throw 'Un rapport HP depasse 16 Mo ; archive locale conservee.' }
             $content=[IO.File]::ReadAllText($file.FullName)
@@ -30,12 +30,16 @@ function Send-AtelierHpReports {
     $archive=Join-Path $DataPath 'hp-reports-upload.zip'
     $stream=[IO.File]::Open($archive,[IO.FileMode]::Create)
     $zip=New-Object IO.Compression.ZipArchive($stream,[IO.Compression.ZipArchiveMode]::Create)
-    $bytes=0L
+    $bytes=0L;$summaryHash=$null
     try {
         foreach ($file in @($files | Sort-Object name)) {
             $content=[string]$file.content
             if ($Config.token) { $content=$content.Replace([string]$Config.token,'[REDACTED]') }
             $encoded=[Text.Encoding]::UTF8.GetBytes($content);$bytes+=$encoded.Length
+            if ($file.name -eq 'Rapport-Installation-HP.html') {
+                $algorithm=[Security.Cryptography.SHA256]::Create()
+                try { $summaryHash=([BitConverter]::ToString($algorithm.ComputeHash($encoded))).Replace('-','').ToLowerInvariant() } finally { $algorithm.Dispose() }
+            }
             if ($encoded.Length -gt 16MB -or $bytes -gt 128MB) { throw 'Rapports HP trop volumineux ; nettoyage differe.' }
             $entry=$zip.CreateEntry($file.name,[IO.Compression.CompressionLevel]::Fastest)
             $entry.LastWriteTime=[DateTimeOffset]::new(1980,1,1,0,0,0,[TimeSpan]::Zero)
@@ -48,10 +52,11 @@ function Send-AtelierHpReports {
     $receipt=Join-Path $DataPath 'hp-reports-sent.json'
     if (Test-Path $receipt) {
         $saved=Get-Content $receipt -Encoding UTF8 -Raw | ConvertFrom-Json
-        if ($saved.deployment_id -eq $Config.id -and $saved.sha256 -eq $hash) { return $hash }
+        if ($saved.deployment_id -eq $Config.id -and $saved.sha256 -eq $hash -and (-not $summaryHash -or $saved.summary_sha256 -eq $summaryHash)) { return $hash }
     }
     $reply=Invoke-RestMethod -Uri ($Config.server_url+'/api/windows/'+$Config.id+'/inventory/hp_reports') -Method Post -Headers @{Authorization=('Bearer '+$Config.token)} -ContentType 'application/zip' -InFile $archive -TimeoutSec 60
     if (-not $reply.accepted -or $reply.deployment_id -ne $Config.id -or $reply.sha256 -ne $hash) { throw 'Rapports HP non confirmes par .250.' }
-    @{deployment_id=$Config.id;sha256=$hash;timestamp=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $receipt -Encoding UTF8
+    if ($summaryHash -and $reply.hp_summary.sha256 -ne $summaryHash) { throw 'Rapport HTML HP non confirme par .250 ; fichiers locaux conserves.' }
+    @{deployment_id=$Config.id;sha256=$hash;summary_sha256=$summaryHash;timestamp=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $receipt -Encoding UTF8
     return $hash
 }

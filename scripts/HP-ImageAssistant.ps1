@@ -206,11 +206,43 @@ function Read-AtelierHpiaAutoReport {
     } catch { }
 }
 
+function Export-AtelierHpiaInstallationReport {
+    param([string]$Directory,[string]$ToolsPath,[switch]$PublishLatest)
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) { return }
+    $root=[IO.Path]::GetFullPath($Directory).TrimEnd([char[]]'\/')
+    $cursor=Get-Item -LiteralPath $root -Force
+    while ($cursor) {
+        if ($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Dossier lie refuse pour le rapport HP.' }
+        $cursor=$cursor.Parent
+    }
+    # Keep the native installation summary, not the pre-install analysis HTML.
+    $source=Get-ChildItem -LiteralPath $root -Filter 'Readme*.html' -File -Recurse |
+        Where-Object { $_.Name -match '^Readme(?: \([0-9]{8} [0-9]{6}\))?\.html$' } |
+        Sort-Object LastWriteTimeUtc,FullName -Descending | Select-Object -First 1
+    if (-not $source) { return }
+    $cursor=$source
+    while ($cursor -and $cursor.FullName -ne $root) {
+        if ($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Rapport HP lie refuse.' }
+        $cursor=if ($cursor -is [IO.DirectoryInfo]) { $cursor.Parent } else { $cursor.Directory }
+    }
+    if ($source.Length -gt 16MB) { throw 'Rapport HTML HP trop volumineux.' }
+    $canonical=Join-Path $root 'Rapport-Installation-HP.html'
+    if ((Test-Path -LiteralPath $canonical) -and ((Get-Item -LiteralPath $canonical -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Copie du rapport HP liee refusee.' }
+    Copy-Item -LiteralPath $source.FullName -Destination $canonical -Force
+    if ($PublishLatest) {
+        $latest=Join-Path (Join-Path $ToolsPath 'Rapports') 'Rapport-Installation-HP.html'
+        New-Item -ItemType Directory -Path (Split-Path $latest -Parent) -Force | Out-Null
+        if ((Test-Path -LiteralPath $latest) -and ((Get-Item -LiteralPath $latest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Destination du rapport HP liee refusee.' }
+        Copy-Item -LiteralPath $canonical -Destination $latest -Force
+    }
+    return $canonical
+}
+
 function Invoke-AtelierHpia {
     param([string]$DataPath,[string]$ToolsPath='C:\IQ_',[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,10800)][int]$TimeoutSeconds=2700,[string]$ReportRoot)
     $resultPath=Join-Path $DataPath 'hpia-result.json'
     $process=$null;$timing=''
-    $result=@{status='needs_attention';message='Traitement HP non execute.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null;script_revision='IQ-5.4.2'}
+    $result=@{status='needs_attention';message='Traitement HP non execute.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null;script_revision='IQ-5.4.3'}
     try {
         $payload=$null;$allowResume=$false;$boot='';$resume=$false;$previous=$null
         $payloadPath=Join-Path $DataPath 'personalization.json'
@@ -380,6 +412,13 @@ function Invoke-AtelierHpia {
         }
     }
     $result.timestamp=[DateTime]::UtcNow.ToString('o')
+    # A timeout leaves HP running: never publish its partially written page.
+    if ($result.report_directory -and $null -ne $result.exit_code) {
+        try {
+            $html=Export-AtelierHpiaInstallationReport -Directory $result.report_directory -ToolsPath $ToolsPath -PublishLatest:(-not $ReportRoot)
+            if ($html) { $result.installation_report=$html }
+        } catch { $result.report_warning='Rapport HTML HP non prepare : '+$_.Exception.Message }
+    }
     Save-AtelierHpCheckpoint $resultPath $result
     return [pscustomobject]$result
 }

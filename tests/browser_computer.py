@@ -1,5 +1,6 @@
 """Exercise a computer sheet, notes, history and stage times in a real browser."""
 import json
+import io
 import os
 from pathlib import Path
 import shutil
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import time
 import uuid
+import zipfile
 from urllib.request import Request,urlopen
 from playwright.sync_api import expect,sync_playwright
 
@@ -41,10 +43,21 @@ def run():
             api('/windows/'+identifier+'/timings',{'measurements':[{'run_id':str(uuid.uuid4()),'source':'winpe','stage':'image','status':'completed','started_at':'2026-10-19T09:00:00Z','duration_seconds':125}]},reporter)
             report={'hostname':'PC-8323','status':'completed','generated_at':'2026-10-19T09:15:00Z','inventory':{'Constructeur':'HP','Modele':'EliteBook','Numero de serie':'SN8323','Windows':'Windows 11 Pro','Garantie constructeur':'active_confirmee_operateur','Garantie debut / fin':'2025-01-01 / 2028-01-01'},'steps':[{'name':'Test webcam','status':'passed','message':'Test operateur'}],'warnings':[]}
             api('/windows/'+identifier+'/report',report,reporter)
+            hp_html=b'<html><body>HP installation completed fixture</body></html>'
+            hp_zip=io.BytesIO()
+            with zipfile.ZipFile(hp_zip,'w') as z:
+                z.writestr('hpia-result.json','{"status":"completed"}')
+                z.writestr('Rapport-Installation-HP.html',hp_html)
+            with urlopen(Request(origin+'/api/windows/'+identifier+'/inventory/hp_reports',data=hp_zip.getvalue(),headers={'Authorization':'Bearer '+reporter,'Content-Type':'application/zip'})) as response:
+                assert response.status==200
             with sync_playwright() as p:
                 browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
                 page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectee')
+                with page.expect_download() as hp_download:
+                    page.locator('#deployments').get_by_role('button',name='Rapport HP (HTML)',exact=True).click()
+                assert hp_download.value.suggested_filename=='Rapport-Installation-HP.html'
+                assert Path(hp_download.value.path()).read_bytes()==hp_html
                 page.get_by_role('button',name='Fiche ordinateur',exact=True).click()
                 expect(page.locator('#computer-title')).to_have_text('PC-8323')
                 expect(page.locator('#computer-summary')).to_contain_text('SN8323')
@@ -52,6 +65,9 @@ def run():
                 expect(page.locator('#computer-history')).to_contain_text('2 min 5 s')
                 expect(page.locator('#computer-report')).to_contain_text('Test webcam')
                 expect(page.locator('#computer-report')).to_contain_text('2028-01-01')
+                with page.expect_download() as hp_download:
+                    page.locator('#computer-history').get_by_role('button',name='Rapport HP (HTML)',exact=True).click()
+                assert Path(hp_download.value.path()).read_bytes()==hp_html
                 page.get_by_label('Technicien (facultatif)').fill('Erik')
                 page.get_by_label('Observation',exact=True).fill('Ecran verifie <script>test</script>')
                 page.get_by_role('button',name='Ajouter l observation',exact=True).click()
