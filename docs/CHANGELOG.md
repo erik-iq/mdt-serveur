@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Test physique d’installation Windows Update, 22 octobre 2026
+
+- Lanceur USB distinct pour installer les mises à jour applicables, pilotes et firmwares compris, avec exclusion des changements de version.
+- Rappels COM valides pour le téléchargement et l’installation, checkpoints avant chaque mise à jour et conservation des résultats individuels.
+- Reprise SYSTEM au démarrage, nouvelles recherches après redémarrage et nombre de passes limité.
+- ZIP du bilan dans IQ et sur la clé lorsqu’elle est disponible. Aucun changement de la préparation en production.
+
 ## Correction du rappel COM du diagnostic Windows Update, 22 octobre 2026
 
 - Rappel de fin de recherche non nul, exposé en COM avec DISPID 0 et indépendant des runspaces PowerShell.
