@@ -153,7 +153,7 @@ def test_reduced_wim_remaps_indexes_and_keeps_other_editions_on_original_image(a
         con.execute('UPDATE profiles SET image_index=6 WHERE id=?', (pro['id'],))
         con.execute('UPDATE profiles SET image_index=1 WHERE id=?', (home['id'],))
     other = client.post('/api/profiles', json={'name':'Éducation conservée', 'asset_id':pro['asset_id'],
-        'image_index':3, 'edition':'Éducation'}).json()
+        'image_index':3, 'edition':'Education'}).json()
     path = candidate(data, pro['asset_id'])
     report = json.loads(path.read_text())
     report.update(schema=2, scope='home_pro', indexes=[{'source_index':1,'index':1}, {'source_index':6,'index':2}])

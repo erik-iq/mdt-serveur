@@ -38,7 +38,7 @@ def validate_hp_reports(payload):
             for entry in entries:
                 name=entry.filename
                 if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entrée HP invalide')
-                if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privee refusée')
+                if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privée refusée')
                 names.add(name.casefold());content=archive.read(entry).decode('utf-8-sig')
                 if name.lower()=='hpia-result.json':json.loads(content)
                 if name.lower().endswith('.xml'):

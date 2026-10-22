@@ -130,7 +130,7 @@ try {
     } while ((Get-Date) -lt $deadline)
     if (-not $updated) { throw 'La console 0.2.0 ne repond pas. Consultez data\logs\console.log et la sauvegarde.' }
     Write-Host ('Console 0.2.0 disponible : ' + $config.base_url) -ForegroundColor Green
-    Write-Host "Sauvegarde privee : $backup"
+    Write-Host "Sauvegarde privée : $backup"
     if ($softwareWasRunning) { Start-ScheduledTask -TaskName 'AtelierPXE-SoftwareSync' }
     if ($hpWasRunning) { Start-ScheduledTask -TaskName 'AtelierPXE-HpRepository' }
     Write-Host 'Pour les changements de scripts clients, reconstruire WinPE avec Upgrade-Atelier4.ps1. La maintenance WIM seule ne le nécessite pas.'

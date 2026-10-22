@@ -37,7 +37,7 @@ $script:commands=New-Object Collections.Generic.List[string]
 function Get-WindowsImage { param($ImagePath,$Index)
  $reduced=(Split-Path $ImagePath -Leaf) -eq 'candidate.wim'
  if ($Index) {
-  $edition=if ('CASE' -eq 'no_target_edition') {'Éducation'} elseif ($reduced) {@('Core','Professional')[$Index-1]} else {@('Core','CoreN','CoreSingleLanguage','Professional','ProfessionalN','Éducation')[$Index-1]}
+  $edition=if ('CASE' -eq 'no_target_edition') {'Education'} elseif ($reduced) {@('Core','Professional')[$Index-1]} else {@('Core','CoreN','CoreSingleLanguage','Professional','ProfessionalN','Education')[$Index-1]}
   if ($reduced -and 'CASE' -eq 'wrong_export_edition') { $edition='Education' }
   return [pscustomobject]@{ImageIndex=$Index;ImageName=('Windows '+$edition);EditionId=$edition;Architecture=9;Version='10.0.26300.1'}
  }

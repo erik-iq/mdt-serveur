@@ -40,3 +40,12 @@ def test_visible_french_and_windows_transport_keep_accents():
     for name in ('Prepare-IQTools.ps1', 'Finalization.ps1'):
         text = (ROOT / 'scripts' / name).read_text(encoding='utf-8-sig')
         assert "'Lisez-moi.txt') -Encoding ASCII" not in text
+
+
+def test_maintenance_display_text_is_accented_without_changing_markup():
+    text = (ROOT / 'app/static/maintenance.js').read_text(encoding='utf-8')
+    for phrase in ('Suivi actualisé', 'données privées', 'Comparé au passage',
+                   'CORRECTIFS INTÉGRÉS', 'durées détaillées', 'Déjà observé'):
+        assert phrase in text
+    assert '<details' in text and '<détails' not in text
+    assert 'rôle=' not in text

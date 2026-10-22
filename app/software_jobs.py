@@ -57,7 +57,7 @@ class SoftwareJobs:
                 pass
         self.key = key_file.read_text().strip()
         if len(self.key) < 24:
-            raise ValueError('Clé agent WinGet invalide : restaurer software-sync/worker-key depuis une sauvegarde privee')
+            raise ValueError('Clé agent WinGet invalide : restaurer software-sync/worker-key depuis une sauvegarde privée')
         with db(write=True) as con:
             con.executescript('''
                 CREATE TABLE IF NOT EXISTS software_jobs (

@@ -13,7 +13,7 @@ KEYBOARDS = [
     {'id': '040c:0000040c', 'name': 'Français - AZERTY'},
     {'id': '080c:0000080c', 'name': 'Français - Belgique'},
     {'id': '100c:0000100c', 'name': 'Français - Suisse'},
-    {'id': '0409:00000409', 'name': 'Anglais - Etats-Unis'},
+    {'id': '0409:00000409', 'name': 'Anglais - États-Unis'},
     {'id': '0809:00000809', 'name': 'Anglais - Royaume-Uni'},
     {'id': '0407:00000407', 'name': 'Allemand - Allemagne'},
 ]
