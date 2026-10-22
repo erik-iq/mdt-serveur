@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Diagnostic Windows Update sur poste existant, 22 octobre 2026
+
+- Kit USB lancé par double-clic, sans nouveau déploiement ni PowerShell à saisir sur le poste.
+- Recherche WUA sous SYSTEM, liste des logiciels, pilotes et éléments facultatifs, comparaison avec les anciens filtres et délai de cinq minutes par source.
+- Codes d’erreur, services, indicateurs WSUS et événements archivés dans un ZIP sous IQ et sur la clé.
+- Aucune installation ni demande de redémarrage ; aucune modification de la préparation en production.
+
 ## Correction de la lecture Microsoft Release Health, 22 octobre 2026
 
 - Lecture de la colonne officielle « Latest build » et des dates « End of updates » de Famille et Pro.
