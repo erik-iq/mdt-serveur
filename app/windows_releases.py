@@ -3,8 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from html.parser import HTMLParser
 import json
+import logging
+import socket
+import ssl
 import re
 import threading
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -57,10 +61,13 @@ def parse_releases(html, today=None):
     for table in parser.tables:
         if not table: continue
         header = [c.lower() for c in table[0]]
-        required = ('version', 'servicing option', 'availability date', 'os build')
-        if not all(name in header for name in required): continue
+        required = ('version', 'servicing option', 'availability date')
+        build_header = next((name for name in ('latest build', 'os build') if name in header), None)
+        if not build_header or not all(name in header for name in required): continue
         indexes = {name: header.index(name) for name in required}
-        end_index = next((i for i, name in enumerate(header) if 'end of servicing' in name and 'home' in name), None)
+        indexes['os build'] = header.index(build_header)
+        end_index = next((i for i, name in enumerate(header) if
+                          ('end of servicing' in name or 'end of updates' in name) and 'home' in name), None)
         for row in table[1:]:
             if len(row) <= max(indexes.values()): continue
             version = row[indexes['version']].strip()
@@ -94,6 +101,29 @@ def fetch_releases():
         raw = response.read(MAX_PAGE + 1)
     if len(raw) > MAX_PAGE: raise ValueError('Page Microsoft trop volumineuse.')
     return parse_releases(raw.decode('utf-8-sig', errors='strict'))
+
+
+def release_error(exc):
+    # Ne pas publier les chemins, réponses proxy ou adresses privées des exceptions.
+    if isinstance(exc, HTTPError):
+        detail = f'La source Microsoft a répondu avec le code HTTP {exc.code}.'
+    elif isinstance(exc, UnicodeError):
+        detail = 'La réponse Microsoft ne contient pas un texte UTF-8 valide.'
+    elif isinstance(exc, ValueError):
+        detail = 'Le format de la publication Microsoft n’a pas été reconnu ou sa redirection a été refusée.'
+    else:
+        reason = exc.reason if isinstance(exc, URLError) else exc
+        if isinstance(reason, ssl.SSLError):
+            detail = 'La connexion HTTPS à Microsoft a échoué : certificat ou négociation TLS.'
+        elif isinstance(reason, socket.gaierror):
+            detail = 'Le nom du serveur Microsoft n’a pas pu être résolu par DNS.'
+        elif isinstance(reason, (TimeoutError, socket.timeout)):
+            detail = 'Le délai de réponse de Microsoft a été dépassé.'
+        elif isinstance(exc, (URLError, OSError)):
+            detail = 'La connexion réseau à Microsoft a échoué. Vérifier l’accès Internet et le proxy du serveur.'
+        else:
+            detail = 'Une erreur interne a interrompu la vérification. Consulter le journal de la console.'
+    return detail + ' Les derniers résultats sont conservés et peuvent être anciens.'
 
 
 class WindowsReleases:
@@ -138,10 +168,11 @@ class WindowsReleases:
             with self.db(write=True) as con:
                 con.execute("UPDATE windows_release_check SET status='completed',success_at=?,message=?,releases_json=? WHERE id=1",
                             (timestamp(), 'Versions stables vérifiées auprès de Microsoft. Aucune image de production modifiée.', json.dumps(releases, ensure_ascii=False)))
-        except Exception:
+        except Exception as exc:
+            logging.getLogger(__name__).exception('Échec de la veille des versions Windows depuis Microsoft')
             with self.db(write=True) as con:
                 con.execute("UPDATE windows_release_check SET status='failed',message=? WHERE id=1",
-                            ('Vérification Microsoft impossible : accès réseau indisponible ou format de publication modifié. Les derniers résultats sont conservés et peuvent être anciens.',))
+                            (release_error(exc),))
         finally:
             self.lock.release()
 

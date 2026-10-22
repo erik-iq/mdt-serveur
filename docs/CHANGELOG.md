@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## Correction de la lecture Microsoft Release Health, 22 octobre 2026
+
+- Lecture de la colonne officielle « Latest build » et des dates « End of updates » de Famille et Pro.
+- Distinction des erreurs HTTP, DNS, TLS, délai dépassé et format inattendu, avec conservation du dernier résultat réussi.
+- Journal technique complet côté serveur pour diagnostiquer les erreurs sans exposer les détails privés sur le site.
+
 ## Veille des versions Windows, 22 octobre 2026
 
 - Vérification quotidienne des versions stables de Windows 11 depuis Microsoft Release Health, avec contrôle manuel depuis le site.
