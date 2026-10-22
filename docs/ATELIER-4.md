@@ -1,5 +1,9 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## IQ-5.8.1 : récupération des résultats Windows Update
+
+La préparation retrouve un résultat manquant dans l’historique natif ou par une recherche ciblée de l’état installé. Un installateur encore actif entraîne une attente et une nouvelle vérification ; aucune réinstallation aveugle n’est demandée. Les échecs natifs restent conservés. Le succès exige toujours la recherche finale et l’absence de redémarrage en attente. Le kit peut aussi vérifier et actualiser les rapports d’un poste déjà testé, sans nouveau déploiement.
+
 ## IQ-5.8 : Windows Update automatique
 
 Après les logiciels et HPIA, le poste recherche et installe automatiquement les correctifs Windows, .NET, Defender, pilotes et firmwares proposés par Windows Update. Les changements de version restent exclus et le Store reste manuel. Les rappels COM de recherche, téléchargement et installation sont valides ; le pilote Intel qui annonçait seulement une possibilité d’interaction est désormais tenté avec ForceQuiet, puis son vrai résultat natif est conservé.

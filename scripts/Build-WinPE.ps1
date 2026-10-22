@@ -93,7 +93,7 @@ try {
     Set-Content (Join-Path $mount 'Windows\System32\startnet.cmd') -Encoding ASCII -Value "@echo off`r`nwpeinit`r`ncall %SystemRoot%\System32\atelier.cmd`r`ncmd.exe`r`n"
     Dismount-WindowsImage -Path $mount -Save | Out-Null
     $mounted = $false
-    @{release='ATELIER-4';ui_revision='IQ-5.8';network_drivers=$networkDrivers;server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
+    @{release='ATELIER-4';ui_revision='IQ-5.8.1';network_drivers=$networkDrivers;server_url=$ServerUrl;wim='media\sources\boot.wim';built_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputPath 'atelier-winpe.json') -Encoding UTF8
 } finally {
     if ($mounted) { Dismount-WindowsImage -Path $mount -Discard | Out-Null }
 }

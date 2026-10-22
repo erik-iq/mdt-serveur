@@ -8,7 +8,10 @@ function Invoke-AtelierAutomaticWindowsUpdate {
     $boot=Get-AtelierHpBootIdentity
     $state=[pscustomobject]@{source='windows_update';revision='WU-AUTO-1';status='running';message='Windows Update automatique';timestamp='';boot_id=$boot;restarts=0;attempts=0;passes=@();active_pass=$null;verification=$null;count=0;titles=@();reboot_required=$false;windows=$null}
     if (Test-Path $path) {$state=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json}
+    if (-not $state.PSObject.Properties['recovery_checks']) {$state | Add-Member NoteProperty recovery_checks 0}
     function Save-AutomaticUpdate {
+        $known=@($state.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -in @('installed','installed_verified')})
+        $state.count=$known.Count;$state.titles=@($known | ForEach-Object {$_.title})
         $state.timestamp=[DateTime]::UtcNow.ToString('o')
         Write-AtelierVerifiedUtf8File -Path $path -Content ($state | ConvertTo-Json -Depth 18) -NoBackup | Out-Null
     }
@@ -21,20 +24,41 @@ function Invoke-AtelierAutomaticWindowsUpdate {
         $state.status='reboot_pending';$state.boot_id=$boot;$state.restarts++;$state.reboot_required=$true
         $state.message=$Message;Save-AutomaticUpdate
     }
+    function Set-AutomaticUpdateProofPending($Proof) {
+        if (-not $Proof.pending) {$state.recovery_checks++}
+        $state.status=if ($Proof.pending) {'retry_pending'} elseif ($state.recovery_checks -ge 6) {'needs_attention'} else {'installing'}
+        $state.message=$Proof.message
+        if ($state.recovery_checks -ge 6 -and -not $Proof.pending) {$state.message='Résultat Windows Update non confirmé après six vérifications. Rapports et fichiers conservés.'}
+        Save-AutomaticUpdate
+    }
     function Test-AutomaticUpdateRestartPending {
         return (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or
             (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending')
     }
     if ($state.status -eq 'completed') {return $state}
-    if ($state.status -in @('needs_attention','installing')) {return $state}
+    if ($state.status -eq 'needs_attention') {return $state}
+    $uncertain=@($state.passes | Where-Object {@($_.updates | Where-Object {$_.status -in @('installing','unknown')}).Count})
+    foreach ($pass in $uncertain) {
+        $proof=Resolve-AtelierUpdatePass -Pass $pass
+        if (-not $proof.confirmed) {
+            Set-AutomaticUpdateProofPending $proof
+            return $state
+        }
+        $state.status='running'
+    }
+    if ($state.status -eq 'installing' -and -not $state.active_pass) {
+        $state.status='needs_attention';$state.message='Résultat Windows Update manquant et état de reprise incomplet.';Save-AutomaticUpdate;return $state
+    }
     if ($state.status -eq 'reboot_pending' -and $state.boot_id -eq $boot) {return $state}
     if ($state.status -eq 'reboot_pending') {$state.reboot_required=$false;$state.status='running'}
     if ($state.active_pass) {
         # Un résultat d’installation absent après interruption ne devient jamais un succès.
         if (@($state.active_pass.updates | Where-Object {$_.status -eq 'installing'}).Count) {
-            $state.status='installing';$state.message='Installation Windows Update interrompue sans résultat confirmé. Rapports et fichiers conservés pour vérification.'
-            Save-AutomaticUpdate
-            return $state
+            $proof=Resolve-AtelierUpdatePass -Pass $state.active_pass
+            if (-not $proof.confirmed) {
+                Set-AutomaticUpdateProofPending $proof
+                return $state
+            }
         }
         $state.passes+=@($state.active_pass);$state.active_pass=$null
     }
@@ -59,7 +83,7 @@ function Invoke-AtelierAutomaticWindowsUpdate {
                 param($Value);$state.active_pass=$Value;Save-AutomaticUpdate
             }
             $state.passes+=@($pass);$state.active_pass=$null
-            $installed=@($state.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -eq 'installed'})
+            $installed=@($state.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -in @('installed','installed_verified')})
             $state.count=$installed.Count;$state.titles=@($installed | ForEach-Object {$_.title})
             if ($pass.status -in @('installed','reboot_required')) {Set-AutomaticUpdateRestart 'Mises à jour installées. Redémarrage automatique puis nouvelle recherche Windows Update.'}
             elseif ($pass.status -eq 'verified') {

@@ -83,7 +83,7 @@ def write_json(path,value):
 
 
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof'])
+@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof','wu_unknown'])
 def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preserved(tmp_path,case):
     program=tmp_path/'ProgramData';data=program/'AtelierPXE';data.mkdir(parents=True)
     iq=tmp_path/'IQ_';(iq/'Rapports').mkdir(parents=True);(iq/'Personnalisation').mkdir()
@@ -93,8 +93,12 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
     write_json(data/'personalization.json',{'settings':{'winget_packages':[]},'deployment':{'id':identifier,'cleanup_after_reporting':True,'previous_payload_name':previous.name}})
     write_json(data/'reporting.json',{'id':identifier,'server_url':'https://atelier.test','token':'fixture-private-report-token','expires':'2099-01-01T00:00:00Z'})
     write_json(data/'result.json',{'status':'completed','deployment_id':identifier,'applications':[]})
-    status='needs_attention' if case=='failure_archived' else 'completed'
+    status='needs_attention' if case in ('failure_archived','wu_unknown') else 'completed'
     write_json(data/'maintenance.json',{'status':status,'attempts':1,'timestamp':'2026-10-19T00:00:00Z','reboot_required':case in {'before_reboot','after_reboot'}})
+    if case=='wu_unknown':
+        record=json.loads((data/'maintenance.json').read_text())
+        record['windows']={'source':'windows_update','status':'needs_attention','passes':[{'updates':[{'status':'installing'}]}]}
+        write_json(data/'maintenance.json',record)
     write_json(data/'progress.json',{'status':status,'message':'Final state'})
     (data/'Inventory').mkdir();(data/'Inventory'/'Inventaire-Technique.xml').write_text('<InventaireOrdinateur ordinateur="PC-LAB"/>')
     (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Catégorie;Propriété;Valeur\nPC-LAB;CPU;Name;Test\n')

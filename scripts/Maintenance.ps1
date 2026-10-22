@@ -133,9 +133,10 @@ try {
         $customization | Add-Member NoteProperty software_summary $software -Force
         Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'result.json') -Content ($customization | ConvertTo-Json -Depth 12) -NoBackup | Out-Null
     }
-    if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
+    $windowsContinuation=$payload.deployment.automatic_windows_update -and $state.windows.status -in @('installing','retry_pending','reboot_pending')
+    if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention' -and -not $windowsContinuation) { Finish-Maintenance; return }
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent être terminés avant la finalisation du poste.' }
-    $hpContinuation=($payload.deployment.allow_bios_restart -or $payload.deployment.cached_windows_updates -or $payload.deployment.automatic_windows_update) -and $state.status -in @('reboot_pending','retry_pending')
+    $hpContinuation=(($payload.deployment.allow_bios_restart -or $payload.deployment.cached_windows_updates -or $payload.deployment.automatic_windows_update) -and $state.status -in @('reboot_pending','retry_pending')) -or $windowsContinuation
     if (-not $hpContinuation) { $state.attempts++ }
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }
     $state | Add-Member NoteProperty reboot_required ([bool]$customization.restart_needed -or [bool]$state.reboot_required -or $state.status -eq 'reboot_pending') -Force
@@ -182,6 +183,7 @@ try {
             Save-Maintenance 'running' 90 $Message
         }
         $script:updateDetail=$null;$state.windows=$wu
+        if ($wu.status -eq 'installing') {Save-Maintenance 'retry_pending' 95 $wu.message;return}
         if ($wu.status -in @('retry_pending','reboot_pending')) {
             Save-Maintenance $wu.status 95 $wu.message
             if ($wu.status -eq 'reboot_pending') {

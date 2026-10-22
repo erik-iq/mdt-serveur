@@ -115,7 +115,7 @@ if ($maintenance.windows.source -eq 'server_250') {
 if ($maintenance.windows.source -eq 'windows_update') {
     foreach ($pass in @($maintenance.windows.passes)) {
         foreach ($entry in @($pass.updates)) {
-            if ($entry) {$steps.Add(@{name='Windows Update';status=$(if ($entry.status -eq 'installed') {'completed'} else {'needs_attention'});message=([string]$entry.title+' / Code WUA '+[string]$entry.result_code+' / HRESULT '+[string]$entry.hresult);timestamp=[string]$entry.started_utc})}
+            if ($entry) {$steps.Add(@{name='Windows Update';status=$(if ($entry.status -in @('installed','installed_verified')) {'completed'} else {'needs_attention'});message=([string]$entry.title+' / Code WUA '+[string]$entry.result_code+' / HRESULT '+[string]$entry.hresult+' / Vérification '+[string]$entry.verification_source);timestamp=[string]$entry.started_utc})}
         }
     }
     $steps.Add(@{name='Contrôle final Windows Update';status=$(if ($maintenance.windows.status -eq 'completed') {'completed'} else {'needs_attention'});message=[string]$maintenance.windows.message;timestamp=[string]$maintenance.windows.timestamp})

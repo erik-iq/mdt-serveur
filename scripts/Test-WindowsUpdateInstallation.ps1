@@ -1,13 +1,13 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
-param([switch]$Worker,[switch]$NewTest)
+param([switch]$Worker,[switch]$NewTest,[switch]$VerifyPrevious)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[Text.UTF8Encoding]::new($false)
 try {[Console]::OutputEncoding=$OutputEncoding} catch {}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if ($Worker) {throw 'Le processus de test doit être administrateur.'}
-    $arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'"'+$(if ($NewTest) {' -NewTest'} else {''})
+    $arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'"'+$(if ($NewTest) {' -NewTest'} elseif ($VerifyPrevious) {' -VerifyPrevious'} else {''})
     $child=Start-Process (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -Verb RunAs -Wait -PassThru
     if ($child.ExitCode -ne 0) {throw 'Le test ne s''est pas terminé normalement. Consulter les rapports IQ.'}
     return
@@ -45,7 +45,13 @@ function Export-UpdateTestReport($Value) {
     $lines=@('TEST D''INSTALLATION WINDOWS UPDATE',('État : '+$Value.status),('Message : '+$Value.message),('Passes : '+$Value.passes.Count),('Redémarrages demandés : '+$Value.restarts),'')
     foreach ($pass in $Value.passes) {
         $lines+=@(('Passe : '+$pass.status),('Message : '+$pass.message))
-        foreach ($update in $pass.updates) {$lines+=@(($update.status+' | '+$update.title+' | '+$update.hresult))}
+        foreach ($update in $pass.updates) {
+            $label=@{installed='Installée';installed_verified='Installation vérifiée';failed='Échec';installing='Installation en cours';planned='Prévue';downloading='Téléchargement';deferred='Différée'}[[string]$update.status]
+            if (-not $label) {$label=[string]$update.status}
+            $lines+=@(($label+' | '+$update.title+' | '+$update.hresult))
+            if ($update.verification_source) {$lines+=@(('Preuve Windows : '+$update.verification_source))}
+        }
+        if ($pass.reconciliation) {$lines+=@(('Vérification : '+$pass.reconciliation.message))}
         foreach ($update in $pass.excluded) {$lines+=@(('Exclue : '+$update.title+' | '+$update.reason))}
     }
     $lines+=@('','Dernière recherche :')
@@ -71,15 +77,35 @@ if ($Worker) {
         $state=Read-UpdateTestState $PSScriptRoot
         $boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
         $resume=Get-AtelierTestUpdateResumeAction $state $boot
-        if ($resume -in @('finished','wait_for_restart')) {return}
-        if ($resume -eq 'verify_interrupted') {
-            # Un arrêt pendant une installation peut masquer son résultat. Vérifier et signaler cette incertitude.
-            $state.status='needs_attention';$state.message='Installation interrompue sans code de retour confirmé. Nouvelle recherche de diagnostic, aucune réinstallation automatique.'
-            $state.passes+=@($state.active_pass);$state.active_pass=$null
-            $state.verification=Invoke-AtelierTestUpdatePass -VerifyOnly
-            Save-UpdateTestState $state $PSScriptRoot;Export-UpdateTestReport $state
-            Unregister-ScheduledTask -TaskName $state.task_name -Confirm:$false
-            return
+        if ($resume -in @('finished','wait_for_restart') -and -not $state.verification_only) {return}
+        if ($state.verification_only -or $resume -eq 'verify_interrupted') {
+            $pending=$false;$confirmed=$true
+            $records=@($state.passes)
+            if ($state.active_pass) {$records+=@($state.active_pass)}
+            foreach ($pass in $records) {
+                if (@($pass.updates | Where-Object {$_.status -notin @('installed','installed_verified')}).Count) {
+                    $proof=Resolve-AtelierUpdatePass -Pass $pass
+                    if (-not $proof.confirmed) {$confirmed=$false}
+                    if ($proof.pending) {$pending=$true}
+                }
+            }
+            if ($state.active_pass -and -not $pending) {$state.passes+=@($state.active_pass);$state.active_pass=$null}
+            if ($pending) {
+                $state.status='running';$state.message='Windows Update installe encore des mises à jour. Nouvelle vérification automatique dans une minute.'
+                Save-UpdateTestState $state $PSScriptRoot;Export-UpdateTestReport $state
+                return
+            }
+            if (-not $confirmed -or $state.verification_only) {
+                $state.verification=Invoke-AtelierTestUpdatePass -VerifyOnly
+                if ($confirmed -and $state.verification.status -eq 'verified') {Set-UpdateTestVerifiedStatus $state}
+                else {$state.status='needs_attention';$state.message='Vérification terminée : au moins un résultat reste non confirmé ou une mise à jour est encore proposée.'}
+                Save-UpdateTestState $state $PSScriptRoot;Export-UpdateTestReport $state
+                if ($state.status -eq 'restart_pending') {
+                    & (Join-Path $env:SystemRoot 'System32\shutdown.exe') /r /t 60 /d p:2:4 /c 'Atelier : redémarrage puis vérification Windows Update.'
+                    if ($LASTEXITCODE -ne 0) {throw 'Redémarrage refusé par Windows.'}
+                } else {Unregister-ScheduledTask -TaskName $state.task_name -Confirm:$false}
+                return
+            }
         }
         $os=Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
         $state.windows=[pscustomobject]@{display_version=$os.DisplayVersion;build=$os.CurrentBuildNumber;ubr=$os.UBR;edition=$os.EditionID}
@@ -145,6 +171,30 @@ if (-not $NewTest) {
         if ($candidate.revision -eq 'WU-INSTALL-2') {$work=$folder.FullName;break}
     }
 }
+if ($VerifyPrevious) {
+    if (-not $work) {throw 'Aucun test précédent à vérifier sur ce PC.'}
+    $state=Read-UpdateTestState $work
+    if ((Get-ScheduledTask -TaskName $state.task_name -ErrorAction SilentlyContinue).State -eq 'Running') {throw 'Le test tourne encore. Attendre sa fin avant cette vérification.'}
+    foreach ($file in @('Test-WindowsUpdateInstallation.ps1','WindowsUpdate-InstallTest.ps1','WindowsUpdate-Diagnostic.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $work -Force
+    }
+    try {
+        $xpath='*[EventData[Data[@Name=''TaskName'']=''\{0}'']]' -f $state.task_name
+        $events=@(Get-WinEvent -LogName 'Microsoft-Windows-TaskScheduler/Operational' -FilterXPath $xpath -MaxEvents 20 -ErrorAction Stop | ForEach-Object {
+            @{id=$_.Id;time_utc=$_.TimeCreated.ToUniversalTime().ToString('o');message=([string]$_.Message).Replace([char]0x2013,'-').Replace([char]0x2014,'-')}
+        })
+        $state | Add-Member NoteProperty recovery_task_events $events -Force
+    } catch {$state | Add-Member NoteProperty recovery_task_events_error 'Historique du Planificateur de tâches indisponible.' -Force}
+    $state | Add-Member NoteProperty verification_only $true -Force
+    $state | Add-Member NoteProperty recovery_revision 'WU-RECOVERY-1' -Force
+    $state.status='reconciling';$state.message='Vérification des résultats manquants dans Windows Update.'
+    Save-UpdateTestState $state $work
+    $action=New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $work 'Test-WindowsUpdateInstallation.ps1')+'" -Worker')
+    $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $triggers=@((New-ScheduledTaskTrigger -AtStartup),(New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 7)))
+    $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName $state.task_name -Action $action -Principal $principal -Trigger $triggers -Settings $settings -Force | Out-Null
+}
 if (-not $work) {
     $id=[guid]::NewGuid().ToString('N');$work=Join-Path $env:ProgramFiles ('AtelierPXE-WindowsUpdateTest-'+$id)
     New-Item -ItemType Directory -Path $work | Out-Null
@@ -161,13 +211,15 @@ if (-not $work) {
     Save-UpdateTestState $state $work
     $action=New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $work 'Test-WindowsUpdateInstallation.ps1')+'" -Worker')
     $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-    $trigger=New-ScheduledTaskTrigger -AtStartup;$trigger.Delay='PT60S'
+    $bootTrigger=New-ScheduledTaskTrigger -AtStartup;$bootTrigger.Delay='PT60S'
+    $trigger=@($bootTrigger,(New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 7)))
     # Aucun arrêt forcé d’un installateur si la fenêtre du lanceur est fermée.
     $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $state.task_name -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Force | Out-Null
 }
 $state=Read-UpdateTestState $work
-Write-Host 'TEST : installation Windows Update, pilotes et firmware inclus, avec redémarrages automatiques.' -ForegroundColor Cyan
+if ($VerifyPrevious) {Write-Host 'VÉRIFICATION : historique et état installé, aucune réinstallation.' -ForegroundColor Cyan}
+else {Write-Host 'TEST : installation Windows Update, pilotes et firmware inclus, avec redémarrages automatiques.' -ForegroundColor Cyan}
 Write-Host 'Brancher le portable sur secteur. La reprise est enregistrée sur le PC ; la clé USB ne doit pas rester branchée.'
 if ($state.status -notin @('completed','needs_attention')) {
     Start-ScheduledTask -TaskName $state.task_name
@@ -178,7 +230,8 @@ if ($state.status -notin @('completed','needs_attention')) {
         if ($state.status -in @('restart_pending','completed','needs_attention')) {break}
         $task=Get-ScheduledTask -TaskName $state.task_name -ErrorAction SilentlyContinue
         if ($monitor.Elapsed.TotalSeconds -gt 15 -and (-not $task -or $task.State -ne 'Running')) {
-            Write-Warning 'Le processus ne tourne plus sans bilan confirmé. Rouvrir ce lanceur pour vérifier la reprise.'
+            if ($state.message -like 'Windows Update installe encore*') {Write-Host 'La vérification continuera automatiquement en arrière-plan. Rouvrir ce lanceur pour consulter le bilan.'}
+            else {Write-Warning 'Le processus ne tourne plus sans bilan confirmé. Rouvrir ce lanceur pour vérifier la reprise.'}
             Export-UpdateTestReport $state
             break
         }

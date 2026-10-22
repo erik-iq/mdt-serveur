@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## IQ-5.8.1 : récupération des résultats Windows Update, 22 octobre 2026
+
+- Vérification des installations sans résultat par l’historique Windows Update ou par une recherche ciblée de l’état installé.
+- Conservation des codes natifs retrouvés, de la provenance de la preuve et des échecs connus. Une recherche vide ne devient pas une preuve d’installation.
+- Reprise automatique après disparition d’un installateur encore actif, sans tuer de processus ni rejouer une installation incertaine.
+- Nouveau bouton de vérification du test existant, sans nouvelle installation ; mise à jour du même ZIP et collecte des événements de tâche disponibles.
+
 ## IQ-5.8 : recherche et installation Windows Update automatiques, 22 octobre 2026
 
 - Recherche en ligne et installation sous SYSTEM après les logiciels et HPIA, pilotes et firmwares compris, sans mise à niveau automatique de Windows.

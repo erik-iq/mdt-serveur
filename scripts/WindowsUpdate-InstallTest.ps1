@@ -138,3 +138,93 @@ function Invoke-AtelierTestUpdatePass {
     & $Checkpoint ([pscustomobject]$result) | Out-Null
     return [pscustomobject]$result
 }
+
+
+# Réconcilier uniquement un résultat manquant, jamais effacer un échec natif enregistré.
+function Resolve-AtelierUpdatePass {
+    param(
+        $Pass,
+        [scriptblock]$SessionFactory={New-Object -ComObject Microsoft.Update.Session},
+        [scriptblock]$CallbackFactory={New-AtelierUpdateSearchCallback},
+        [ValidateRange(1,600)][int]$TimeoutSeconds=180,
+        [int]$PollMilliseconds=1000
+    )
+    $proof=[ordered]@{confirmed=$false;pending=$false;message='Résultat non confirmé.';entries=@()}
+    try {
+        $session=& $SessionFactory
+        $session.ClientApplicationID='Atelier PXE : vérification des installations Windows Update'
+        if ($session.CreateUpdateInstaller().IsBusy) {
+            $proof.pending=$true;$proof.message='Windows Update installe encore des mises à jour. Vérification automatique différée.'
+            return [pscustomobject]$proof
+        }
+        $searcher=$session.CreateUpdateSearcher();$searcher.ServerSelection=2;$searcher.Online=$false
+        $history=@()
+        try {
+            $count=[Math]::Min(500,[int]$searcher.GetTotalHistoryCount())
+            if ($count -gt 0) {$history=@($searcher.QueryHistory(0,$count))}
+        } catch { }
+        foreach ($entry in @($Pass.updates)) {
+            if ($entry.status -in @('installed','installed_verified')) {continue}
+            if ($entry.status -eq 'failed' -or ($null -ne $entry.result_code -and [int]$entry.result_code -ne 2)) {
+                $proof.entries+=@{id=$entry.id;confirmed=$false;message='Échec natif déjà enregistré ; aucune conversion en succès.'}
+                continue
+            }
+            if ($entry.status -notin @('installing','unknown','planned','downloading','deferred')) {continue}
+            $id=[guid]::Empty
+            if (-not [guid]::TryParse([string]$entry.id,[ref]$id)) {throw 'Identifiant de mise à jour invalide pour la vérification.'}
+            $start=[DateTime]::Parse($entry.started_utc).ToUniversalTime().AddSeconds(-5)
+            $matches=@($history | Where-Object {
+                $date=[datetime]$_.Date
+                if ($date.Kind -eq [DateTimeKind]::Unspecified) {$date=[datetime]::SpecifyKind($date,[DateTimeKind]::Utc)}
+                [string]$_.UpdateIdentity.UpdateID -eq $id.ToString() -and
+                [int]$_.UpdateIdentity.RevisionNumber -eq [int]$entry.revision -and
+                $date.ToUniversalTime() -ge $start -and $date.ToUniversalTime() -le [DateTime]::UtcNow.AddSeconds(5)
+            } | Sort-Object Date -Descending)
+            $last=$matches | Select-Object -First 1
+            # Une DATE COM sans fuseau ne prouve pas la chronologie : vérifier alors l’état installé.
+            $dated=$last -and ([datetime]$last.Date).Kind -ne [DateTimeKind]::Unspecified
+            if ($dated -and [int]$last.Operation -eq 1 -and [int]$last.ResultCode -eq 2 -and ([long]$last.HResult -band 2147483648) -eq 0) {
+                $entry.status='installed_verified';$entry.result_code=[int]$last.ResultCode;$entry.hresult=Get-AtelierUpdateHresult $last.HResult
+                $entry | Add-Member NoteProperty verification_source 'windows_update_history' -Force
+                $entry | Add-Member NoteProperty verified_utc ([DateTime]::UtcNow.ToString('o')) -Force
+                $proof.entries+=@{id=$entry.id;confirmed=$true;source='windows_update_history';result_code=[int]$last.ResultCode;hresult=$entry.hresult}
+                continue
+            }
+            if ($dated -and [int]$last.Operation -eq 1 -and [int]$last.ResultCode -in @(3,4,5)) {
+                $entry.status='failed';$entry.result_code=[int]$last.ResultCode;$entry.hresult=Get-AtelierUpdateHresult $last.HResult
+                $entry | Add-Member NoteProperty verification_source 'windows_update_history' -Force
+                $proof.entries+=@{id=$entry.id;confirmed=$false;source='windows_update_history';result_code=[int]$last.ResultCode;hresult=$entry.hresult}
+                continue
+            }
+            $job=$null
+            try {
+                $callback=& $CallbackFactory
+                if (-not $callback) {throw 'Rappel COM de vérification absent.'}
+                $job=$searcher.BeginSearch(("IsInstalled=1 and UpdateID='"+$id.ToString()+"'"),$callback,$null)
+                if (-not $job) {throw 'Recherche de preuve installée indisponible.'}
+                $clock=[Diagnostics.Stopwatch]::StartNew()
+                while (-not $job.IsCompleted) {
+                    if ($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds) {$job.RequestAbort();throw 'Délai dépassé pendant la vérification installée.'}
+                    Start-Sleep -Milliseconds $PollMilliseconds
+                }
+                $installed=$searcher.EndSearch($job)
+                $found=@($installed.Updates | Where-Object {[string]$_.Identity.UpdateID -eq $id.ToString() -and [int]$_.Identity.RevisionNumber -ge [int]$entry.revision -and $_.IsInstalled})
+                if ([int]$installed.ResultCode -eq 2 -and $found.Count) {
+                    $entry.status='installed_verified'
+                    # Le code d’installation reste absent : la preuve provient de l’état installé.
+                    $entry | Add-Member NoteProperty verification_source 'installed_state' -Force
+                    $entry | Add-Member NoteProperty verified_utc ([DateTime]::UtcNow.ToString('o')) -Force
+                    $proof.entries+=@{id=$entry.id;confirmed=$true;source='installed_state';search_result_code=2}
+                } else {$proof.entries+=@{id=$entry.id;confirmed=$false;source='installed_state';message='État installé non confirmé.'}}
+            } finally {if ($job -and $job.IsCompleted) {try {$job.CleanUp()} catch {}}}
+        }
+        $proof.confirmed=@($Pass.updates).Count -gt 0 -and -not @($Pass.updates | Where-Object {$_.status -notin @('installed','installed_verified')}).Count
+        $proof.message=if ($proof.confirmed) {'Résultats manquants vérifiés dans Windows Update, sans réinstallation.'} else {'Au moins une installation reste non confirmée. Aucun succès inventé.'}
+        if ($proof.confirmed) {
+            $Pass | Add-Member NoteProperty status_before_verification $Pass.status -Force
+            $Pass.status='installed_verified';$Pass.message=$proof.message
+        }
+    } catch {$proof.message=$_.Exception.Message}
+    $Pass | Add-Member NoteProperty reconciliation ([pscustomobject]$proof) -Force
+    return [pscustomobject]$proof
+}

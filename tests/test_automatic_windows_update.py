@@ -16,6 +16,7 @@ def test_automatic_update_persists_restarts_and_requires_final_search(tmp_path,c
     shutil.copy(ROOT/'scripts/Client-WindowsUpdate.ps1',tmp_path)
     (tmp_path/'WindowsUpdate-Diagnostic.ps1').write_text('')
     (tmp_path/'WindowsUpdate-InstallTest.ps1').write_text(r'''
+function Resolve-AtelierUpdatePass {param($Pass);[pscustomobject]@{confirmed=$false;pending=$false;message='Unknown native result fixture'}}
 function Invoke-AtelierTestUpdatePass {
  param([switch]$VerifyOnly,$OnProgress,$Checkpoint)
  $global:calls++
@@ -69,3 +70,35 @@ $final=Invoke-AtelierAutomaticWindowsUpdate -DataPath 'DATA'
     elif case=='failed':assert final['status']=='needs_attention'
     else:assert final['status']=='retry_pending' and final['attempts']==3
     assert final['source']=='windows_update'
+
+
+def test_uncertain_pass_recovers_only_from_proof_without_reinstalling(tmp_path):
+    shutil.copy(ROOT/'scripts/Client-WindowsUpdate.ps1',tmp_path)
+    (tmp_path/'WindowsUpdate-Diagnostic.ps1').write_text('')
+    (tmp_path/'WindowsUpdate-InstallTest.ps1').write_text('''
+function Resolve-AtelierUpdatePass {param($Pass)
+ $Pass.updates[0].status='installed_verified'
+ [pscustomobject]@{confirmed=$true;pending=$false;message='History success fixture'}
+}
+function Invoke-AtelierTestUpdatePass {param([switch]$VerifyOnly,$OnProgress)
+ if(-not $VerifyOnly){throw 'An already verified update must never be reinstalled'}
+ [pscustomobject]@{status='verified';message='Nothing remaining'}
+}
+''')
+    state={'source':'windows_update','revision':'WU-AUTO-1','status':'installing','message':'Unknown result','timestamp':'','boot_id':'boot1','restarts':1,'attempts':1,'passes':[{'status':'unknown','updates':[{'status':'installing','title':'Intel component'}]}],'active_pass':None,'verification':None,'count':0,'titles':[],'reboot_required':False,'windows':None}
+    (tmp_path/'windows-update-result.json').write_text(json.dumps(state))
+    path=tmp_path/'recover.ps1'
+    path.write_text(r'''
+$ErrorActionPreference='Stop'
+. 'DATA/Client-WindowsUpdate.ps1'
+function Get-AtelierHpBootIdentity {return 'boot2'}
+function Write-AtelierVerifiedUtf8File {param($Path,$Content,[switch]$NoBackup);[IO.File]::WriteAllText($Path,$Content)}
+function Get-ItemProperty {param($Path);@{DisplayVersion='26H2';CurrentBuildNumber=26300;UBR=9711;EditionID='Professional'}}
+function Test-Path {param($Path);if($Path -like 'HKLM:*'){return $false};return Microsoft.PowerShell.Management\Test-Path $Path}
+Invoke-AtelierAutomaticWindowsUpdate -DataPath 'DATA'|ConvertTo-Json -Depth 18 -Compress
+'''.replace('DATA',str(tmp_path).replace("'","''")),encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(path)],capture_output=True,text=True,timeout=10)
+    assert run.returncode==0,run.stderr
+    value=json.loads(run.stdout)
+    assert value['status']=='completed' and value['count']==1
+    assert value['passes'][0]['updates'][0]['status']=='installed_verified'

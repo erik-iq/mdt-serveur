@@ -91,6 +91,7 @@ function Complete-AtelierLocalCleanup {
         if ([string]$payload.deployment.id -ne [string]$config.id) { throw 'Identité de déploiement différente.' }
         $state=Get-Content (Join-Path $DataPath 'maintenance.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         if ($state.windows.source -in @('server_250','windows_update') -and $state.windows.status -eq 'installing') { return $false }
+        if ($state.windows.source -eq 'windows_update' -and @($state.windows.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -in @('installing','unknown')}).Count) {return $false}
         if ($state.status -notin @('completed','needs_attention')) { return $false }
         if (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)^(winget|msiexec|HPImageAssistant|HpFirmwareUpdRec.*|HPBIOSUPDREC.*|HPBIOSUpdate.*)$' }).Count) { return $false }
         if ($state.reboot_required) {

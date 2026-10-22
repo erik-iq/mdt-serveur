@@ -37,3 +37,13 @@ Le rapport final est vert uniquement après une recherche en ligne réussie sans
 Le rapport du 22 octobre à 15:07 confirme Windows 26H2 build 26300.9711, sans redémarrage en attente, et un seul pilote Intel System Driver Update restant proposé. Le kit précédent l’avait refusé avant toute installation parce que CanRequestUserInput valait vrai. Cette propriété décrit une possibilité, pas la preuve d’une intervention obligatoire.
 
 WU-INSTALL-2 tente donc le mode silencieux ForceQuiet et enregistre le vrai code de retour. Une ancienne exécution terminée WU-INSTALL-1 n’empêche pas la création du nouvel essai. Le même moteur est intégré à la préparation automatique IQ-5.8 ; les nouveaux déploiements n’exigent plus de lancer le kit USB.
+
+## Vérifier une installation dont le résultat manque
+
+Le rapport du HP montre Intel System Driver Update installé avec le résultat WUA 2 et HRESULT 0, puis un second composant Intel sans résultat enregistré. La recherche finale ne propose plus rien, mais cette seule absence ne constitue pas une preuve d’installation du second composant.
+
+Le bouton `Verifier-InstallationWindowsUpdate.cmd` reprend le dossier privé existant et consulte Windows Update sous SYSTEM, sans nouvelle installation. Il recherche le même identifiant et la même révision dans l’historique récent des opérations. Un succès natif retrouvé est conservé avec sa provenance. À défaut, une recherche ciblée IsInstalled=1 peut confirmer l’état installé ; elle ne fabrique pas de code d’installation. Un échec natif connu reste un échec. Une recherche vide, partielle ou expirée ne suffit pas à valider le composant.
+
+Si un installateur est encore actif, la vérification est reportée automatiquement d’une minute sans interrompre le processus. Le résultat et le ZIP du test existant sont actualisés. Le statut devient terminé seulement lorsque chaque résultat manquant est confirmé, que la nouvelle recherche ne propose plus de correctif ni pilote et qu’aucun redémarrage Windows n’est en attente. Les événements disponibles de la tâche précédente sont joints pour diagnostiquer l’interruption du suivi.
+
+IQ-5.8.1 applique aussi cette récupération dans la préparation de production : une reprise peut retrouver les résultats dans Windows, poursuivre la recherche et terminer sans réinstaller aveuglément les mises à jour déjà confirmées. Les dossiers d’un ancien test ne sont pas effacés par la vérification.
