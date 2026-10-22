@@ -141,7 +141,7 @@ function Complete-AtelierLocalCleanup {
         # Un fichier ouvert par un autre processus reporte le nettoyage avant toute modification des tâches.
         Assert-AtelierPrivateTree -Path $DataPath -Handles $handles
         if ($previous -and (Test-Path $previous)) { Assert-AtelierPrivateTree -Path $previous -Handles $handles }
-        foreach ($task in @('AtelierPXE-Preparation','AtelierPXE-Tools','AtelierPXE-Maintenance')) {
+        foreach ($task in @('AtelierPXE-Preparation','AtelierPXE-WindowsUpdateFirst','AtelierPXE-Tools','AtelierPXE-Maintenance')) {
             if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction Stop }
         }
         foreach ($handle in $handles) { Remove-Item -LiteralPath $handle.Name -Force -ErrorAction Stop }

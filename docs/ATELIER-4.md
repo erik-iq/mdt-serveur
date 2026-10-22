@@ -1,5 +1,11 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## IQ-5.8.2 : Windows Update avant les logiciels
+
+Dès le premier bureau Windows, la préparation attend Windows Update sous SYSTEM avant la personnalisation, les logiciels et HPIA. Les correctifs, Defender, pilotes et firmwares applicables sont installés, puis les redémarrages et recherches reprennent automatiquement. La préparation ne libère les logiciels qu’après un résultat terminé et vérifié. Une erreur ou un résultat incertain bloque cette suite et conserve les rapports. La tâche interactive reste inscrite pendant les redémarrages ; le mode sans intervention rétablit une connexion unique à chaque reprise. Microsoft Store reste manuel.
+
+Reconstruire WinPE avec `Upgrade-Atelier4.ps1` pour les nouveaux déploiements. La vérification du prochain déploiement remplace les essais avec la clé USB. Les anciens postes déjà en cours conservent leur procédure.
+
 ## IQ-5.8.1 : récupération des résultats Windows Update
 
 La préparation retrouve un résultat manquant dans l’historique natif ou par une recherche ciblée de l’état installé. Un installateur encore actif entraîne une attente et une nouvelle vérification ; aucune réinstallation aveugle n’est demandée. Les échecs natifs restent conservés. Le succès exige toujours la recherche finale et l’absence de redémarrage en attente. Le kit peut aussi vérifier et actualiser les rapports d’un poste déjà testé, sans nouveau déploiement.

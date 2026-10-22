@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## IQ-5.8.2 : Windows Update au début de la préparation, 22 octobre 2026
+
+- Recherche et installation Windows Update sous SYSTEM avant la personnalisation, les logiciels et HPIA.
+- Reprises automatiques au démarrage et contrôles réguliers ; reconnexion unique en mode sans intervention après chaque redémarrage nécessaire.
+- Aucun logiciel lancé tant que Windows Update n’est pas terminé et vérifié. Les échecs et résultats inconnus conservent les rapports et bloquent la suite.
+- Nouveau module embarqué dans WinPE ; ordre présenté dans l’assistant et sur la page Correctifs Windows.
+
 ## IQ-5.8.1 : récupération des résultats Windows Update, 22 octobre 2026
 
 - Vérification des installations sans résultat par l’historique Windows Update ou par une recherche ciblée de l’état installé.

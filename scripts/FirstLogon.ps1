@@ -36,7 +36,7 @@ function Start-Maintenance {
     # Les anciens postes utilisaient une tâche interactive pour ouvrir HPIA après maintenance.
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
     $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installés ou non vérifiés : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels vérifiés : '+$script:softwareSummary.verified+'.' }
-    Set-Progress 'running' 75 ($detail+' Finalisation et correctifs Windows en arrière-plan.')
+    Set-Progress 'running' 75 ($detail+' Finalisation et pilotes constructeur en arrière-plan.')
     # Cette copie IQ survit au nettoyage et affiche le bilan après reconnexion.
     $uiRoot=Join-Path $ToolsPath 'Rapports\Preparation'
     New-Item -ItemType Directory -Path $uiRoot -Force | Out-Null
@@ -106,9 +106,14 @@ try {
     }
     # Vérifier les applications demandées dans cette installation réelle de Windows.
     # Les WIM capturés et les reprises peuvent contenir d’anciens résultats de réussite.
-    Set-Progress 'running' 5 'Préparation du bureau et des logiciels...'
+    Set-Progress 'running' 5 'Démarrage de la préparation du poste...'
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
+    if ($payload.deployment.automatic_windows_update) {
+        Set-Progress 'running' 10 'Windows Update en premier. Les logiciels et HPIA attendent la fin des mises à jour et des redémarrages.'
+        . (Join-Path $DataPath 'WindowsUpdate-First.ps1') -DataPath $DataPath
+        if (-not (Wait-AtelierWindowsUpdateFirst -DataPath $DataPath)) { return }
+    }
     Write-Trace 'Début de la personnalisation du premier compte administrateur.'
     $theme = $payload.settings.theme
     if ($theme -in @('light','dark')) {

@@ -1,8 +1,8 @@
-# Mises à jour Windows automatiques, IQ-5.8
+# Mises à jour Windows automatiques, IQ-5.8.2
 
 ## Parcours actuel
 
-Les nouveaux déploiements IQ-5.8 recherchent et installent automatiquement les mises à jour avec l’API Windows Update Agent, sous SYSTEM, après les logiciels et HPIA. Les correctifs Windows et .NET, Defender, les pilotes et les firmwares applicables sont inclus. Les changements de version Windows restent exclus et le Store reste manuel.
+Les nouveaux déploiements IQ-5.8.2 recherchent et installent automatiquement les mises à jour avec l’API Windows Update Agent, sous SYSTEM, avant les logiciels et HPIA. Les correctifs Windows et .NET, Defender, les pilotes et les firmwares applicables sont inclus. Les changements de version Windows restent exclus et le Store reste manuel.
 
 Chaque installation enregistre son état avant l’appel natif et conserve son résultat individuel. L’indicateur CanRequestUserInput ne bloque plus une tentative silencieuse : ForceQuiet est demandé, les invites de source sont désactivées et un refus réel reste une erreur. Les téléchargements et installations emploient les rappels COM DISPID 0 validés pour la recherche physique sur le HP.
 
