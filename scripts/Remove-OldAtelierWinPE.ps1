@@ -20,17 +20,55 @@ $keep=[IO.Path]::GetFullPath($KeepOutputPath).TrimEnd('\')
 $marker=Join-Path $keep 'atelier-winpe.json'
 if (-not (Test-Path $marker) -or (Get-Content $marker -Encoding UTF8 -Raw | ConvertFrom-Json).release -ne 'ATELIER-4') { throw 'Nouvelle image ATELIER-4 validée absente ; aucune ancienne image supprimée.' }
 $newWim=Join-Path $keep 'media\sources\boot.wim'
-if (-not (Test-Path $newWim -PathType Leaf) -or (Get-Item -LiteralPath $newWim).Length -eq 0) { throw 'Nouveau boot.wim absent ou vide ; nettoyage refuse.' }
+if (-not (Test-Path $newWim -PathType Leaf) -or (Get-Item -LiteralPath $newWim).Length -eq 0) { throw 'Nouveau boot.wim absent ou vide ; nettoyage refusé.' }
 $images=@(Get-WdsBootImage)
 if (@($images | Where-Object { $_.ImageName -eq $KeepImageName }).Count -ne 1) { throw 'La nouvelle image doit être importée dans WDS avant tout nettoyage.' }
 $mounted=@(Get-WindowsImage -Mounted)
+$wdsCleanupFailed=$false
+function Get-AtelierWdsArchitecture([object]$Value) {
+    # WDS peut renvoyer le code numérique du processeur plutôt que son nom.
+    switch (([string]$Value).ToLowerInvariant()) {
+        '0' { return 'x86' }
+        '9' { return 'x64' }
+        '6' { return 'ia64' }
+        '12' { return 'arm64' }
+        'amd64' { return 'x64' }
+        'x86' { return 'x86' }
+        'x64' { return 'x64' }
+        'ia64' { return 'ia64' }
+        'arm64' { return 'arm64' }
+        default { throw ('Architecture WDS inconnue : ' + $Value) }
+    }
+}
 foreach ($image in $images) {
     if ($image.ImageName -eq $KeepImageName -or $image.ImageName -match '(?i)(MDT|LiteTouch)' -or $image.ImageName -notmatch '^Atelier(?:\s*PXE)?(?:\s|[-_])') { continue }
     if ($PSCmdlet.ShouldProcess($image.ImageName,'Supprimer cette ancienne image de démarrage Atelier dans WDS')) {
         Write-Host ('Suppression image WDS Atelier : ' + $image.ImageName)
-        & wdsutil.exe '/Remove-Image' ('/Image:' + $image.ImageName) '/ImageType:Boot' ('/Architecture:' + $image.Architecture) ('/Filename:' + $image.FileName)
-        if ($LASTEXITCODE -ne 0) { throw ('Suppression WDS refusée : ' + $image.ImageName + '. Nettoyage disque interrompu.') }
+        try {
+            $architecture=Get-AtelierWdsArchitecture $image.Architecture
+            $arguments=@('/Remove-Image',('/Image:' + $image.ImageName),'/ImageType:Boot',('/Architecture:' + $architecture))
+            if ($image.FileName) { $arguments+=('/Filename:' + [IO.Path]::GetFileName($image.FileName)) }
+            $nativeOutput=@(& wdsutil.exe @arguments 2>&1)
+            $nativeExitCode=$LASTEXITCODE
+            $nativeOutput | ForEach-Object { Write-Host ([string]$_) }
+            if ($nativeExitCode -ne 0) {
+                throw ('Code WDS ' + $nativeExitCode + '. ' + ($nativeOutput -join [Environment]::NewLine))
+            }
+            if (@(Get-WdsBootImage | Where-Object {
+                $_.ImageName -eq $image.ImageName -and
+                (Get-AtelierWdsArchitecture $_.Architecture) -eq $architecture
+            }).Count) { throw 'L''ancienne image reste enregistrée dans WDS après la commande.' }
+        } catch {
+            $wdsCleanupFailed=$true
+            Write-Warning ('Ancienne image WDS conservée : ' + $image.ImageName + '. ' + $_.Exception.Message)
+        }
     }
+}
+if ($wdsCleanupFailed) {
+    # Aucun dossier de construction supprimé si WDS conserve une ancienne image.
+    Write-Warning 'Nettoyage des anciens dossiers différé. Le nouveau WinPE reste disponible ; aucune reconstruction nécessaire.'
+    Write-Host ('Image conservée : ' + $KeepImageName) -ForegroundColor Green
+    return
 }
 foreach ($root in $SearchRoots | Select-Object -Unique) {
     if (-not (Test-Path $root -PathType Container)) { continue }

@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Correctif de nettoyage WDS, 22 octobre 2026
+
+- Conversion des architectures numériques WDS vers les noms attendus par wdsutil.
+- Conservation du code et du message natifs en cas de refus de suppression.
+- Vérification de la disparition de chaque ancienne inscription avant nettoyage des dossiers.
+- Un refus conserve les anciens dossiers et laisse la mise à jour se terminer avec un avertissement. Le nouveau WinPE déjà importé reste disponible.
+
 ## IQ-5.7, 22 octobre 2026
 
 - Dépôt KB sur .250 avec recherche Microsoft, téléchargement, cache et accès HTTPS limité au déploiement demandeur.

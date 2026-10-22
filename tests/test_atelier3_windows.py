@@ -76,10 +76,11 @@ if(-not(Send-AtelierInventory 'DATA' 'CACHE')){throw 'Changed upload failed'}
     assert [line.rsplit('/',1)[-1] for line in (tmp_path/'uploads').read_text().splitlines()]==['xml','csv','csv']
 
 
+@pytest.mark.parametrize('wds_case',['success','numeric','refused','still_registered','unknown'])
 @pytest.mark.parametrize('old_name',['WinPE-Atelier2-old','WinPE-Reprise-old','WinPE-v1'])
 @pytest.mark.parametrize('keep_registered',[True,False])
 @pytest.mark.parametrize('root_alias',[True,False])
-def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tmp_path,old_name,keep_registered,root_alias):
+def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tmp_path,old_name,keep_registered,root_alias,wds_case):
     keep=tmp_path/'WinPE-Atelier3-new';keep.mkdir()
     (keep/'atelier-winpe.json').write_text('{"release":"ATELIER-4"}')
     (keep/'media'/'sources').mkdir(parents=True);(keep/'media'/'sources'/'boot.wim').write_bytes(b'new')
@@ -93,24 +94,39 @@ def test_cleanup_removes_only_old_atelier_images_after_replacement_is_present(tm
     wrapper=tmp_path/'cleanup.ps1'
     wrapper.write_text("""$ErrorActionPreference='Stop'
 function Import-Module {param($Name)}
+$global:removedOld=$false
 function Get-WdsBootImage {
  if(REGISTERED){[pscustomobject]@{ImageName='Atelier PXE - ATELIER-4 - new';Architecture='x64';FileName='new.wim'}}
- [pscustomobject]@{ImageName='Atelier PXE - ATELIER-2 - old';Architecture='x64';FileName='old.wim'}
+ if(-not $global:removedOld){[pscustomobject]@{ImageName='Atelier PXE - ATELIER-2 - old';Architecture='ARCH';FileName='old.wim'}}
  [pscustomobject]@{ImageName='MDT Production';Architecture='x64';FileName='mdt.wim'}
  [pscustomobject]@{ImageName='Atelier MDT Production';Architecture='x64';FileName='litetouch.wim'}
 }
 function Get-WindowsImage {param([switch]$Mounted)}
-function wdsutil.exe {Add-Content 'LOG' ($args -join '|');$global:LASTEXITCODE=0}
+function wdsutil.exe {
+ Add-Content 'LOG' ($args -join '|')
+ if('CASE' -eq 'refused'){$global:LASTEXITCODE=5;return 'Native WDS fixture error'}
+ $global:LASTEXITCODE=0
+ if('CASE' -ne 'still_registered'){$global:removedOld=$true}
+}
 & 'SCRIPT' -KeepImageName 'Atelier PXE - ATELIER-4 - new' -KeepOutputPath 'KEEP' -SearchRoots @('ROOT') -Confirm:$false
-""".replace('REGISTERED','$true' if keep_registered else '$false').replace('LOG',ps(tmp_path/'removed')).replace('SCRIPT',ps(ROOT/'scripts'/'Remove-OldAtelierWinPE.ps1')).replace('KEEP',ps(keep)).replace('ROOT',ps(search_root)),encoding='utf-8-sig')
+""".replace('ARCH', '9' if wds_case=='numeric' else 'invalid' if wds_case=='unknown' else 'x64').replace('CASE',wds_case).replace('REGISTERED','$true' if keep_registered else '$false').replace('LOG',ps(tmp_path/'removed')).replace('SCRIPT',ps(ROOT/'scripts'/'Remove-OldAtelierWinPE.ps1')).replace('KEEP',ps(keep)).replace('ROOT',ps(search_root)),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=20)
     if not keep_registered:
         assert run.returncode!=0
         assert old.exists() and keep.exists() and not (tmp_path/'removed').exists()
         return
     assert run.returncode==0,run.stderr
-    assert old.exists()==root_alias and keep.exists() and unrelated.exists() and mdt.exists()
+    failed=wds_case in ('refused','still_registered','unknown')
+    assert old.exists()==(root_alias or failed) and keep.exists() and unrelated.exists() and mdt.exists()
+    if failed:
+        assert 'Nettoyage des anciens dossiers différé' in run.stdout
+    if wds_case=='refused':
+        assert 'Native WDS fixture error' in run.stdout and 'Code WDS 5' in run.stdout
+    if wds_case=='unknown':
+        assert not (tmp_path/'removed').exists()
+        return
     log=(tmp_path/'removed').read_text()
+    assert '/Architecture:x64' in log
     assert '/Image:Atelier PXE - ATELIER-2 - old' in log and 'MDT Production' not in log and '/Filename:new.wim' not in log
 
 
