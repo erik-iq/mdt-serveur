@@ -1,4 +1,12 @@
-# Functions only; install applications in the interactive Windows session, never in WinPE.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. Installer les logiciels dans la session Windows interactive, jamais dans WinPE.
 function Get-AtelierClientWinGet {
     $candidates=@()
     $command=Get-Command winget.exe -ErrorAction SilentlyContinue
@@ -21,9 +29,9 @@ function Get-AtelierInstalledClientSoftware {
     if ($Key -eq 'hpia') {
         try { $tool=Get-AtelierInstalledHpia;return @{version=[string]$tool.version;tool=$tool} } catch { return $null }
     }
-    # A successful launcher or an old checkpoint is not proof of installation.
+    # Un lanceur réussi ou un ancien checkpoint ne prouve pas une installation.
     $rules=@{
-        vlc=@{name='^VLC( media player)?$';publisher='VideoLAN';files=@('vlc.exe')}
+        vlc=@{name='^VLC( média player)?$';publisher='VideoLAN';files=@('vlc.exe')}
         reader=@{name='^Adobe (Acrobat|Reader)';publisher='Adobe';files=@('AcroRd32.exe','Acrobat.exe','Reader\AcroRd32.exe','Acrobat\Acrobat.exe')}
         chrome=@{name='^Google Chrome$';publisher='Google';files=@('chrome.exe','Application\chrome.exe')}
         lenovo_system_update=@{name='^(Lenovo )?System Update';publisher='Lenovo';files=@('tvsu.exe')}
@@ -62,8 +70,8 @@ function Get-AtelierExecutableCommandPath {
 }
 function Get-AtelierInstalledAnyDesk {
     param([string]$DiagnosticLog)
-    # Some official installations omit Publisher/InstallLocation. Require a
-    # signed AnyDesk binary AND a matching machine registration or service.
+    # Certaines installations officielles omettent Publisher/InstallLocation. Exiger
+    # un binaire AnyDesk signé et une inscription machine ou un service correspondant.
     $registry=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
     $entries=@(Get-ItemProperty -Path $registry -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^AnyDesk\b' })
     $service=$null
@@ -78,12 +86,12 @@ function Get-AtelierInstalledAnyDesk {
         $candidates+=@(Get-AtelierExecutableCommandPath ([string]$entry.UninstallString))
     }
     if ($servicePath) { $candidates+=@($servicePath) }
-    if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Controle AnyDesk : entrees de desinstallation='+$entries.Count+' ; service avec chemin='+[bool]$servicePath) -Encoding UTF8 }
+    if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Contrôle AnyDesk : entrées de désinstallation='+$entries.Count+' ; service avec chemin='+[bool]$servicePath) -Encoding UTF8 }
     foreach ($path in @($candidates | Where-Object { $_ } | Select-Object -Unique)) {
         if ([IO.Path]::GetFileName($path) -ine 'AnyDesk.exe' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
         try {
             $signature=Get-AuthenticodeSignature -LiteralPath $path -ErrorAction Stop
-            if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Executable AnyDesk='+$path+' ; signature='+$signature.Status+' ; editeur='+$signature.SignerCertificate.Subject) -Encoding UTF8 }
+            if ($DiagnosticLog) { Add-Content -LiteralPath $DiagnosticLog -Value ('Exécutable AnyDesk='+$path+' ; signature='+$signature.Status+' ; éditeur='+$signature.SignerCertificate.Subject) -Encoding UTF8 }
             if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(?:^|,\s*)(?:CN|O)=(?:AnyDesk Software GmbH|philandro Software GmbH)(?:,|$)') { continue }
             $serviceMatches=$servicePath -and [IO.Path]::GetFullPath($path).Equals([IO.Path]::GetFullPath($servicePath),[StringComparison]::OrdinalIgnoreCase)
             if (-not $entries.Count -and -not $serviceMatches) { continue }
@@ -116,22 +124,24 @@ function Invoke-AtelierClientInstall {
         $hpOverride='/s /e /f "'+$hpLocation+'"'
         if ($i -gt 0 -and $Arguments[$i-1] -eq '--override' -and $hpLocation -notmatch '["\r\n]' -and $argument -eq $hpOverride -and
             $Arguments[0] -eq 'install' -and @($Arguments | Where-Object { $_ -eq 'HP.ImageAssistant' }).Count -eq 1) {
-            # Escape the inner quotes for the native Windows argv parser. Only
-            # this fixed HP extraction command may bypass manifest switches.
+            # Échapper les guillemets internes pour le parseur argv natif de Windows.
+            # Seule cette commande d’extraction HP fixe peut remplacer les options du manifeste.
             $encoded.Add('"'+($argument -replace '(\\*)"','$1$1\"' -replace '(\\+)$','$1$1')+'"');continue
         }
-        throw 'Argument WinGet non autorise.'
+        throw 'Argument WinGet non autorisé.'
     }
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$Executable;$info.Arguments=$encoded -join ' '
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
     $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+    $info.StandardOutputEncoding=[Text.UTF8Encoding]::new($false)
+    $info.StandardErrorEncoding=[Text.UTF8Encoding]::new($false)
     $process=[Diagnostics.Process]::Start($info)
     try {
         $output=$process.StandardOutput.ReadToEndAsync();$errors=$process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($TimeoutMilliseconds)) {
-            # Do not launch another installer on top of an unknown running installation.
-            throw 'Installateur encore actif apres 45 minutes : controler son processus avant de relancer.'
+            # Ne pas ajouter un installateur concurrent à une installation active dont le résultat est inconnu.
+            throw 'Installateur encore actif après 45 minutes : contrôler son processus avant de relancer.'
         }
         [IO.File]::AppendAllText($LogPath,($output.Result + [Environment]::NewLine + $errors.Result),[Text.Encoding]::UTF8)
         return $process.ExitCode
@@ -139,9 +149,9 @@ function Invoke-AtelierClientInstall {
 }
 function Get-AtelierInstalledHpia {
     $path=Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant\HPImageAssistant.exe'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'WinGet termine mais HPImageAssistant.exe est absent du dossier attendu. Consulter software-logs\hpia.log.' }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'WinGet terminé mais HPImageAssistant.exe est absent du dossier attendu. Consulter software-logs\hpia.log.' }
     $signature=Get-AuthenticodeSignature -LiteralPath $path
-    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature de l executable HP Image Assistant invalide.' }
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature de l''exécutable HP Image Assistant invalide.' }
     return @{name='HP Image Assistant';path=$path;version=[string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
 function New-AtelierHpiaLauncher {
@@ -149,8 +159,8 @@ function New-AtelierHpiaLauncher {
     Get-AtelierInstalledHpia | Out-Null
     $directory=Join-Path $ToolsPath 'Constructeur'
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    # Fixed command, no reporting credentials and no dependency on the
-    # disposable ProgramData payload. Opening HPIA manually requests elevation.
+    # Commande fixe, sans identifiants de rapport ni dépendance au dossier ProgramData temporaire.
+    # L’ouverture manuelle de HPIA demande une élévation.
     $launcher=@'
 @echo off
 powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath (Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant\HPImageAssistant.exe') -Verb RunAs"
@@ -165,33 +175,33 @@ powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -Command "Start-Process -F
 function Install-AtelierClientSoftware {
     param([string]$DataPath,[string[]]$Packages,[scriptblock]$OnProgress)
     if (-not $Packages.Count) { return }
-    # Assign the root JSON array directly. In Windows PowerShell 5.1 @(...)
-    # boxes it as one item; member enumeration then mixes all package IDs.
+    # Affecter directement le tableau JSON racine. Sous PowerShell 5.1, @(...)
+    # l’encapsule en un élément ; l’énumération des membres mélange ensuite les identifiants des paquets.
     $sources=Get-Content (Join-Path $DataPath 'software-sources.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-    # Client-only HP package; independent of the old server/bundle catalogue.
+    # Paquet HP du poste, indépendant de l’ancien catalogue serveur ou bundle.
     $sources+=@([pscustomobject]@{key='hpia';name='HP Image Assistant';winget_id='HP.ImageAssistant';architecture='x64'})
     $sources+=@([pscustomobject]@{key='lenovo_system_update';name='Lenovo System Update';winget_id='Lenovo.SystemUpdate';architecture='x86'})
     $results=New-Object 'Collections.Generic.List[object]'
     $statePath=Join-Path $DataPath 'winget-client-state.json'
     $saved=@{}
-    # Rebuild this state from live checks; old or damaged checkpoints are not inputs.
+    # Recréer cet état par des contrôles réels, sans anciens checkpoints ni checkpoints endommagés.
     $logs=Join-Path $DataPath 'software-logs'
     New-Item -ItemType Directory -Path $logs -Force | Out-Null
     try {
         $winget=Get-AtelierClientWinGet
         if (-not $winget) {
-            & $OnProgress 10 'Preparation de WinGet dans Windows...'
+            & $OnProgress 10 'Préparation de WinGet dans Windows...'
             try { & (Join-Path $DataPath 'Install-WinGet.ps1') *>&1 | Out-String | Add-Content -LiteralPath (Join-Path $logs 'winget-preparation.log') -Encoding UTF8 }
             catch { if (-not (Get-AtelierClientWinGet)) { throw } }
             $winget=Get-AtelierClientWinGet
         }
-        if (-not $winget) { throw 'WinGet indisponible apres sa preparation dans cette session Windows.' }
+        if (-not $winget) { throw 'WinGet indisponible après sa préparation dans cette session Windows.' }
     } catch {
         $failure=$_.Exception.Message
         Add-Content -LiteralPath (Join-Path $logs 'winget-preparation.log') -Value $failure -Encoding UTF8
         foreach ($key in $Packages) {
             $source=$sources | Where-Object { $_.key -eq $key } | Select-Object -First 1
-            $results.Add(@{id=$key;name=[string]$source.name;version='';status='failed';exit_code=-1;reason=('Preparation WinGet : ' + $failure)})
+            $results.Add(@{id=$key;name=[string]$source.name;version='';status='failed';exit_code=-1;reason=('Préparation WinGet : ' + $failure)})
         }
         Write-AtelierVerifiedUtf8File -Path $statePath -Content (ConvertTo-Json -InputObject @($results.ToArray()) -Depth 8) -NoBackup | Out-Null
         return $results.ToArray()
@@ -199,48 +209,48 @@ function Install-AtelierClientSoftware {
     $index=0
     foreach ($key in @($Packages | Select-Object -Unique)) {
         $source=$sources | Where-Object { $_.key -eq $key } | Select-Object -First 1
-        if (-not $source) { throw ('Logiciel non autorise : ' + $key) }
+        if (-not $source) { throw ('Logiciel non autorisé : ' + $key) }
         $index++
         $installed=Get-AtelierInstalledClientSoftware $key
         if ($installed) {
-            $entry=@{id=$key;name=[string]$source.name;version=$installed.version;status='completed';exit_code=0;reason='Presence actuelle verifiee dans Windows'}
+            $entry=@{id=$key;name=[string]$source.name;version=$installed.version;status='completed';exit_code=0;reason='Présence actuelle vérifiée dans Windows'}
             if ($installed.tool) { $entry.tool=$installed.tool } else { $entry.verification=$installed.verification }
             $saved[$key]=$entry
             Write-AtelierVerifiedUtf8File -Path $statePath -Content (ConvertTo-Json -InputObject @($saved.Values) -Depth 8) -NoBackup | Out-Null
             $results.Add($entry);continue
         }
-        & $OnProgress (10+[int](45*($index-1)/$Packages.Count)) ('Telechargement et installation silencieuse : ' + $source.name)
+        & $OnProgress (10+[int](45*($index-1)/$Packages.Count)) ('Téléchargement et installation silencieuse : ' + $source.name)
         $log=Join-Path $logs ($key + '.log')
         $code=$null
         try {
-            # Arguments come exclusively from the shipped catalogue; no command is accepted from the web.
+            # Les arguments viennent uniquement du catalogue livré ; aucune commande ne vient du site.
             $arguments=@('install','--id',$source.winget_id,'--exact','--source','winget','--silent','--architecture',$source.architecture,'--accept-source-agreements','--accept-package-agreements','--disable-interactivity')
             if ($key -eq 'hpia') {
-                # Manifest 5.3.6 embeds /f C:\SWSetup\HPImageAssistant in
-                # Silent. --location alone adds another /f. Replace the entire
-                # switch string so extraction has one deterministic destination.
+                # Le manifeste 5.3.6 contient /f C:\SWSetup\HPImageAssistant dans
+                # Silent. --location ajoute un deuxième /f. Remplacer toutes les options
+                # pour que l’extraction n’utilise qu’une seule destination déterministe.
                 $location=Join-Path $env:ProgramFiles 'AtelierPXE\Tools\HPImageAssistant'
                 New-Item -ItemType Directory -Path $location -Force | Out-Null
                 & icacls.exe $location /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-                if ($LASTEXITCODE -ne 0) { throw 'Impossible de proteger le dossier HP Image Assistant.' }
+                if ($LASTEXITCODE -ne 0) { throw 'Impossible de protéger le dossier HP Image Assistant.' }
                 $arguments+=@('--location',$location,'--override',('/s /e /f "'+$location+'"'))
             } else { $arguments+=@('--scope','machine') }
             $code=Invoke-AtelierClientInstall -Executable $winget -Arguments $arguments -LogPath $log
-            # A launcher can finish before registration becomes visible. Wait
-            # briefly, without starting a competing installer or a long scan.
+            # Un lanceur peut finir avant que l’inscription devienne visible. Attendre
+            # brièvement, sans installateur concurrent ni longue analyse.
             $installed=$null
             for ($attempt=0;$attempt -lt 4;$attempt++) {
                 if ($attempt) { Start-Sleep -Milliseconds 500 }
                 $installed=Get-AtelierInstalledClientSoftware $key -DiagnosticLog $log
                 if ($installed) { break }
             }
-            Add-Content -LiteralPath $log -Value ('Controle final : WinGet='+$code+' ; presence verifiee='+[bool]$installed) -Encoding UTF8
+            Add-Content -LiteralPath $log -Value ('Contrôle final : WinGet='+$code+' ; présence vérifiée='+[bool]$installed) -Encoding UTF8
             if (-not $installed) {
                 if ($key -eq 'hpia') { Get-AtelierInstalledHpia | Out-Null }
-                throw ('Installation non verifiee : '+$source.name+' ; WinGet='+$code+'. Executable, signature ou enregistrement Windows non confirme. Voir '+$log)
+                throw ('Installation non vérifiée : '+$source.name+' ; WinGet='+$code+'. Exécutable, signature ou enregistrement Windows non confirmé. Voir '+$log)
             }
-            $reason=if ($key -eq 'hpia') { 'Outil HP extrait et signature verifiee ; le resultat des SoftPaq est indique separement' } else { 'Installation silencieuse WinGet verifiee dans Windows' }
-            if ($code -notin @(0,3010,1641)) { $reason+=' ; presence confirmee malgre le code WinGet '+$code }
+            $reason=if ($key -eq 'hpia') { 'Outil HP extrait et signature vérifiée ; le résultat des SoftPaq est indiqué séparément' } else { 'Installation silencieuse WinGet vérifiée dans Windows' }
+            if ($code -notin @(0,3010,1641)) { $reason+=' ; présence confirmée malgré le code WinGet '+$code }
             $entry=@{id=$key;name=[string]$source.name;version=$installed.version;status='completed';exit_code=$code;reason=$reason}
             if ($installed.tool) { $entry.tool=$installed.tool } else { $entry.verification=$installed.verification }
             $saved[$key]=$entry;$results.Add($entry)

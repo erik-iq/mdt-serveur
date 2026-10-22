@@ -1,4 +1,4 @@
-# Suite de l’installation — DEPLOY-01
+# Suite de l’installation , DEPLOY-01
 
 **Pour reprendre votre installation déjà effectuée :** suivre [la mise à jour 0.2, l’assistant moderne et le test sur le HP EliteBook 850 G6](ASSISTANT-PXE.md). Les étapes initiales ci-dessous concernent un serveur neuf.
 
@@ -41,7 +41,7 @@ Attendu : `Python 3.12.x`. Si le chemin choisi est différent, fournir ce chemin
 
 ## 3. Télécharger et extraire le logiciel
 
-Dans [le dépôt GitHub](https://github.com/erik-iq/mdt-serveur), cliquer **Code → Download ZIP**. Dans les propriétés de l’archive téléchargée, cocher **Débloquer** si cette option est présente, puis extraire les fichiers.
+Dans [le dépôt GitHub](https://github.com/erik-iq/mdt-serveur), cliquer **Code → Download ZIP**. Dans les propriétés de l’archive téléchargée, cocher **Débloquer** si cette option est présenté, puis extraire les fichiers.
 
 Le résultat doit être :
 
@@ -118,11 +118,11 @@ Si le site ou son `web.config` existe déjà, vérifier sa configuration avant t
 ```powershell
 Install-WindowsFeature Web-Server -IncludeManagementTools
 New-Item -ItemType Directory -Path C:\inetpub\AtelierPXE -Force | Out-Null
-if (Test-Path C:\inetpub\AtelierPXE\web.config) { throw 'web.config existe deja : verifier la configuration avant de poursuivre.' }
+if (Test-Path C:\inetpub\AtelierPXE\web.config) { throw 'web.config existe déjà : vérifier la configuration avant de poursuivre.' }
 Copy-Item .\docs\iis.web.config.example C:\inetpub\AtelierPXE\web.config
 ```
 
-Installer les modules officiels IIS [URL Rewrite](https://www.iis.net/downloads/microsoft/url-rewrite) et [Application Request Routing — ARR](https://www.iis.net/downloads/microsoft/application-request-routing).
+Installer les modules officiels IIS [URL Rewrite](https://www.iis.net/downloads/microsoft/url-rewrite) et [Application Request Routing , ARR](https://www.iis.net/downloads/microsoft/application-request-routing).
 
 Dans **Gestionnaire IIS** :
 

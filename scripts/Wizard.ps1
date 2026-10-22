@@ -1,7 +1,15 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([Parameter(Mandatory)][psobject]$Config)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -24,7 +32,7 @@ $script:controls = @{}
 $script:applyingSoftwarePreset=$false
 $script:resizing=$false
 $script:operatorKeyboard = '100c:0000100c'
-$script:steps = @('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
+$script:steps = @('Connexion','Windows','Poste & région','Logiciels & bureau','Récapitulatif','Installation')
 $computer = Get-CimInstance Win32_ComputerSystem
 $script:manufacturer = [string]$computer.Manufacturer
 $script:serialNumber = ''
@@ -33,7 +41,7 @@ $script:namingMessage = ''
 try {
     $script:serialNumber=Get-AtelierHardwareSerial
     $script:proposedName=Get-AtelierSerialSuffix -SerialNumber $script:serialNumber
-    $script:namingMessage='Quatre derniers chiffres du numero de serie. Completer le nom avant installation.'
+    $script:namingMessage='Quatre derniers chiffres du numéro de série. Compléter le nom avant installation.'
 } catch { $script:namingMessage=$_.Exception.Message }
 $script:network=Get-AtelierWinPENetwork
 $script:macs=@($script:network.macs)
@@ -93,7 +101,7 @@ function Add-Choice([string]$Key, [string]$Label, [object[]]$Items, [string]$Val
 }
 function Choice-Value([string]$Key) {
     $choice = $script:controls[$Key]
-    if ($choice.SelectedIndex -lt 0) { throw 'Une selection est requise.' }
+    if ($choice.SelectedIndex -lt 0) { throw 'Une sélection est requise.' }
     return [string]$choice.Tag[$choice.SelectedIndex].id
 }
 function Add-Check([string]$Key, [string]$Text, [bool]$Checked, [bool]$Enabled = $true) {
@@ -126,7 +134,7 @@ function Save-Page {
         1 { $id = Choice-Value 'profile'; if ($id -ne $script:selectedProfile.id) { Set-Profile $id } }
         2 {
             $name = $script:controls.hostname.Text.Trim()
-            if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Completer le nom : commencer par une lettre, puis utiliser au maximum 15 lettres, chiffres ou tirets.' }
+            if ($name -notmatch '^[A-Za-z][A-Za-z0-9-]{0,14}$') { throw 'Compléter le nom : commencer par une lettre, puis utiliser au maximum 15 lettres, chiffres ou tirets.' }
             $script:targetName = $name
             $script:settings.keyboard = '100c:0000100c'
             $script:settings.timezone = Choice-Value 'timezone'
@@ -158,7 +166,7 @@ function Update-WizardLayout {
     $script:resizing=$true
     $script:body.SuspendLayout()
     try {
-        # Preserve field values and deployment controls; never recreate a page on resize.
+        # Préserver les champs et contrôles du déploiement ; ne pas recréer une page au redimensionnement.
         $scale=1.0
         if ($form.PSObject.Properties['DeviceDpi']) { $scale=[math]::Max(1.0,$form.DeviceDpi/96.0) }
         $compact=$form.ClientSize.Width -lt 940*$scale -or $form.ClientSize.Height -lt 600*$scale
@@ -177,7 +185,7 @@ function Update-WizardLayout {
             $button.Width=$buttonWidth;$button.Height=[int](40*$scale)
         }
         $main.RowStyles[3].Height=[int](44*$scale)
-        # Reserve the scrollbar width to avoid horizontal overflow when it appears.
+        # Réserver la largeur de la barre de défilement pour éviter un débordement horizontal.
         $width=[math]::Max(80,$script:body.ClientSize.Width-$script:body.Padding.Horizontal-[Windows.Forms.SystemInformation]::VerticalScrollBarWidth)
         foreach ($control in $script:body.Controls) {
             $available=[math]::Max(60,$width-$control.Margin.Horizontal)
@@ -202,7 +210,7 @@ function Show-Page {
     foreach ($control in @($script:body.Controls)) { $control.Dispose() }
     $script:body.Controls.Clear(); $script:controls = @{}
     $script:title.Text = $script:steps[$script:page]
-    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Preparez le nom, le clavier et le fuseau horaire.','Choisissez les logiciels a installer apres Windows et votre personnalisation.','Verifiez la cible avant de confirmer l installation.','Application de Windows et preparation du premier demarrage.')[$script:page]
+    $script:description.Text = @('Autorisez ce poste et connectez le partage des images.','Choisissez Windows dans le catalogue du serveur.','Préparez le nom, le clavier et le fuseau horaire.','Choisissez les logiciels à installer après Windows et votre personnalisation.','Vérifiez la cible avant de confirmer l''installation.','Application de Windows et préparation du premier démarrage.')[$script:page]
     $script:back.Enabled = $script:page -gt 1 -and -not $script:running
     $script:next.Enabled = -not $script:running
     $script:next.Text = if ($script:page -eq 0) { 'Connexion' } elseif ($script:page -eq 4) { 'Installer Windows' } else { 'Continuer' }
@@ -213,39 +221,39 @@ function Show-Page {
     switch ($script:page) {
         0 {
             Add-Text ($script:manufacturer + ' / ' + $computer.Model) 12 $true | Out-Null
-            Add-Text ('Numero de serie BIOS : ' + $(if($script:serialNumber){$script:serialNumber}else{'Indisponible ; identification impossible'})) 11 $true | Out-Null
+            Add-Text ('Numéro de série BIOS : ' + $(if($script:serialNumber){$script:serialNumber}else{'Indisponible ; identification impossible'})) 11 $true | Out-Null
             Add-Text $script:network.message | Out-Null
-            Add-Text ('MAC observees (informatif) : ' + ($script:macs -join ' / ')) | Out-Null
-            Add-Text 'Clavier francais suisse - QWERTZ (fixe)' | Out-Null
+            Add-Text ('MAC observées (informatif) : ' + ($script:macs -join ' / ')) | Out-Null
+            Add-Text 'Clavier français suisse - QWERTZ (fixe)' | Out-Null
             Add-Input 'keyboard_test' 'Test clavier (sans mot de passe) : essayez qwertz et 123' | Out-Null
             if (-not $Config.internal_mode) {
-            Add-Text 'Enregistrez ce numero de serie dans la console, puis creez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
-            Add-Input 'code' 'Code d installation' '' $true | Out-Null
+            Add-Text 'Enregistrez ce numéro de série dans la console, puis créez une autorisation avec assistant PXE. Saisissez le code affiche par la console.' | Out-Null
+            Add-Input 'code' 'Code d''installation' '' $true | Out-Null
             Add-Text ('Partage des images : ' + $script:share) | Out-Null
             Add-Input 'username' 'Compte de lecture du partage' ([string]$Config.share_account) | Out-Null
             Add-Input 'password' 'Mot de passe du partage' '' $true | Out-Null
-            Add-Text 'Le mot de passe reste dans la session WinPE ; il ne sera pas copie dans Windows.' | Out-Null
+            Add-Text 'Le mot de passe reste dans la session WinPE ; il ne sera pas copié dans Windows.' | Out-Null
             } else {
-                Add-Text $(if($Config.auto_enroll){'Le poste est enregistre automatiquement. Aucune autorisation prealable sur le site. Le disque sera confirme ici avant installation.'}else{'Connexion au poste enregistre dans la console.'}) | Out-Null
+                Add-Text $(if($Config.auto_enroll){'Le poste est enregistré automatiquement. Aucune autorisation préalable sur le site. Le disque sera confirmé ici avant installation.'}else{'Connexion au poste enregistre dans la console.'}) | Out-Null
             }
         }
         1 {
             $items = @($script:session.catalog.profiles | ForEach-Object { [pscustomobject]@{id=$_.id; name=[string]$_.name} })
-            Add-Choice 'profile' 'Edition Windows (Pro / Famille) et profil' $items $script:selectedProfile.id | Out-Null
-            Add-Text 'La liste utilise les images Windows du serveur. La langue depend de l''image choisie.' | Out-Null
+            Add-Choice 'profile' 'Édition Windows (Pro / Famille) et profil' $items $script:selectedProfile.id | Out-Null
+            Add-Text 'La liste utilise les images Windows du serveur. La langue dépend de l''image choisie.' | Out-Null
         }
         2 {
-            Add-Text ('Numero de serie BIOS : ' + $script:serialNumber) | Out-Null
+            Add-Text ('Numéro de série BIOS : ' + $script:serialNumber) | Out-Null
             if ($script:namingMessage) { Add-Text $script:namingMessage | Out-Null }
             $name = Add-Input 'hostname' 'Nom du PC' $script:targetName
             $name.MaxLength = 15
-            Add-Text 'Clavier Windows : francais suisse - QWERTZ (fixe)' | Out-Null
+            Add-Text 'Clavier Windows : français suisse - QWERTZ (fixe)' | Out-Null
             Add-Choice 'timezone' 'Fuseau horaire' @($script:session.catalog.options.timezones) $script:settings.timezone | Out-Null
-            Add-Choice 'user_locale' 'Region / formats' @($script:session.catalog.options.regions) $script:settings.user_locale | Out-Null
+            Add-Choice 'user_locale' 'Région / formats' @($script:session.catalog.options.regions) $script:settings.user_locale | Out-Null
         }
         3 {
             if ($script:settings.software_mode -eq 'winget') {
-                Add-Text 'Installation silencieuse apres le demarrage Windows' 12 $true | Out-Null
+                Add-Text 'Installation silencieuse après le démarrage Windows' 12 $true | Out-Null
                 $presetItems=@([pscustomobject]@{id='custom';name='Personnalise - choisir les cases'})+@($script:session.catalog.options.software_presets)
                 $presetChoice=Add-Choice 'software_preset' 'Bundle logiciels' $presetItems 'custom'
                 foreach ($package in @($script:session.catalog.options.software_packages)) { Add-Check ('winget-' + $package.id) $package.name ($package.id -in @($script:settings.winget_packages)) }
@@ -265,11 +273,11 @@ function Show-Page {
                         if (-not $script:applyingSoftwarePreset) { $script:controls.software_preset.SelectedIndex=0 }
                     })
                 }
-                Add-Text 'Coche = installation WinGet dans Windows. Decoche = aucune installation. Le bundle remplit les cases, puis vous pouvez les modifier.' | Out-Null
+                Add-Text 'Coche = installation WinGet dans Windows. Décoche = aucune installation. Le bundle remplit les cases, puis vous pouvez les modifier.' | Out-Null
             } else {
             Add-Text 'Bundles' 12 $true | Out-Null
             foreach ($bundle in @($script:session.catalog.bundles)) { Add-Check ('bundle-' + $bundle.id) $bundle.name ($bundle.id -in @($script:settings.bundle_ids)) }
-            Add-Text 'Logiciels supplementaires' 12 $true | Out-Null
+            Add-Text 'Logiciels supplémentaires' 12 $true | Out-Null
             foreach ($application in @($script:session.catalog.applications)) {
                 $compatible = Test-AtelierManufacturer $application.manufacturer $script:manufacturer
                 $label = $application.name + ' ' + $application.version
@@ -277,10 +285,10 @@ function Show-Page {
                 Add-Check ('app-' + $application.id) $label ($compatible -and $application.id -in @($script:settings.application_ids)) $compatible
             }
             }
-            Add-Choice 'theme' 'Theme du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
-            $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d ecran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
-            Add-Choice 'wallpaper' 'Fond d ecran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'HP Image Assistant coche : analyse et SoftPaq HP compatibles en arriere-plan. Lenovo System Update coche : installation de l outil. Windows Update et Microsoft Store restent manuels. Un BIOS peut redemarrer le poste ; la preparation reprend automatiquement.' | Out-Null
+            Add-Choice 'theme' 'Thème du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
+            $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d''écran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
+            Add-Choice 'wallpaper' 'Fond d''écran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
+            Add-Text 'HP Image Assistant coché : analyse et SoftPaq HP compatibles en arrière-plan. Lenovo System Update coche : installation de l''outil. Windows Update et Microsoft Store restent manuels. Un BIOS peut redémarrer le poste ; la préparation reprend automatiquement.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
@@ -292,19 +300,19 @@ function Show-Page {
 
             Add-Text ($script:selectedProfile.name + ' -> ' + $script:targetName) 16 $true | Out-Null
             Add-Text ('Clavier : ' + $script:settings.keyboard + ' | Fuseau : ' + $script:settings.timezone) | Out-Null
-            if ($disk -and -not $Config.auto_enroll) { Add-Text ('Disque ' + $disk.Number + ' : ' + $disk.FriendlyName + ' | ' + [math]::Round($disk.Size/1GB) + ' Go | Serie ' + $disk.SerialNumber) 11 $true | Out-Null }
+            if ($disk -and -not $Config.auto_enroll) { Add-Text ('Disque ' + $disk.Number + ' : ' + $disk.FriendlyName + ' | ' + [math]::Round($disk.Size/1GB) + ' Go | Série ' + $disk.SerialNumber) 11 $true | Out-Null }
             $apps = if ($script:settings.software_mode -eq 'winget') { @($script:session.catalog.options.software_packages | Where-Object { $_.id -in @($script:settings.winget_packages) } | ForEach-Object { $_.name }) } else { @(Selected-Applications | ForEach-Object { $_.name }) }
             Add-Text ('Logiciels de ce poste : ' + ($apps -join ', ')) | Out-Null
-            Add-Text 'Toutes les partitions du disque indique seront supprimees. Les controles du numero de serie, UEFI, image et disque seront executes avant cet effacement.' | Out-Null
+            Add-Text 'Toutes les partitions du disque indiqué seront supprimées. Les contrôles du numéro de série, UEFI, image et disque seront exécutés avant cet effacement.' | Out-Null
             $expected = 'EFFACER ' + $script:targetName + ' DISQUE ' + $disk.Number
             if (-not $script:session.plan.internal_mode) {
                 Add-Input 'confirmation' ('Tapez exactement : ' + $expected) | Out-Null
             } else {
-                Add-Text 'Installer Windows effacera ce disque et lancera le deploiement.' 11 $true | Out-Null
+                Add-Text 'Installer Windows effacera ce disque et lancera le déploiement.' 11 $true | Out-Null
             }
         }
         5 {
-            $script:stage = Add-Text 'Controle des prerequis...' 13 $true
+            $script:stage = Add-Text 'Contrôle des prérequis...' 13 $true
             $script:progress = New-Object Windows.Forms.ProgressBar
             $script:progress.Width = $script:body.ClientSize.Width - 28; $script:progress.Height = 22
             $script:body.Controls.Add($script:progress)
@@ -314,7 +322,7 @@ function Show-Page {
             $script:logs.Width = $script:body.ClientSize.Width - 28; $script:logs.Height = 250
             $script:logs.Font = New-AtelierFont -Family 'Consolas' -Size 9
             $script:body.Controls.Add($script:logs)
-            Add-Text 'Image appliquee signifie que Windows est prepare. Le premier demarrage, les logiciels et le bureau seront verifies apres redemarrage.' | Out-Null
+            Add-Text 'Image appliquée signifie que Windows est préparé. Le premier démarrage, les logiciels et le bureau seront vérifiés après redémarrage.' | Out-Null
         }
     }
     $script:body.ResumeLayout()
@@ -323,19 +331,19 @@ function Show-Page {
 function Connect-Post {
     $script:connectionStage='Identification du poste'
     $script:serialNumber=Get-AtelierHardwareSerial
-    if (-not $script:serialNumber) { throw 'Numero de serie BIOS absent ou generique. Impossible d identifier ce poste de facon fiable.' }
+    if (-not $script:serialNumber) { throw 'Numéro de série BIOS absent ou générique. Impossible d''identifier ce poste de façon fiable.' }
     $script:network=Get-AtelierWinPENetwork
     $script:macs=@($script:network.macs)
-    $script:status.Text = 'Connexion securisee au serveur...'; $form.Refresh()
+    $script:status.Text = 'Connexion sécurisée au serveur...'; $form.Refresh()
     if ($Config.internal_mode) {
-        $script:connectionStage='Connexion a l API Atelier /api/boot/discover'
+        $script:connectionStage='Connexion à l''API Atelier /api/boot/discover'
         $discovery=@{serial_number=$script:serialNumber;macs=$script:macs;release=[string]$Config.boot_release}
         try { $connected = Send-Json '/api/boot/discover' $discovery $false }
         catch {
             $prepared=Get-AtelierPreparedWindowsConflict -Failure $_ -SerialNumber $script:serialNumber
             if (-not $prepared -or -not $Config.auto_enroll) { throw }
             if (-not (Confirm-PreparedWindowsReinstall)) {
-                $script:status.Text='Image deja appliquee : demarrer sur Windows Boot Manager pour terminer la preparation.'
+                $script:status.Text='Image déjà appliquée : démarrer sur Windows Boot Manager pour terminer la préparation.'
                 $script:next.Enabled=$true
                 return
             }
@@ -343,14 +351,14 @@ function Connect-Post {
             $connected=Send-Json '/api/boot/discover' $discovery $false
         }
         $connectionHeaders = @{Authorization=('Bearer ' + $connected.agent_token)}
-        $script:connectionStage='Recuperation des acces au partage'
+        $script:connectionStage='Récupération des accès au partage'
         $credentials = Invoke-RestMethod -Uri ($script:root + '/api/agent/' + $connected.id + '/share-credentials') -Headers $connectionHeaders -TimeoutSec 20
         $username = $credentials.username
         $password = $credentials.password
         $connectionHeaders.Clear()
     } else {
         if (-not $script:controls.username.Text.Trim() -or -not $script:controls.password.Text) { throw 'Indiquez le compte et le mot de passe du partage.' }
-        $script:connectionStage='Connexion a l API Atelier /api/boot/connect'
+        $script:connectionStage='Connexion à l''API Atelier /api/boot/connect'
         $connected = Send-Json '/api/boot/connect' @{code=$script:controls.code.Text.Trim();serial_number=$script:serialNumber;macs=$script:macs} $false
         $username = $script:controls.username.Text.Trim()
         $password = $script:controls.password.Text
@@ -375,8 +383,8 @@ function Connect-Post {
     Show-Page
 }
 function Confirm-PreparedWindowsReinstall {
-    $message="Une image Windows est deja appliquee sur ce poste, mais sa preparation n est pas terminee.`r`n`r`nPour terminer cette installation, choisissez Non puis demarrez sur Windows Boot Manager.`r`n`r`nSi Windows est bloque et que vous voulez recommencer, choisissez Oui. Une nouvelle installation sera preparee ; vous devrez encore choisir et confirmer le disque a effacer. L historique sera conserve."
-    return [Windows.Forms.MessageBox]::Show($form,$message,'Recommencer l installation Windows ?',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Warning,[Windows.Forms.MessageBoxDefaultButton]::Button2) -eq [Windows.Forms.DialogResult]::Yes
+    $message="Une image Windows est déjà appliquée sur ce poste, mais sa préparation n’est pas terminée.`r`n`r`nPour terminer cette installation, choisissez Non puis démarrez sur Windows Boot Manager.`r`n`r`nSi Windows est bloque et que vous voulez recommencer, choisissez Oui. Une nouvelle installation sera préparée ; vous devrez encore choisir et confirmer le disque a effacer. L’historique sera conservé."
+    return [Windows.Forms.MessageBox]::Show($form,$message,'Recommencer l''installation Windows ?',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Warning,[Windows.Forms.MessageBoxDefaultButton]::Button2) -eq [Windows.Forms.DialogResult]::Yes
 }
 function Begin-Deployment {
     if ($Config.auto_enroll) { $script:session.plan.disk_number=[int](Choice-Value 'target_disk') }
@@ -395,7 +403,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.5'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.5.1'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'Dpi'
 $form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96)
@@ -468,7 +476,7 @@ $script:next.Add_Click({
         if ($script:page -eq 0) {
             $details=Get-AtelierConnectionFailure -Failure $_ -Stage $script:connectionStage -ServerUrl $script:root
             $details+="`r`n`r`nMessage Windows : "+$_.Exception.Message
-            [Windows.Forms.MessageBox]::Show($form,$details,'Connexion Atelier - erreur complete',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+            [Windows.Forms.MessageBox]::Show($form,$details,'Connexion Atelier - erreur complète',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
         }
     }
 })
@@ -493,25 +501,25 @@ $script:timer.Add_Tick({
                 $script:stage.Text='Installation interrompue : consulter le journal.'
                 foreach($errorRecord in $script:engine.Streams.Error){$script:logs.AppendText($errorRecord.ToString() + "`r`n")}
             } else {
-                $script:stage.Text='Image appliquee. Redemarrage vers Windows demande.'
+                $script:stage.Text='Image appliquée. Redémarrage vers Windows demande.'
                 $script:progress.Value=100
-                $script:logs.AppendText("Windows terminera sa configuration, puis les logiciels seront installes en arriere-plan.`r`n")
+                $script:logs.AppendText("Windows terminera sa configuration, puis les logiciels seront installés en arrière-plan.`r`n")
             }
-        } catch { $script:stage.Text='Echec du deploiement.';$script:logs.AppendText($_.Exception.Message) }
+        } catch { $script:stage.Text='Échec du déploiement.';$script:logs.AppendText($_.Exception.Message) }
         finally { $script:running=$false;$script:engine.Dispose();$script:next.Text='Fermer';$script:next.Enabled=$true }
     }
 })
 $form.Add_FormClosing({
     param($sender,$eventArgs)
-    # Keep the accidental-close guard without vetoing wpeutil's system shutdown.
+    # Conserver la protection contre une fermeture accidentelle, sans empêcher l’arrêt système de wpeutil.
     if ($script:running -and $eventArgs.CloseReason -ne [Windows.Forms.CloseReason]::WindowsShutDown) {
-        $eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenetre reste ouverte pendant les operations disque.'
+        $eventArgs.Cancel=$true;$script:status.Text='Installation active : la fenêtre reste ouverte pendant les opérations disque.'
     }
 })
 $script:startupFailure = $null
 $form.Add_Shown({
     try { $form.WindowState='Maximized';Show-Page; if ($Config.internal_mode) { try { Connect-Post } catch { $script:status.Text=$_.Exception.Message } } } catch {
-        # Return startup errors to Launch.ps1 instead of leaving a blank form.
+        # Transmettre les erreurs de démarrage à Launch.ps1, sans laisser une fenêtre vide.
         $script:startupFailure = $_
         $form.Close()
     }

@@ -1,4 +1,4 @@
-"""Computer history, operator notes and measured deployment stages."""
+"""Historique du poste, observations du technicien et durées des étapes."""
 import json
 import math
 import uuid
@@ -10,7 +10,7 @@ from app.identity import public_machine
 from fastapi import Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-STAGES={'image':'Application de Windows','software':'Logiciels','manufacturer_tools':'Preparation des outils constructeur','hp_updates':'Mises a jour HP','windows_update':'Windows Update','inventory':'Inventaire','personalization':'Personnalisation'}
+STAGES={'image':'Application de Windows','software':'Logiciels','manufacturer_tools':'Préparation des outils constructeur','hp_updates':'Mises à jour HP','windows_update':'Windows Update','inventory':'Inventaire','personalization':'Personnalisation'}
 
 
 class Measurement(BaseModel):
@@ -25,7 +25,7 @@ class Measurement(BaseModel):
     @field_validator('duration_seconds')
     @classmethod
     def finite(cls,value):
-        if not math.isfinite(value):raise ValueError('Duree invalide')
+        if not math.isfinite(value):raise ValueError('Durée invalide')
         return value
 
     @field_validator('started_at')
@@ -49,7 +49,7 @@ class Note(BaseModel):
     @classmethod
     def printable(cls,value):
         value=value.strip()
-        if any(ord(c)<32 and c not in '\n\r\t' for c in value):raise ValueError('Caracteres de controle interdits')
+        if any(ord(c)<32 and c not in '\n\r\t' for c in value):raise ValueError('Caractères de contrôle interdits')
         return value
 
 
@@ -78,7 +78,7 @@ def computer_routes(api,db,admin,windows_agent,now):
                 run=str(item.run_id)
                 previous=con.execute('SELECT * FROM deployment_timings WHERE deployment_id=? AND run_id=?',(identifier,run)).fetchone()
                 if previous:
-                    if previous['source']!=item.source or previous['stage']!=item.stage:raise HTTPException(409,'Identite de mesure differente')
+                    if previous['source']!=item.source or previous['stage']!=item.stage:raise HTTPException(409,'Identité de mesure différente')
                     if previous['status']!='running' and item.status=='running':continue
                     if item.duration_seconds<previous['duration_seconds']:continue
                 elif count>=200:raise HTTPException(409,'Limite de mesures atteinte')
@@ -91,14 +91,14 @@ def computer_routes(api,db,admin,windows_agent,now):
     @api.get('/api/deployments/{identifier}/timings',dependencies=[Depends(admin)])
     def timings(identifier:str):
         with db() as con:
-            if not con.execute('SELECT id FROM deployments WHERE id=?',(identifier,)).fetchone():raise HTTPException(404,'Deploiement introuvable')
+            if not con.execute('SELECT id FROM deployments WHERE id=?',(identifier,)).fetchone():raise HTTPException(404,'Déploiement introuvable')
             return {'measurements':timing_list(con,identifier)}
 
     @api.get('/api/deployments/{identifier}/report',dependencies=[Depends(admin)])
     def report(identifier:str):
         with db() as con:
             row=con.execute('SELECT report_json FROM computer_reports WHERE deployment_id=?',(identifier,)).fetchone()
-            if not row:raise HTTPException(404,'Rapport pas encore recu')
+            if not row:raise HTTPException(404,'Rapport pas encore reçu')
             return json.loads(row['report_json'])
 
     @api.post('/api/machines/{identifier}/notes',dependencies=[Depends(admin)],status_code=201)

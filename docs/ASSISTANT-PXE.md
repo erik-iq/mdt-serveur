@@ -1,8 +1,8 @@
-> IQ-5.0 : le PC est identifie par son numero de serie BIOS, meme sur un dock. Les instructions MAC ci-dessous concernent l ancien parcours. Pour les deploiements actuels, suivre [GUIDE-UTILISATEUR.md](GUIDE-UTILISATEUR.md) et [ATELIER-4.md](ATELIER-4.md).
+> IQ-5.0 : le PC est identifié par son numéro de série BIOS, même sur un dock. Les instructions MAC ci-dessous concernent l’ancien parcours. Pour les déploiements actuels, suivre [GUIDE-UTILISATEUR.md](GUIDE-UTILISATEUR.md) et [ATELIER-4.md](ATELIER-4.md).
 
 > Pour le nouveau parcours sans jeton/code, avec compte automatique, nom BIOS, mises à jour et dossier IQ_, suivre [MODE-INTERNE.md](MODE-INTERNE.md). Ce guide conserve le parcours authentifié.
 
-# Assistant PXE 0.2 — reprise sur DEPLOY-01
+# Assistant PXE 0.2 , reprise sur DEPLOY-01
 
 Votre serveur de déploiement est **DEPLOY-01 / 192.168.99.250**. L’hôte Hyper-V est **192.168.99.253**, le routeur/DHCP **192.168.99.1**. IIS, Python, WDS, ADK et le module WinPE sont déjà installés. Ce guide reprend à la mise à jour du logiciel ; il ne faut pas relancer l’installation initiale.
 
@@ -115,7 +115,7 @@ Télécharger les installateurs x64 depuis leurs éditeurs, puis les copier dans
 
 | Logiciel | Source officielle | Configuration du catalogue |
 |---|---|---|
-| VLC Media Player | [VideoLAN](https://www.videolan.org/vlc/) | EXE x64, tous les postes ; argument silencieux `/S`, à vérifier pour la version téléchargée |
+| VLC Média Player | [VideoLAN](https://www.videolan.org/vlc/) | EXE x64, tous les postes ; argument silencieux `/S`, à vérifier pour la version téléchargée |
 | Lecteur PDF de votre choix | Site officiel de l’éditeur ; par exemple [Adobe Reader](https://get.adobe.com/fr/reader/enterprise/) | MSI ou EXE signé ; utiliser les paramètres silencieux documentés par l’éditeur |
 | Google Chrome | [Chrome Enterprise](https://chromeenterprise.google/browser/download/) | MSI x64, tous les postes ; arguments supplémentaires vides pour le MSI standard |
 | HP Image Assistant | [Page HP HPIA](https://ftp.ext.hp.com/pub/caps-softpaq/cmit/HPIA.html) | ZIP des fichiers extraits de l’outil, mode **Outil portable**, point d’entrée `HPImageAssistant.exe`, constructeur **HP** |
@@ -131,7 +131,7 @@ Créer le bundle **Poste standard** : VLC + lecteur PDF + Chrome + HP Image Assi
 
 Dans **Profils Windows → Nouveau profil** : choisir le WIM et l’index réellement présents, puis saisir la version/édition vérifiées. Par exemple :
 
-- Nom : `Windows 11 Pro FR — Atelier`.
+- Nom : `Windows 11 Pro FR , Atelier`.
 - Langue de l’image : `fr-FR`, clavier français AZERTY, région `fr-FR`, fuseau Paris/Bruxelles.
 - Propriétaire et organisation : facultatifs.
 - Thème : clair, sombre ou conserver le thème Windows.
@@ -207,7 +207,7 @@ Dans WinPE :
 4. **Bundle & bureau** : logiciels, bundle, thème et fond d’écran. Les outils d’une autre marque sont désactivés.
 5. **Récapitulatif** : contrôler modèle/taille/série du disque et les logiciels retenus.
 
-Pour le premier parcours, **ne pas saisir la confirmation finale** : fermer l’assistant et annuler le job dans la console. Le choix de profil n’efface rien. Ce passage valide l’interface, le matériel, HTTPS et SMB.
+Pour le premier parcours, **ne pas saisir la confirmation finale** : fermer l’assistant et annuler le job dans la console. Le choix de profil n’effacé rien. Ce passage valide l’interface, le matériel, HTTPS et SMB.
 
 ## 10. Installer réellement sur le disque de test
 

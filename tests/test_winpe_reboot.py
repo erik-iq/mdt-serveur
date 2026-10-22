@@ -23,7 +23,7 @@ function Test-Path {param($Path);if($Path -ne 'HKLM:\SYSTEM\CurrentControlSet\Co
 function Start-Sleep {param($Seconds);$script:slept=$Seconds}
 function wpeutil.exe {
  param($Action)
- if($Action -ne 'reboot'){throw 'Unexpected operation'}
+ if($Action -ne 'reboot'){throw 'Unexpected opération'}
  $script:reboots++;$global:LASTEXITCODE=$(if('CASE' -eq 'native_failure'){5}else{0})
 }
 $failed=$false;$message=''
@@ -42,14 +42,14 @@ try {Restart-AtelierStagedWindows -Staged:('CASE' -ne 'not_staged')} catch {$fai
 
 @pytest.mark.parametrize('case',['success','changed_answer','changed_backup','server_failure','reboot_failure'])
 def test_real_final_staging_checks_and_cleanup_precede_reboot(tmp_path,case):
-    """Execute the agent's final staging/catch/finally, excluding disk operations."""
+    """Exécute the agent's final staging/catch/finally, excluding disk opérations."""
     script=tmp_path/'finish.ps1'
     script.write_text(r'''
 $ErrorActionPreference='Stop'
 . 'PROJECT/scripts/Unattend.ps1'
 . 'PROJECT/scripts/WinPE-Session.ps1'
 $ast=[Management.Automation.Language.Parser]::ParseFile('PROJECT/scripts/Deploy.ps1',[ref]$null,[ref]$null)
-$core=$ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] } | Select-Object -First 1
+$core=$ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] -and $_.Body.Extent.Text -match 'Assert-Active' } | Select-Object -First 1
 $index=-1
 for ($i=0;$i -lt $core.Body.Statements.Count;$i++) { if($core.Body.Statements[$i].Extent.Text -eq 'Assert-Active'){$index=$i} }
 if($index -lt 0){throw 'Final deployment checks missing'}

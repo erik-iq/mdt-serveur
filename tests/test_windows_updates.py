@@ -1,4 +1,4 @@
-"""Run update decision logic with fake COM objects, never install updates here."""
+"""Run update décision logic with fake COM objects, never install updates here."""
 import json
 import os
 from pathlib import Path
@@ -115,7 +115,7 @@ $job | Add-Member ScriptMethod RequestAbort { $script:aborted=$true }
 $job | Add-Member ScriptMethod CleanUp { throw 'Unfinished cleanup must not block the deadline' }
 $searcher=[pscustomobject]@{Job=$job}
 $searcher | Add-Member ScriptMethod BeginSearch { param($criteria,$callback,$state);$this.Job }
-$searcher | Add-Member ScriptMethod EndSearch { throw 'Incomplete search must not be called up to date' }
+$searcher | Add-Member ScriptMethod EndSearch { throw 'Incomplète search must not be called up to date' }
 $session=[pscustomobject]@{ClientApplicationID='';Searcher=$searcher}
 $session | Add-Member ScriptMethod CreateUpdateSearcher { $this.Searcher }
 $session | Add-Member ScriptMethod CreateUpdateDownloader { throw 'No download before a successful search' }

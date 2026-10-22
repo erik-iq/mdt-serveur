@@ -18,7 +18,7 @@ def setup_reporter(system):
 def snapshot(**overrides):
     return dict(hostname='PC-LAB-01', status='completed', generated_at='2026-10-15T16:00:00Z',
                 inventory={'Modèle': 'HP (EliteBook) \\ test', 'Windows': 'Windows 11 Pro'},
-                steps=[dict(name='Windows Update', status='completed', message='KB test installée')],
+                steps=[dict(name='Windows Update', status='completed', message='KB test installee')],
                 warnings=['Microsoft Store : achèvement non vérifié'], **overrides)
 
 

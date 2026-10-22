@@ -89,7 +89,7 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
     iq=tmp_path/'IQ_';(iq/'Rapports').mkdir(parents=True);(iq/'Personnalisation').mkdir()
     (iq/'Personnalisation'/'Fond-Atelier.png').write_bytes(b'permanent wallpaper')
     identifier=str(uuid.uuid4())
-    previous=program/('AtelierPXE-Previous-'+uuid.uuid4().hex);previous.mkdir();(previous/'old-state').write_text('reference image')
+    previous=program/('AtelierPXE-Previous-'+uuid.uuid4().hex);previous.mkdir();(previous/'old-state').write_text('référence image')
     write_json(data/'personalization.json',{'settings':{'winget_packages':[]},'deployment':{'id':identifier,'cleanup_after_reporting':True,'previous_payload_name':previous.name}})
     write_json(data/'reporting.json',{'id':identifier,'server_url':'https://atelier.test','token':'fixture-private-report-token','expires':'2099-01-01T00:00:00Z'})
     write_json(data/'result.json',{'status':'completed','deployment_id':identifier,'applications':[]})
@@ -97,7 +97,7 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
     write_json(data/'maintenance.json',{'status':status,'attempts':1,'timestamp':'2026-10-19T00:00:00Z','reboot_required':case in {'before_reboot','after_reboot'}})
     write_json(data/'progress.json',{'status':status,'message':'Final state'})
     (data/'Inventory').mkdir();(data/'Inventory'/'Inventaire-Technique.xml').write_text('<InventaireOrdinateur ordinateur="PC-LAB"/>')
-    (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Categorie;Propriete;Valeur\nPC-LAB;CPU;Name;Test\n')
+    (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Catégorie;Propriété;Valeur\nPC-LAB;CPU;Name;Test\n')
     (data/'software-logs').mkdir();(data/'software-logs'/'vlc.log').write_text('fixture-private-report-token Downloaded VLC successfully')
     (data/'Unattend.generated.xml').write_text('<Password>private-setup-password</Password>')
     hp_case=case in {'hp_reports','hp_bad_receipt','hp_bad_proof'}

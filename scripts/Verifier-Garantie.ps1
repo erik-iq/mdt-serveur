@@ -1,5 +1,13 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 param([string]$OutputDirectory=$PSScriptRoot)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 
 function Get-AtelierWarrantyMonths {
@@ -14,10 +22,10 @@ function Save-AtelierWarranty {
     param($Report,[string]$Directory)
     New-Item -ItemType Directory -Path $Directory -Force | Out-Null
     $Report | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Directory 'Garantie.json') -Encoding UTF8
-    @('VERIFICATION DE GARANTIE',('Poste : ' + $Report.ordinateur),('Constructeur : ' + $Report.constructeur),('Modele : ' + $Report.modele),('Numero de serie : ' + $Report.numero_serie),('Produit / SKU : ' + $Report.produit),('Source : ' + $Report.source_url),('Etat : ' + $Report.statut),('Date de verification : ' + $Report.verifie_le),('Debut : ' + $Report.debut),('Fin : ' + $Report.fin),('Mois complets de couverture : ' + $Report.mois_couverture),('Mois complets restants : ' + $Report.mois_restants),('Jours restants : ' + $Report.jours_restants),('Observation : ' + $Report.observation),'Les dates sont confirmees par l operateur depuis le portail constructeur. Une page ouverte seule ne verifie pas la garantie.') | Set-Content (Join-Path $Directory 'Garantie.txt') -Encoding UTF8
+    @('VÉRIFICATION DE GARANTIE',('Poste : ' + $Report.ordinateur),('Constructeur : ' + $Report.constructeur),('Modèle : ' + $Report.modele),('Numéro de série : ' + $Report.numero_serie),('Produit / SKU : ' + $Report.produit),('Source : ' + $Report.source_url),('État : ' + $Report.statut),('Date de vérification : ' + $Report.verifie_le),('Début : ' + $Report.debut),('Fin : ' + $Report.fin),('Mois complets de couverture : ' + $Report.mois_couverture),('Mois complets restants : ' + $Report.mois_restants),('Jours restants : ' + $Report.jours_restants),('Observation : ' + $Report.observation),'Les dates sont confirmées par l''opérateur depuis le portail constructeur. Une page ouverte seule ne vérifie pas la garantie.') | Set-Content (Join-Path $Directory 'Garantie.txt') -Encoding UTF8
 }
 
-# Loading just the functions is supported for date calculation tests.
+# Le chargement des seules fonctions permet de tester le calcul des dates.
 if ($MyInvocation.InvocationName -eq '.') { return }
 $computer=Get-CimInstance Win32_ComputerSystem
 $bios=Get-CimInstance Win32_BIOS
@@ -28,7 +36,7 @@ $url=switch -Regex ([string]$computer.Manufacturer) {
     '^Dell\b' { 'https://www.dell.com/support/home/fr-fr?app=warranty';break }
     default { '' }
 }
-$report=[ordered]@{ordinateur=$env:COMPUTERNAME;constructeur=[string]$computer.Manufacturer;modele=[string]$computer.Model;produit=[string]$computer.SystemSKUNumber;numero_serie=$serial;source_url=$url;statut='non_verifie';verifie_le='';debut='';fin='';mois_couverture=$null;mois_restants=$null;jours_restants=$null;observation='Dates non confirmees sur le site constructeur.'}
+$report=[ordered]@{ordinateur=$env:COMPUTERNAME;constructeur=[string]$computer.Manufacturer;modele=[string]$computer.Model;produit=[string]$computer.SystemSKUNumber;numero_serie=$serial;source_url=$url;statut='non_verifie';verifie_le='';debut='';fin='';mois_couverture=$null;mois_restants=$null;jours_restants=$null;observation='Dates non confirmées sur le site constructeur.'}
 $previous=$null
 if (Test-Path (Join-Path $OutputDirectory 'Garantie.json')) {
     try { $previous=Get-Content (Join-Path $OutputDirectory 'Garantie.json') -Encoding UTF8 -Raw | ConvertFrom-Json } catch { }
@@ -51,7 +59,7 @@ $copy=New-Object Windows.Forms.Button;$copy.Text='Copier le SN';$copy.Location=N
 $copy.Add_Click({[Windows.Forms.Clipboard]::SetText($serial)})
 $inputs=@{}
 $y=160
-foreach ($item in @(@('debut','Debut (AAAA-MM-JJ)'),@('fin','Fin (AAAA-MM-JJ)'),@('observation','Couverture / observation'))) {
+foreach ($item in @(@('debut','Début (AAAA-MM-JJ)'),@('fin','Fin (AAAA-MM-JJ)'),@('observation','Couverture / observation'))) {
     $caption=New-Object Windows.Forms.Label;$caption.Text=$item[1];$caption.Location=New-Object Drawing.Point(20,$y);$caption.Size=New-Object Drawing.Size(230,28)
     $input=New-Object Windows.Forms.TextBox;$input.Location=New-Object Drawing.Point(260,$y);$input.Size=New-Object Drawing.Size(370,28);$input.MaxLength=400
     $inputs[$item[0]]=$input;$form.Controls.AddRange(@($caption,$input));$y+=45
@@ -63,12 +71,12 @@ if ($previous -and $previous.numero_serie -eq $serial) {
 $notice=New-Object Windows.Forms.Label;$notice.Location=New-Object Drawing.Point(20,355);$notice.Size=New-Object Drawing.Size(620,50)
 $save.Add_Click({
     try {
-        if (-not $url) { throw 'Constructeur non pris en charge : verifier manuellement la source officielle.' }
+        if (-not $url) { throw 'Constructeur non pris en charge : vérifier manuellement la source officielle.' }
         $culture=[Globalization.CultureInfo]::InvariantCulture
         $start=[datetime]::ParseExact($inputs.debut.Text,'yyyy-MM-dd',$culture)
         $end=[datetime]::ParseExact($inputs.fin.Text,'yyyy-MM-dd',$culture)
-        if ($end -lt $start) { throw 'La fin doit etre posterieure au debut.' }
-        if ($start -gt (Get-Date).Date) { throw 'Le debut est dans le futur : verifier les dates.' }
+        if ($end -lt $start) { throw 'La fin doit être posterieure au début.' }
+        if ($start -gt (Get-Date).Date) { throw 'Le début est dans le futur : vérifier les dates.' }
         $report.debut=$start.ToString('yyyy-MM-dd');$report.fin=$end.ToString('yyyy-MM-dd')
         $report.mois_couverture=Get-AtelierWarrantyMonths $start $end
         $report.mois_restants=Get-AtelierWarrantyMonths (Get-Date).Date $end
@@ -76,7 +84,7 @@ $save.Add_Click({
         $report.statut=if ($end -lt (Get-Date).Date) { 'expiree_confirmee_operateur' } else { 'active_confirmee_operateur' }
         $report.verifie_le=[DateTime]::UtcNow.ToString('o');$report.observation=$inputs.observation.Text
         Save-AtelierWarranty $report $OutputDirectory
-        $notice.Text='Garantie.txt et Garantie.json enregistres localement dans IQ_. Le rapport de deploiement reste consulte sur le serveur apres nettoyage.'
+        $notice.Text='Garantie.txt et Garantie.json enregistrés localement dans IQ_. Le rapport de déploiement reste consulte sur le serveur après nettoyage.'
     } catch { $notice.Text='Dates AAAA-MM-JJ attendues. ' + $_.Exception.Message }
 })
 $form.Controls.AddRange(@($logo,$label,$open,$copy,$save,$notice))

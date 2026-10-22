@@ -1,4 +1,4 @@
-"""Install HPIA through the real client WinGet wrapper, then verify the executable."""
+"""Install HPIA through the real client WinGet wrapper, then verify the exécutable."""
 import json
 import os
 from pathlib import Path
@@ -33,7 +33,7 @@ with open(__file__+'.calls','a') as f:f.write(json.dumps(args)+'\\n')
 if 'CASE'=='winget_failure':sys.exit(12)
 if 'CASE'!='missing_exe':
     target=pathlib.Path(args[args.index('--location')+1])/'HPImageAssistant.exe'
-    target.write_bytes(b'HP executable fixture, never executed')
+    target.write_bytes('HP exécutable fixture, never executed'.encode("utf-8"))
 if 'CASE'=='nonzero_verified':sys.exit(19)
 '''.replace('CASE',case));executable.chmod(0o755)
     wrapper=tmp_path/'run.ps1'
@@ -91,7 +91,7 @@ switch ('CASE') {
 try {
  Invoke-AtelierClientInstall -Executable 'must-never-launch.exe' -Arguments @('install','--id',$package,'--override',$override) -LogPath 'LOG'
  throw 'Override was accepted'
-} catch { if ($_.Exception.Message -ne 'Argument WinGet non autorise.') {throw} }
+} catch { if ($_.Exception.Message -ne 'Argument WinGet non autorisé.') {throw} }
 '''.replace('PROGRAM',quote(tmp_path/'Program Files')).replace('CLIENT',quote(ROOT/'scripts'/'Client-Software.ps1')).replace('CASE',case).replace('LOG',quote(tmp_path/'log')),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert run.returncode==0,run.stderr

@@ -1,4 +1,4 @@
-# Parcours interne — INTERNE-1
+# Parcours interne , INTERNE-1
 
 Pour la révision avec rapports PDF, choix Pro/Famille et tests matériels, suivre [ATELIER-2](MISE-A-JOUR-ATELIER-2.md) et le [guide utilisateur](GUIDE-UTILISATEUR.md).
 
@@ -15,7 +15,7 @@ Pour l'installation existante **DEPLOY-01 / 192.168.99.250**, hôte Hyper-V **19
 - Le fichier de réponses prépare région, clavier, fuseau, OOBE et première session automatique. Aucune modification des marqueurs d'avancement de Windows Setup ou suppression des exigences matérielles Windows 11.
 - Une fenêtre de progression apparaît dans Windows pour le bureau, les logiciels et la maintenance.
 - Windows Update installe les mises à jour logicielles nécessaires du service configuré, y compris WSUS s'il existe. Les pilotes, BIOS et mises à jour facultatives ne sont pas sélectionnés. Des redémarrages automatiques avec délai de deux minutes permettent la reprise. Le processus est limité à cinq passes, quatre redémarrages et six tentatives ; il s'arrête avec un état explicite si une intervention est nécessaire.
-- Le service Windows reçoit une demande d'actualisation des applications Microsoft Store. Le résultat indique **requested / completion_verified=false** : il ne certifie pas que toutes les applications Store ont terminé. Le Store, ses services et l'accès Internet doivent être opérationnels.
+- Le service Windows reçoit une demande d'actualisation des applications Microsoft Store. Le résultat indiqué **requested / completion_verified=false** : il ne certifie pas que toutes les applications Store ont terminé. Le Store, ses services et l'accès Internet doivent être opérationnels.
 
 Le mode interne rend les fonctions administratives accessibles à toute personne pouvant joindre la console sur le LAN. Il est désactivé par défaut dans les installations existantes et s'active explicitement ci-dessous.
 
@@ -67,7 +67,7 @@ Choisir cette nouvelle image dans WDS au prochain boot. Une ancienne image deman
 1. Dans la console, conserver la MAC de **PC-TEST-PXE** et créer une **nouvelle autorisation** avec le profil Windows 11 Pro FR, index 6 du WIM d'origine, le bon disque et le choix dans l'assistant activé. Aucun code ni phrase ne sont demandés en mode interne. Une autorisation expire après deux heures et n'est plus récupérable dès le début de l'installation.
 2. Démarrer la VM sur la nouvelle image **INTERNE-1**. L'assistant se connecte automatiquement si l'autorisation existe ; sinon créer l'autorisation dans la console et cliquer sur **Connexion**.
 3. Vérifier Windows, le nom BIOS proposé et son préfixe, région, clavier, bundle **Poste standard** et **Fond-Atelier.png**.
-4. Lire le récapitulatif du disque. **Installer Windows** efface ses partitions. Attendre la fin WinPE ; `staged` signifie seulement que l'image et le premier démarrage sont préparés.
+4. Lire le récapitulatif du disque. **Installer Windows** effacé ses partitions. Attendre la fin WinPE ; `staged` signifie seulement que l'image et le premier démarrage sont préparés.
 5. Éteindre WinPE avec `wpeutil shutdown`, puis placer Windows Boot Manager/le disque avant le réseau dans Hyper-V. Relancer : Windows doit préparer le compte Administrateur puis ouvrir sa première session et la fenêtre de progression.
 6. Laisser le réseau et Internet disponibles. Les logiciels s'installent, les diagnostics sont créés et la maintenance commence. La session automatique est limitée et désactivée à la fin ou à l'arrêt définitif de la maintenance.
 7. Contrôler `C:\ProgramData\AtelierPXE\result.json` (logiciels), `maintenance.json` (Windows Update / demande Store), `maintenance.log`, `first-logon.log` et le dossier ci-dessous. La console web ne reçoit pas encore les états de maintenance après `staged`.
@@ -91,10 +91,10 @@ Les lanceurs `.cmd` demandent une élévation Windows pour pouvoir écrire leurs
 
 ## Diagnostic et retour au mode précédent
 
-- Si une ancienne version de `Enable-InternalMode.ps1` affiche une erreur Python `SyntaxError: '(' was never closed`, puis « Terminez les deploiements », le contrôle n'a pas abouti : ce message ne prouve pas qu'un déploiement est actif. Mettre à jour ce script et relancer l'activation. Le correctif transmet le code Python sur l'entrée standard pour Windows PowerShell 5.1, ouvre SQLite en lecture seule et distingue une erreur de contrôle d'un nombre réel de déploiements en cours. Cette erreur survient avant la création du compte et la modification de la configuration.
+- Si une ancienne version de `Enable-InternalMode.ps1` affiche une erreur Python `SyntaxError: '(' was never closed`, puis « Terminez les déploiements », le contrôle n'a pas abouti : ce message ne prouve pas qu'un déploiement est actif. Mettre à jour ce script et relancer l'activation. Le correctif transmet le code Python sur l'entrée standard pour Windows PowerShell 5.1, ouvre SQLite en lecture seule et distingue une erreur de contrôle d'un nombre réel de déploiements en cours. Cette erreur survient avant la création du compte et la modification de la configuration.
 - Une erreur de connexion du partage doit être corrigée sur DEPLOY-01 avec `Enable-InternalMode.ps1`, jamais en copiant un mot de passe dans WinPE.
 - `retry_pending` annonce une nouvelle tentative quinze minutes plus tard ; `needs_attention` signifie arrêt après la limite et désactivation de l'ouverture automatique. Consulter `maintenance.log` avant une reprise manuelle.
 - Après une limite atteinte, vérifier Internet, Windows Update, les services Store et les journaux. Ne pas supprimer l'état ou relancer une boucle sans diagnostic.
-- Pour désactiver ce parcours, remettre `internal_mode` et `automatic_windows` à `false` dans `data-runtime.json`, redémarrer la tâche `AtelierPXE-Console`, puis reconstruire WinPE. Cela n'efface ni les données du serveur ni les comptes des postes déjà déployés.
+- Pour désactiver ce parcours, remettre `internal_mode` et `automatic_windows` à `false` dans `data-runtime.json`, redémarrer la tâche `AtelierPXE-Console`, puis reconstruire WinPE. Cela n'effacé ni les données du serveur ni les comptes des postes déjà déployés.
 
 La syntaxe, les états persistants et les appels simulés sont testables sous Linux ; la création du compte local, OOBE, les permissions DPAPI/SMB, les véritables installations, powercfg et les mises à jour doivent être validés sur la VM Windows avant diffusion aux PC physiques.

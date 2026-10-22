@@ -1,6 +1,6 @@
 # Récupérer les journaux du premier démarrage depuis Hyper-V
 
-Le message Windows « Une erreur interne s’est produite lors du chargement ou de la recherche d’un fichier de réponses sans assistance » nécessite les journaux du Windows installé. Le code `0x800705b9` est `ERROR_XML_PARSE_ERROR` : Windows a échoué à analyser le XML. Un journal indiquant qu’il trouve `C:\Windows\Panther\unattend.xml` ne prouve pas que son contenu est valide.
+Le message Windows « Une erreur interne s’est produite lors du chargement ou de la recherche d’un fichier de réponses sans assistance » nécessite les journaux du Windows installé. Le code `0x800705b9` est `ERROR_XML_PARSE_ERROR` : Windows a échoué à analyser le XML. Un journal indiquant qu’il trouve `C:\Windows\Panther\unattend.xml` ne prouve pas que son contenu est validé.
 
 Un Bloc-notes blanc ne suffit pas à conclure que le fichier fait zéro octet. Par exemple, une position « Ligne 1, colonne 1352 » peut correspondre à des caractères invisibles. Il faut vérifier le fichier et ses octets. Le collecteur distingue fichier absent, taille nulle, octets nuls, erreur XML et XML syntaxiquement valide. La validation du schéma de Windows Setup reste distincte.
 

@@ -63,7 +63,7 @@ $second=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'TOOLS'
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert run.returncode==0,run.stderr
     result=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))
-    # PowerShell 7 may parse JSON dates as DateTime and omit a trailing zero.
+    # PowerShell 7 may parse JSON dates as DateTime and omit a trailing zéro.
     first_time=datetime.fromisoformat(result['first'].pop('timestamp'))
     second_time=datetime.fromisoformat(result['second'].pop('timestamp'))
     assert first_time==second_time and result['first']==result['second']

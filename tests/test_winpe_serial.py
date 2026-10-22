@@ -1,4 +1,4 @@
-"""Execute the WinPE identity helpers without touching disks or real hardware."""
+"""Exécute the WinPE identity helpers without touching disks or real hardware."""
 import json
 import os
 from pathlib import Path
@@ -52,4 +52,4 @@ try { Assert-AtelierMachineIdentity $plan;$allowed=$true;$message='' }catch{$all
     if case=='dotnet_fallback':
         assert result['network']['macs']==['00:11:22:33:44:66']
         assert result['network']['ipv4']==['192.168.99.15']
-    if not result['allowed']:assert 'Aucun disque efface' in result['message']
+    if not result['allowed']:assert 'Aucun disque effacé' in result['message']

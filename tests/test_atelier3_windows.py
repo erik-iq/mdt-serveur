@@ -1,4 +1,4 @@
-"""Exercise the new Windows helpers with isolated executable and API fixtures."""
+"""Exercise the new Windows helpers with isolated exécutable and API fixtures."""
 import json
 import os
 from pathlib import Path
@@ -55,7 +55,7 @@ $second=@(Install-AtelierClientSoftware -DataPath 'DATA' -Packages @('vlc','chro
 def test_inventory_transfer_sends_each_file_once_and_retries_only_changed_file(tmp_path):
     cache=tmp_path/'Inventory';cache.mkdir()
     (cache/'Inventaire-Technique.xml').write_text('<InventaireOrdinateur ordinateur="PC-TEST"/>')
-    (cache/'Inventaire-Technique.csv').write_text('Ordinateur;Categorie;Propriete;Valeur\nPC-TEST;CPU;Nom;Test\n')
+    (cache/'Inventaire-Technique.csv').write_text('Ordinateur;Catégorie;Propriété;Valeur\nPC-TEST;CPU;Nom;Test\n')
     (tmp_path/'reporting.json').write_text(json.dumps({'server_url':'https://atelier.test','id':'job','token':'private-report-token'}))
     wrapper=tmp_path/'transfer.ps1'
     wrapper.write_text("""$ErrorActionPreference='Stop'

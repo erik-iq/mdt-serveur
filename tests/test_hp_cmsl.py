@@ -90,8 +90,8 @@ function Invoke-HPRepositorySync {
  param([switch]$Quiet)
  $script:pass++
  if($script:pass -eq 2 -and -not (Test-Path 'sp12345.exe')){throw 'Previously downloaded package lost before synchronization'}
- Set-Content '.repository/cache/offline/platformList.cab' 'HP reference fixture'
- if('CASE' -ne 'missing_reference'){Set-Content '.repository/cache/8AB8_64_11.0.25h2.cab' 'HP platform reference fixture'}
+ Set-Content '.repository/cache/offline/platformList.cab' 'HP référence fixture'
+ if('CASE' -ne 'missing_reference'){Set-Content '.repository/cache/8AB8_64_11.0.25h2.cab' 'HP platform référence fixture'}
  if($script:pass -eq 1){Set-Content 'sp12345.exe' 'Signed fixture - never executed';Set-Content 'sp12345.cva' 'Metadata fixture'}
  else{Set-Content 'sp23456.exe' 'New signed fixture - never executed';Set-Content 'sp23456.cva' 'New metadata'}
  if('CASE' -eq 'sync_failure' -and $script:pass -eq 2){throw 'HP network failure'}

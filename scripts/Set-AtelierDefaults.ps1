@@ -1,6 +1,14 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 param([Parameter(Mandatory)][string]$InstallPath)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $base='http://127.0.0.1:'+ $config.port
@@ -13,7 +21,7 @@ if (-not $wallpapers.Count) {
     if ($files.Count) {
         $body=@{filename=$files[0].Name;kind='wallpaper'} | ConvertTo-Json
         Invoke-RestMethod ($base+'/api/assets') -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) | Out-Null
-        Write-Host ('Fond d ecran enregistre : '+$files[0].Name)
-    } else { Write-Warning 'Fond Atelier.png absent du dossier artifacts. Le deposer puis l enregistrer comme fond d ecran pour activer la selection par defaut.' }
+        Write-Host ('Fond d''écran enregistre : '+$files[0].Name)
+    } else { Write-Warning 'Fond Atelier.png absent du dossier artifacts. Le déposer puis l''enregistrer comme fond d''écran pour activer la sélection par défaut.' }
 }
-Write-Host 'Assistant : quatre derniers chiffres du SN a completer ; region fr-CH ; aucun prefixe, proprietaire ou organisation.'
+Write-Host 'Assistant : quatre derniers chiffres du SN à compléter ; région fr-CH ; aucun préfixe, propriétaire ou organisation.'

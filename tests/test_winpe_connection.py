@@ -84,6 +84,6 @@ try { Connect-Post } catch { $failed=$true }
     assert result['page']==(1 if case=='success' else 0)
     assert result['mapped']==(case=='success')
     assert result['stage']=={'success':'Chargement des profils Windows',
-                             'api':'Connexion a l API Atelier /api/boot/discover',
-                             'credentials':'Recuperation des acces au partage',
+                             "api":"Connexion à l'API Atelier /api/boot/discover",
+                             'credentials':'Récupération des accès au partage',
                              'share':'Ouverture du partage des images'}[case]

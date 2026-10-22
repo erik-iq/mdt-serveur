@@ -1,4 +1,4 @@
-"""Regression from the supplied HP report, with public metadata and no PC identity."""
+"""Régression from the supplied HP report, with public metadata and no PC identity."""
 import hashlib
 import json
 import os
@@ -81,7 +81,7 @@ $second=Invoke-AtelierHpia -DataPath 'WORK/data' -ToolsPath 'WORK/IQ_'
     assert state['reboot_required']==(case=='restart')
     if case in {'analysis_only','still_4104'}:
         assert state['packages']==[] and 'Un ou plusieurs SoftPaq' not in state['message']
-        if case=='analysis_only':assert 'aucun resultat' in state['message']
+        if case=='analysis_only':assert 'aucun résultat' in state['message']
     else:
         assert len(state['packages'])==11 and all(p['code'] is not None for p in state['packages'])
-        if case=='installed':assert 'Reference HP generique' in state['message'] and 'Un ou plusieurs SoftPaq' not in state['message']
+        if case=='installed':assert 'Référence HP générique' in state['message'] and 'Un ou plusieurs SoftPaq' not in state['message']

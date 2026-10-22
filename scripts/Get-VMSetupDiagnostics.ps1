@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 [CmdletBinding(DefaultParameterSetName='VM')]
 param(
     [Parameter(ParameterSetName='VM')][string]$VMName = 'PC-TEST-PXE',
@@ -6,6 +6,14 @@ param(
     [string]$OutputPath = (Join-Path ([IO.Path]::GetTempPath()) ('AtelierPXE-Diagnostic-' + [guid]::NewGuid().ToString('N'))),
     [switch]$OpenFolder
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 $mountedPath = $null
 $isWindowsHost = $env:OS -eq 'Windows_NT'
@@ -40,14 +48,14 @@ function Get-AnswerFileSummary {
         $summary.reason = 'well_formed_xml'
         $summary.root = $document.DocumentElement.LocalName
         $summary.namespace = $document.DocumentElement.NamespaceURI
-        # Well-formed XML is not proof of acceptance by Windows Setup/WSIM.
+        # Un XML bien formé ne prouve pas son acceptation par Windows Setup ou WSIM.
         $summary.windows_validation = 'not_performed'
     } catch {
         $summary.reason = 'invalid_xml'
         $exception = $_.Exception
         while ($exception.InnerException -and $exception -isnot [Xml.XmlException]) { $exception=$exception.InnerException }
         if ($exception -is [Xml.XmlException]) { $summary.error_line=$exception.LineNumber; $summary.error_position=$exception.LinePosition }
-        # Do not put XML snippets or exception messages into the public summary.
+        # Ne pas inclure de fragments XML ou de messages d’exception dans le résumé public.
     } finally {
         if ($reader) { $reader.Dispose() }
         $stream.Dispose()
@@ -62,20 +70,20 @@ try {
         if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Ouvrez Windows PowerShell en administrateur.' }
     }
     if ($PSCmdlet.ParameterSetName -eq 'VM') {
-        if (-not $isWindowsHost) { throw 'Le mode VM necessite l hote Hyper-V Windows.' }
+        if (-not $isWindowsHost) { throw 'Le mode VM nécessite l''hôte Hyper-V Windows.' }
         Import-Module Hyper-V -ErrorAction Stop
         $vm = Get-VM -Name $VMName -ErrorAction Stop
         if ($vm.State -ne 'Off') { throw "Eteignez uniquement la VM $VMName depuis Hyper-V, puis relancez la collecte." }
         $drives = @(Get-VMHardDiskDrive -VMName $VMName -ErrorAction Stop)
-        if ($drives.Count -ne 1 -or -not $drives[0].Path) { throw 'La collecte automatique attend un seul disque virtuel. Verifiez les disques de la VM.' }
+        if ($drives.Count -ne 1 -or -not $drives[0].Path) { throw 'La collecte automatique attend un seul disque virtuel. Vérifiez les disques de la VM.' }
         $diskPath = $drives[0].Path
         $vhd = Get-VHD -Path $diskPath -ErrorAction Stop
-        if ($vhd.Attached) { throw 'Le disque virtuel est deja attache. Aucun montage ni demontage effectue.' }
+        if ($vhd.Attached) { throw 'Le disque virtuel est déjà attache. Aucun montage ni démontage effectue.' }
         $image = Mount-VHD -Path $diskPath -ReadOnly -NoDriveLetter -Passthru -ErrorAction Stop
         $mountedPath = $diskPath
         Update-HostStorageCache -ErrorAction Stop
         $disk = Get-Disk -Number $image.DiskNumber -ErrorAction Stop
-        if (-not $disk.IsReadOnly -or $disk.IsOffline) { throw 'Le disque monte doit etre en ligne et en lecture seule. Aucun changement de son etat ne sera effectue.' }
+        if (-not $disk.IsReadOnly -or $disk.IsOffline) { throw 'Le disque monte doit être en ligne et en lecture seule. Aucun changement de son état ne sera effectué.' }
         $roots = @()
         foreach ($partition in @(Get-Partition -DiskNumber $disk.Number -ErrorAction Stop)) {
             foreach ($path in @($partition.AccessPaths)) {
@@ -85,7 +93,7 @@ try {
             }
         }
         $roots = @($roots | Select-Object -Unique)
-        if ($roots.Count -ne 1) { throw 'Impossible d identifier une unique installation Windows accessible sur ce disque. Aucun fichier source modifie.' }
+        if ($roots.Count -ne 1) { throw 'Impossible d''identifier une unique installation Windows accessible sur ce disque. Aucun fichier source modifie.' }
         $WindowsPath = $roots[0]
     }
     if (-not [IO.Directory]::Exists($WindowsPath)) { throw 'Dossier Windows introuvable.' }
@@ -94,15 +102,15 @@ try {
     if ($destination -eq $sourceRoot -or $destination.StartsWith($sourceRoot + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) {
         throw 'Placez le rapport hors du dossier Windows source.'
     }
-    if (Test-Path -LiteralPath $destination) { throw 'Le dossier de sortie existe deja. Utilisez un nouveau chemin.' }
+    if (Test-Path -LiteralPath $destination) { throw 'Le dossier de sortie existe déjà. Utilisez un nouveau chemin.' }
     New-Item -ItemType Directory -Path $destination | Out-Null
     if ($isWindowsHost) {
         $userGrant = '*' + $identity.User.Value + ':(OI)(CI)F'
         & icacls.exe $destination /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' $userGrant | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw 'Impossible de proteger le dossier de diagnostic.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Impossible de protéger le dossier de diagnostic.' }
     }
     $report = [ordered]@{utc=[DateTime]::UtcNow.ToString('o'); answer_files=@(); logs=@()}
-    # Use fixed paths only, without a recursive search or following junctions.
+    # Utiliser des chemins fixes, sans recherche récursive ni suivi des jonctions.
     $files = @(
         @('Panther','setuperr.log'), @('Panther','setupact.log'),
         @('Panther','UnattendGC','setuperr.log'), @('Panther','UnattendGC','setupact.log'),
@@ -132,7 +140,7 @@ try {
     Write-Host "Diagnostic copie dans : $destination" -ForegroundColor Green
     foreach ($answer in $report.answer_files) { Write-Host ("{0} : existe={1}, taille={2} octets, XML={3}, encodage={4}" -f $answer.file,$answer.exists,$answer.size_bytes,$answer.xml_valid,$answer.encoding) }
 } finally {
-    # Only detach the image mounted by this invocation, even after a copy error.
+    # Démonter uniquement l’image montée par cet appel, même après une erreur de copie.
     if ($mountedPath) { Dismount-VHD -Path $mountedPath -ErrorAction Stop }
 }
 if ($OpenFolder -and $isWindowsHost) { Start-Process explorer.exe -ArgumentList ('"' + $destination + '"') | Out-Null }

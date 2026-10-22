@@ -86,7 +86,7 @@ def test_legacy_profiles_and_wizard_cannot_reenable_windows_or_store_updates(tmp
         response=client.post('/api/agent/'+job['id']+'/configure',headers=auth(job['agent_token']),json={'profile_id':profile['id'],'hostname':'PC-LAB-01','settings':settings})
         assert response.status_code==200,response.text
         assert response.json()['settings']['windows_update'] is response.json()['settings']['store_update'] is False
-        # An already saved selection from an older client is also normalized.
+        # An already saved sélection from an older client is also normalized.
         with sqlite3.connect(tmp_path/'deployment.sqlite3') as con:
             con.execute('UPDATE deployments SET selection_json=? WHERE id=?',(json.dumps({'profile_id':profile['id'],'hostname':'PC-LAB-01','settings':settings}),job['id']))
         plan=client.get('/api/agent/'+job['id']+'/plan',headers=auth(job['agent_token'])).json()

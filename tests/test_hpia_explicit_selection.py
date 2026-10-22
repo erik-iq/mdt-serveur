@@ -1,4 +1,4 @@
-"""Regression: /Action:Install returned Analyze Action List with exit zero."""
+"""Régression: /Action:Install returned Analyze Action List with exit zéro."""
 import hashlib
 import json
 from pathlib import Path
@@ -33,7 +33,7 @@ function Invoke-AtelierHpiaProcess {
  foreach ($item in $fixture.HPIA.Recommendations) { $item | Add-Member NoteProperty SSMCompliant $('CASE' -ne 'not_ssm') }
  if ('CASE' -eq 'unknown_result') { $fixture.HPIA.HPIAOperation='Unknown';$fixture.HPIA.LastOperation='Unknown' }
  if ($Arguments -like '*/Force*') { throw 'Force is forbidden' }
- if ($Arguments -like '*/AutoReport*' -or $Arguments -notlike '*/Action:Install*' -or $Arguments -notlike '*/InstallType:AutoInstallable*') { throw 'Installation must not be replaced by the reporting operation' }
+ if ($Arguments -like '*/AutoReport*' -or $Arguments -notlike '*/Action:Install*' -or $Arguments -notlike '*/InstallType:AutoInstallable*') { throw 'Installation must not be replaced by the reporting opération' }
  if ($script:calls -eq 2) {
   $list=[regex]::Match($Arguments,'/SPList:"([^"]+)"')
   if (-not $list.Success) { throw 'An explicit HP SPList is required' }

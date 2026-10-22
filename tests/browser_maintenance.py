@@ -52,7 +52,7 @@ def run():
             snapshot_id=str(uuid.uuid4());archive=data/'hp-repository/snapshots'/(snapshot_id+'.zip')
             with zipfile.ZipFile(archive,'w') as z:
                 z.writestr('sp12345.exe',b'Fixture only')
-                z.writestr('sp12345.cva','[General]\nVersion=1.2.3\n[Software Title]\nUS=Intel <fixture> driver\n')
+                z.writestr('sp12345.cva','[Général]\nVersion=1.2.3\n[Software Title]\nUS=Intel <fixture> driver\n')
             with sqlite3.connect(data/'deployment.sqlite3') as con:
                 con.execute('INSERT INTO hp_repository_snapshots VALUES (?,?,?,?,?,?,?,?)',
                     (snapshot_id,'83B2','win11','26H2','a'*64,archive.stat().st_size,'["SP12345"]','2026-10-21T10:00:00Z'))
@@ -61,7 +61,7 @@ def run():
                 browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1050});errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
-                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectee')
+                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectée')
                 page.get_by_role('button',name='HPIA et pilotes',exact=True).click()
                 expect(page.locator('#hp-maintenance-models')).to_contain_text('EliteBook <fixture>')
                 page.locator('#hp-maintenance-models summary').click()
@@ -75,12 +75,12 @@ def run():
                 page.locator('#hp-maintenance-search').fill('')
                 page.screenshot(path='/tmp/atelier-maintenance-hp.png',full_page=True)
                 page.get_by_role('button',name='Images et correctifs',exact=True).click()
-                expect(page.locator('#windows-maintenance-runs')).to_contain_text('Candidate a tester')
+                expect(page.locator('#windows-maintenance-runs')).to_contain_text('Candidate à tester')
                 page.locator('#windows-maintenance-runs summary').click()
                 expect(page.locator('#windows-maintenance-runs')).to_contain_text('KB5127648')
                 expect(page.locator('#windows-maintenance-runs')).to_contain_text('1 min 5 s')
                 with page.expect_download() as download:
-                    page.get_by_role('button',name='Telecharger le rapport JSON',exact=True).click()
+                    page.get_by_role('button',name='Télécharger le rapport JSON',exact=True).click()
                 assert json.loads(Path(download.value.path()).read_text())['run_id']==RUN
                 assert 'PRIVATE' not in Path(download.value.path()).read_text()
                 def catalog(route):
@@ -89,7 +89,7 @@ def run():
                             'groups':[{'kb':'KB5128000','title':'Fixture new cumulative','published':'2026-10-21','new':True}]}]}))
                     route.fulfill(status=202,content_type='application/json',body='{"accepted":true}')
                 page.route('**/api/maintenance/windows/check',catalog)
-                page.get_by_role('button',name='Verifier les nouveaux correctifs',exact=True).click()
+                page.get_by_role('button',name='Vérifier les nouveaux correctifs',exact=True).click()
                 expect(page.locator('#windows-maintenance-catalog')).to_contain_text('KB5128000')
                 expect(page.locator('#windows-maintenance-catalog')).to_contain_text('Nouveau correctif')
                 page.screenshot(path='/tmp/atelier-maintenance-windows.png',full_page=True)

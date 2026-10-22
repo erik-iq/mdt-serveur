@@ -1,4 +1,4 @@
-"""Automatic discovery still requires a local WinPE installation click; no disk operation is in this API."""
+"""Automatic discovery still requires a local WinPE installation click; no disk opération is in this API."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import sqlite3

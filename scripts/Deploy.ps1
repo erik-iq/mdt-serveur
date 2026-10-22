@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ServerUrl,
@@ -9,6 +9,14 @@ param(
     [switch]$StartFromWizard,
     [switch]$AllowHttpForLab
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $headers = @{ Authorization = "Bearer $Token" }
@@ -38,48 +46,48 @@ function Run-Checked([string]$Executable, [string[]]$Arguments) {
 }
 function Assert-Active {
     $current = Invoke-RestMethod -Uri "$endpoint/plan" -Headers $headers
-    if ($current.status -ne 'running') { throw 'Le deploiement n''est plus actif.' }
+    if ($current.status -ne 'running') { throw 'Le déploiement n''est plus actif.' }
 }
 
 try {
     if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Cet agent fonctionne uniquement dans WinPE.' }
     $uri = [Uri]$ServerUrl
-    if ($uri.Scheme -ne 'https' -and -not ($AllowHttpForLab -and $uri.Scheme -eq 'http')) { throw 'HTTPS requis. HTTP est reserve au laboratoire avec -AllowHttpForLab.' }
+    if ($uri.Scheme -ne 'https' -and -not ($AllowHttpForLab -and $uri.Scheme -eq 'http')) { throw 'HTTPS requis. HTTP est réservé au laboratoire avec -AllowHttpForLab.' }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $mutex = New-Object Threading.Mutex($false, 'Global\AtelierPXE-Deployment')
     $ownsMutex = $mutex.WaitOne(0)
-    if (-not $ownsMutex) { throw 'Un autre agent est deja actif sur ce poste.' }
+    if (-not $ownsMutex) { throw 'Un autre agent est déjà actif sur ce poste.' }
     $plan = Invoke-RestMethod -Uri "$endpoint/plan" -Headers $headers
-    if ($plan.status -ne 'queued') { throw 'Ce deploiement a deja ete commence ; creez une nouvelle autorisation apres diagnostic.' }
+    if ($plan.status -ne 'queued') { throw 'Ce déploiement a déjà été commence ; créez une nouvelle autorisation après diagnostic.' }
     Assert-AtelierMachineIdentity $plan
     Run-Checked 'wpeutil.exe' @('UpdateBootInfo')
     $firmware = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name PEFirmwareType).PEFirmwareType
-    if ($firmware -ne 2) { throw 'Le deploiement necessite un demarrage UEFI (BIOS legacy non pris en charge).' }
+    if ($firmware -ne 2) { throw 'Le déploiement nécessite un démarrage UEFI (BIOS legacy non pris en charge).' }
     $disk = Get-Disk -Number $plan.disk_number
-    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly -or $disk.BusType -eq 'USB') { throw 'Disque systeme, USB, hors ligne ou en lecture seule : operation refusee.' }
+    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly -or $disk.BusType -eq 'USB') { throw 'Disque système, USB, hors ligne ou en lecture seule : opération refusée.' }
     if ($disk.Size -lt 64GB) { throw 'Un disque de 64 Go minimum est requis.' }
     foreach ($letter in @('S','W','R')) {
-        if (Test-Path "${letter}:\") { throw "La lettre $letter est occupee. Liberez-la avant le deploiement." }
+        if (Test-Path "${letter}:\") { throw "La lettre $letter est occupee. Liberez-la avant le déploiement." }
     }
     $source = Get-Item -LiteralPath $ImagePath
-    if ($source.PSIsContainer -or ($source.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $source.Name -ne $plan.image_filename -or $source.Length -ne $plan.image_size -or $source.Extension -ne '.wim') { throw 'La source doit etre le fichier WIM enregistre dans la console.' }
+    if ($source.PSIsContainer -or ($source.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $source.Name -ne $plan.image_filename -or $source.Length -ne $plan.image_size -or $source.Extension -ne '.wim') { throw 'La source doit être le fichier WIM enregistre dans la console.' }
     if ($source.FullName -notmatch '^\\\\') {
         $sourceDisk = Get-Partition -DriveLetter $source.FullName.Substring(0,1) | Get-Disk
         if ($sourceDisk.Number -eq $disk.Number) { throw 'L''image source se trouve sur le disque a effacer.' }
     }
     $claim = Invoke-RestMethod -Uri "$endpoint/claim" -Method Post -Headers $headers
     $started = $true
-    if (-not $claim.report_token -or -not $claim.report_expires) { throw 'Mettre a jour la console ATELIER-2 avant de deployer cette image WinPE. Aucun disque efface.' }
-    Send-Event 'running' 5 'Agent WinPE identifie ; controle de l''image source'
-    # The server hashes at registration. Avoid rereading the whole WIM over SMB.
-    # Keep the source immutable through metadata validation and DISM application.
+    if (-not $claim.report_token -or -not $claim.report_expires) { throw 'Mettre à jour la console ATELIER-2 avant de déployer cette image WinPE. Aucun disque effacé.' }
+    Send-Event 'running' 5 'Agent WinPE identifie ; contrôle de l''image source'
+    # Le serveur calcule l’empreinte à l’enregistrement. Éviter une relecture complète par SMB.
+    # Garder la source immuable pendant la validation et l’application DISM.
     $imageLock = [IO.File]::Open($source.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-    # DismCmdlets rejects a missing edition/index before touching the disk.
+    # DismCmdlets refuse une édition ou un index absent avant toute écriture sur le disque.
     $edition = Get-WindowsImage -ImagePath $source.FullName -Index $plan.image_index
     if ($edition.Architecture -ne 9) { throw 'Une image Windows x64 est requise.' }
     $expectedEdition=@{Pro='Professional';Professional='Professional';Famille='Core';Home='Core';'Famille unilingue'='CoreSingleLanguage'}[$plan.edition]
-    if ($expectedEdition -and $edition.EditionId -ne $expectedEdition) { throw 'L index WIM ne correspond pas a l edition Pro/Famille du profil. Synchroniser les profils avant de poursuivre.' }
-    if ($edition.Languages -and $plan.locale -notin @($edition.Languages)) { throw 'La langue du profil n est pas presente dans cette image Windows.' }
+    if ($expectedEdition -and $edition.EditionId -ne $expectedEdition) { throw 'L''index WIM ne correspond pas à l''édition Pro/Famille du profil. Synchroniser les profils avant de poursuivre.' }
+    if ($edition.Languages -and $plan.locale -notin @($edition.Languages)) { throw 'La langue du profil n''est pas présenté dans cette image Windows.' }
     $manufacturer = [string](Get-CimInstance Win32_ComputerSystem).Manufacturer
     $selectedApplications = @($plan.applications | Where-Object { $plan.settings.software_mode -ne 'winget' } | Where-Object { Test-AtelierManufacturer $_.manufacturer $manufacturer })
     $sourceFolder = Split-Path $source.FullName -Parent
@@ -92,26 +100,26 @@ try {
         $path = Join-Path $sourceFolder $extra.asset.filename
         $file = Get-Item -LiteralPath $path
         if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -ne $extra.asset.size -or (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ne $extra.asset.sha256) {
-            throw ("Fichier supplementaire invalide avant effacement : " + $extra.asset.filename)
+            throw ("Fichier supplémentaire invalide avant effacement : " + $extra.asset.filename)
         }
     }
     $unattend = New-AtelierUnattend -Plan $plan
     Assert-AtelierUnattendContent -Content $unattend
     Write-Host "IMAGE : $($edition.ImageName)"
     Write-Host "CIBLE : $($plan.hostname) / SN $($plan.serial_number)"
-    Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / serie $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
-    Write-Host 'Toutes les partitions de ce disque seront supprimees.' -ForegroundColor Red
+    Write-Host "DISQUE : $($disk.Number) / $($disk.FriendlyName) / série $($disk.SerialNumber) / $([math]::Round($disk.Size/1GB)) Go" -ForegroundColor Yellow
+    Write-Host 'Toutes les partitions de ce disque seront supprimées.' -ForegroundColor Red
     $expected = "EFFACER $($plan.hostname) DISQUE $($disk.Number)"
     $confirmation = if ($StartFromWizard -and $plan.internal_mode) { $expected } elseif ($LocalConfirmation) { $LocalConfirmation } else { Read-Host "Tapez exactement : $expected" }
-    if ($confirmation -cne $expected) { throw 'Confirmation locale refusee ; aucun disque efface.' }
+    if ($confirmation -cne $expected) { throw 'Confirmation locale refusée ; aucun disque effacé.' }
     Assert-Active
     Assert-AtelierMachineIdentity $plan
-    # Hold the source open for read and disallow writes/deletion during apply.
+    # Garder la source ouverte en lecture, sans autoriser son écriture ou sa suppression.
     try {
-        Send-Event 'running' 20 'Image verifiee ; creation des partitions UEFI/GPT'
+        Send-Event 'running' 20 'Image vérifiée ; création des partitions UEFI/GPT'
         Assert-Active
         $currentDisk = Get-Disk -Number $plan.disk_number
-        if ($currentDisk.UniqueId -ne $disk.UniqueId -or $currentDisk.Size -ne $disk.Size) { throw 'L''identite du disque a change.' }
+        if ($currentDisk.UniqueId -ne $disk.UniqueId -or $currentDisk.Size -ne $disk.Size) { throw 'L''identité du disque a change.' }
         $partitionScript = @"
 select disk $($plan.disk_number)
 clean
@@ -143,10 +151,10 @@ exit
         Sync-AtelierTimings $timingPath ([pscustomobject]@{server_url=$ServerUrl.TrimEnd('/');id=$DeploymentId;token=$claim.report_token})
     } finally { if ($imageLock) { $imageLock.Dispose(); $imageLock=$null } }
     Assert-Active
-    Send-Event 'running' 80 'Configuration du nom du poste et du demarrage UEFI'
+    Send-Event 'running' 80 'Configuration du nom du poste et du démarrage UEFI'
     $payloadPath = 'W:\ProgramData\AtelierPXE'
-    # A captured WIM can contain checkpoints from its reference computer.
-    # Preserve them outside the new payload, never reuse their success states.
+    # Un WIM capturé peut contenir des checkpoints de son ordinateur de référence.
+    # Les conserver hors du nouveau dossier de travail, sans réutiliser leurs statuts de réussite.
     $previousPayload=Initialize-AtelierDeploymentPayload -Path $payloadPath
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
@@ -160,19 +168,19 @@ exit
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active
-        Send-Event 'running' 85 ('Preparation du bundle : ' + $extra.asset.filename)
+        Send-Event 'running' 85 ('Préparation du bundle : ' + $extra.asset.filename)
         $folder = Join-Path $payloadPath $extra.subfolder
         New-Item -ItemType Directory -Path $folder -Force | Out-Null
         if ($extra.subfolder -eq 'Resources') {
-            # Explorer runs without elevation, even for an administrator account.
+            # Explorer s’exécute sans élévation, même dans un compte administrateur.
             Run-Checked 'icacls.exe' @($folder, '/grant:r', '*S-1-5-32-545:(OI)(CI)RX')
         }
         $target = Join-Path $folder $extra.asset.filename
         Copy-Item -LiteralPath (Join-Path $sourceFolder $extra.asset.filename) -Destination $target
-        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ne $extra.asset.sha256) { throw 'Integrite du bundle refusee apres copie.' }
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ne $extra.asset.sha256) { throw 'Intégrité du bundle refusée après copie.' }
     }
-    # specialize/oobeSystem are processed at first boot, not by DISM's
-    # offlineServicing pass. Cache the answer file for Windows setup.
+    # specialize/oobeSystem sont traités au premier démarrage, et non pendant
+    # offlineServicing. Mettre le fichier de réponses en cache pour Windows Setup.
     New-Item -ItemType Directory -Path 'W:\Windows\Panther' -Force | Out-Null
     $answerBackup = Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'Unattend.generated.xml') -Content $unattend -Unattend
     $answer = Write-AtelierVerifiedUtf8File -Path 'W:\Windows\Panther\Unattend.xml' -Content $unattend -Unattend
@@ -188,9 +196,9 @@ exit
     Assert-Active
     Assert-AtelierUnattendFile -Path $answer.path -ExpectedHash $answer.sha256
     Assert-AtelierUnattendFile -Path $answerBackup.path -ExpectedHash $answerBackup.sha256
-    Send-Event 'staged' 100 'Image appliquee. Redemarrage automatique vers Windows ; installation des logiciels au premier demarrage.'
+    Send-Event 'staged' 100 'Image appliquée. Redémarrage automatique vers Windows ; installation des logiciels au premier démarrage.'
     $staged = $true
-    Write-Host 'Image et demarrage prepares. Redemarrage automatique dans 5 secondes.' -ForegroundColor Green
+    Write-Host 'Image et démarrage préparés. Redémarrage automatique dans 5 secondes.' -ForegroundColor Green
 } catch {
     $failure = $_
     if ($imageTiming) {
@@ -198,7 +206,7 @@ exit
         Sync-AtelierTimings $timingPath ([pscustomobject]@{server_url=$ServerUrl.TrimEnd('/');id=$DeploymentId;token=$claim.report_token})
     }
     if ($started) {
-        try { Send-Event 'failed' $lastProgress $failure.Exception.Message } catch { Write-Warning 'Impossible de transmettre l''echec a la console.' }
+        try { Send-Event 'failed' $lastProgress $failure.Exception.Message } catch { Write-Warning 'Impossible de transmettre l''échec à la console.' }
     }
     Write-Error $failure -ErrorAction Continue
     exit 1
@@ -209,5 +217,5 @@ exit
     $headers.Clear()
     $Token = $null
 }
-# All answer files are verified and handles released before the reboot request.
+# Vérifier les fichiers de réponses et fermer leurs handles avant de demander le redémarrage.
 Restart-AtelierStagedWindows -Staged $staged

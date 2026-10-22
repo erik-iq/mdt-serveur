@@ -1,9 +1,8 @@
-"""Download monthly OS/.NET Framework packages from the Microsoft Update Catalog.
+"""Téléchargement des correctifs mensuels Windows/.NET depuis le catalogue Microsoft.
 
-No third party module or undocumented update service is installed. Catalog HTML
-is not a stable API: fail closed if its rows, pagination or downloads change.
-DISM remains responsible for package applicability and signature validation.
-"""
+Aucun module tiers ou service non documenté n’est installé. Le catalogue HTML
+n’est pas une API stable : refuser son changement de structure ou de téléchargement.
+DISM reste responsable de l’applicabilité et de la validation des signatures."""
 from __future__ import annotations
 
 import argparse
@@ -31,7 +30,7 @@ def safe_url(url, catalog=False):
     hosts = {'www.catalog.update.microsoft.com', 'catalog.update.microsoft.com'} if catalog else DOWNLOAD_HOSTS
     if (parts.scheme != 'https' or parts.hostname not in hosts or parts.username or
             parts.password or parts.port not in (None, 443) or parts.fragment):
-        raise ValueError('Adresse Microsoft non autorisee : ' + url)
+        raise ValueError('Adresse Microsoft non autorisée : ' + url)
     return url
 
 
@@ -88,7 +87,7 @@ def fetch_page(opener, url, fields=None):
         safe_url(response.url, catalog=True)
         body = response.read(8 * 1024 * 1024 + 1)
     if len(body) > 8 * 1024 * 1024:
-        raise ValueError('Reponse catalogue trop grande')
+        raise ValueError('Réponse catalogue trop grande')
     return body.decode('utf-8-sig')
 
 
@@ -105,7 +104,7 @@ def search(opener, query):
         if not page.next_page:
             return rows
         if '__VIEWSTATE' not in page.hidden or '__EVENTVALIDATION' not in page.hidden:
-            raise ValueError('Etat de pagination Microsoft absent')
+            raise ValueError('État de pagination Microsoft absent')
         page = CatalogPage(fetch_page(opener, url, dict(page.hidden,
             __EVENTTARGET='ctl00$catalogBody$nextPageLinkText', __EVENTARGUMENT='')))
     raise ValueError('Trop de pages Microsoft ; affiner la recherche')
@@ -144,7 +143,7 @@ def select_update(rows, family, release, arch, kind, dotnet='4.8.1', today=None)
     latest = candidates[0]
     if any(item['published'] == latest['published'] and item['id'] != latest['id']
            and item['kb'] != latest['kb'] for item in candidates[1:]):
-        raise ValueError('Plusieurs correctifs differents a la meme date ; selection manuelle necessaire')
+        raise ValueError('Plusieurs correctifs différents à la même date ; sélection manuelle nécessaire')
     return latest
 
 
@@ -204,14 +203,14 @@ def download(opener, item, directory):
 
 
 class DeadlineOpener:
-    """Bound metadata lookup time without changing download or redirect checks."""
+    """Borner la recherche des métadonnées sans modifier les contrôles des téléchargements ou redirections."""
     def __init__(self, opener, seconds):
         self.opener, self.deadline = opener, time.monotonic() + seconds
 
     def open(self, request, timeout):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
-            raise TimeoutError('Delai maximal de recherche du catalogue Microsoft atteint')
+            raise TimeoutError('Délai maximal de recherche du catalogue Microsoft atteint')
         return self.opener.open(request, timeout=min(timeout, remaining))
 
 
@@ -219,7 +218,7 @@ def select_plan(family, release, arch, dotnet, opener=None, timeout_seconds=180)
     opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()), MicrosoftRedirect())
     opener = DeadlineOpener(opener, timeout_seconds)
     groups = []
-    # Finish with the OS cumulative update, after the .NET component update.
+    # Terminer par le cumulatif Windows, après la mise à jour du composant .NET.
     for kind in ('net', 'os') if dotnet else ('os',):
         query = f'Windows {family} {release} {arch} Cumulative Update'
         if kind == 'net':
@@ -237,11 +236,11 @@ def prepare(family, release, arch, dotnet, cache, opener=None):
         fields = {'updateIDs': json.dumps([{'size': 0, 'updateID': selected['id'], 'uidInfo': selected['id']}])}
         links = download_links(fetch_page(opener, CATALOG + '/DownloadDialog.aspx', fields))
         if any(not re.search(r'[-_]' + arch + r'[-_]', item['filename'], re.I) for item in links):
-            raise ValueError('Architecture du telechargement incoherente')
+            raise ValueError('Architecture du téléchargement incohérente')
         target = [item for item in links if re.search(r'\b' + selected['kb'] + r'[-_]', item['filename'], re.I)]
         if len(target) != 1:
             raise ValueError('Paquet cible Microsoft absent ou ambigu')
-        # Keep the target and ALL checkpoints together, without unrelated MSUs.
+        # Garder la cible et tous ses checkpoints ensemble, sans MSU étrangers.
         directory = Path(cache) / selected['id']
         allowed = {item['filename'] for item in links}
         if directory.exists() and any(path.name not in allowed for path in directory.glob('*.msu')):
@@ -263,7 +262,7 @@ def main():
     plan = (select_plan(args.family, args.release, args.arch, dotnet) if args.select_only
             else prepare(args.family, args.release, args.arch, dotnet, args.cache))
     output = Path(args.output)
-    output.write_text(json.dumps(plan, ensure_ascii=True, indent=2), encoding='utf-8')
+    output.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
     print(str(output))
 
 

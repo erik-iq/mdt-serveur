@@ -1,6 +1,14 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 param([string]$DataPath='C:\ProgramData\AtelierPXE', [string]$OutputDirectory='C:\IQ_')
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'IQ-Paths.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
@@ -19,7 +27,7 @@ powershell.exe -NoLogo -NoProfile -WindowStyle Hidden -Command "`$p=[char]34+'%~
     }
 }
 Copy-Item -LiteralPath (Join-Path $DataPath 'Tests-Materiel.html') -Destination (Join-Path $OutputDirectory 'Diagnostics') -Force
-# Warranty shares the same Windows palette; hardware tests embed it in their HTML.
+# La garantie partage la palette Windows ; les tests matériels l’intègrent dans leur HTML.
 foreach ($name in @('Theme.ps1','theme.json','brand-logo.png')) {
     Copy-Item -LiteralPath (Join-Path $DataPath $name) -Destination (Join-Path $OutputDirectory 'Garantie') -Force
     Copy-Item -LiteralPath (Join-Path $DataPath $name) -Destination (Join-Path $OutputDirectory 'Diagnostics') -Force
@@ -42,7 +50,7 @@ $atelierData=Join-Path $env:ProgramData 'AtelierPXE'
 $atelierCache=Join-Path $atelierData 'Inventory'
 & (Join-Path $atelierData 'Export-Inventaire.ps1') -OutputDirectory $atelierCache | Out-Null
 . (Join-Path $atelierData 'Inventory-Transfer.ps1')
-if (-not (Send-AtelierInventory -DataPath $atelierData -InventoryDirectory $atelierCache)) { Write-Warning 'Transmission en attente ; cache prive conserve.' }
+if (-not (Send-AtelierInventory -DataPath $atelierData -InventoryDirectory $atelierCache)) { Write-Warning 'Transmission en attente ; cache privé conserve.' }
 '@
     Set-Content -LiteralPath (Join-Path $OutputDirectory 'Inventaire\Export-Inventaire.ps1') -Value $centralLauncher -Encoding UTF8
 } else {
@@ -54,10 +62,10 @@ param()
 }
 if ($payload.wallpaper) {
     $source=Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
-    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $payload.wallpaper.sha256) { throw 'Fond d ecran invalide avant copie dans IQ_.' }
+    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $payload.wallpaper.sha256) { throw 'Fond d''écran invalide avant copie dans IQ_.' }
     Copy-Item -LiteralPath $source -Destination (Join-Path $OutputDirectory ('Personnalisation\' + $payload.wallpaper.filename)) -Force
 }
-# Move only known results from the previous flat layout. Never remove unknown files.
+# Déplacer uniquement les résultats connus de l’ancienne disposition. Préserver les autres fichiers.
 foreach ($entry in @(
     @{category='Licence';pattern='Licence-Windows.*'},
     @{category='Diagnostics';pattern='Rapport-batterie.html'},
@@ -95,13 +103,13 @@ $diagnostics | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDirectory
 @(
     'IQ Atelier - dossier technique', '',
     'Diagnostics : tests son, webcam, clavier et batterie.',
-    'Licence : etat de l activation Windows.',
-    'Rapports : PDF de deploiement, JSON et outil Generer-Rapport.cmd.',
+    'Licence : état de l''activation Windows.',
+    'Rapports : PDF de déploiement, JSON et outil Generer-Rapport.cmd.',
     'Inventaire : outil Export-Inventaire.cmd pour actualiser les XML/CSV.',
-    'Garantie : verification des dates sur le site officiel du constructeur.',
-    'Personnalisation : fond d ecran selectionne.', '',
-    'Constructeur : HP-ImageAssistant.cmd si HPIA a ete coche et verifie.',
-    'Les dates de garantie restent non verifiees tant que l operateur ne les a pas confirmees.',
-    'Aucune cle produit, cle BitLocker ou TPM n est exportee.',
-    $(if($payload.settings.central_inventory){'XML/CSV sur le serveur .250 : ouvrir Dossier inventaire dans Atelier. Cache prive dans ProgramData\AtelierPXE\Inventory.'}else{'XML/CSV dans Inventaire.'})
-) | Set-Content (Join-Path $OutputDirectory 'Lisez-moi.txt') -Encoding ASCII
+    'Garantie : vérification des dates sur le site officiel du constructeur.',
+    'Personnalisation : fond d''écran sélectionne.', '',
+    'Constructeur : HP-ImageAssistant.cmd si HPIA a été coché et vérifié.',
+    'Les dates de garantie restent non vérifiées tant que l''opérateur ne les a pas confirmées.',
+    'Aucune clé produit, clé BitLocker ou TPM n''est exportée.',
+    $(if($payload.settings.central_inventory){'XML/CSV sur le serveur .250 : ouvrir Dossier inventaire dans Atelier. Cache privé dans ProgramData\AtelierPXE\Inventory.'}else{'XML/CSV dans Inventaire.'})
+) | Set-Content (Join-Path $OutputDirectory 'Lisez-moi.txt') -Encoding UTF8

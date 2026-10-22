@@ -2,20 +2,24 @@
 
 Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
 
-La revision **ATELIER-4** utilise le theme IQ bleu/lilas dans le site, WinPE et la progression Windows. Les postes arrivent automatiquement dans Atelier ; le choix Pro/Famille et la confirmation du disque sont dans WinPE. Le bureau s ouvre pendant que les logiciels WinGet et la preparation s executent en arriere-plan. Windows Update et Microsoft Store restent manuels. WinPE IQ-5.3 s ouvre maximise et redemarre automatiquement vers Windows apres preparation verifiee de l image. Le demarrage rapide Windows reste desactive.
+La révision **ATELIER-4** utilise le thème IQ bleu/lilas dans le site, WinPE et la progression Windows. Les postes arrivent automatiquement dans Atelier ; le choix Pro/Famille et la confirmation du disque sont dans WinPE. Le bureau s’ouvre pendant que les logiciels WinGet et la préparation s’exécutent en arrière-plan. Windows Update et Microsoft Store restent manuels. WinPE IQ-5.5.1 s’ouvre maximisé et redémarre automatiquement vers Windows après préparation vérifiée de l’image. Le démarrage rapide Windows reste désactivé.
 
-Le dossier **C:\IQ_** classe les outils par categorie. Les rapports PDF se trouvent dans **Rapports** ; les inventaires XML/CSV sont transmis au serveur .250 et accessibles depuis l activite du poste. Les pages Infrastructure PXE et Logiciels & bundles sont retirees. Le SHA-256 complet du WIM est calcule a l enregistrement sur le serveur ; il n est plus recalcule dans WinPE a chaque deploiement. Les controles rapides et `/CheckIntegrity /Verify` de DISM sont conserves.
+Le dossier **C:\IQ_** classe les outils par catégorie. Les rapports PDF se trouvent dans **Rapports** ; les inventaires XML/CSV sont transmis au serveur .250 et accessibles depuis l’activité du poste. Les pages Infrastructure PXE et Logiciels & bundles sont retirées. Le SHA-256 complet du WIM est calculé à l’enregistrement sur le serveur ; il n’est plus recalculé dans WinPE à chaque déploiement. Les contrôles rapides et `/CheckIntegrity /Verify` de DISM sont conservés.
 
-**Commencer ici :** [guide utilisateur](docs/GUIDE-UTILISATEUR.md) et [mise a jour ATELIER-4, limites et nettoyage](docs/ATELIER-4.md). La mise a jour utilise `scripts/Upgrade-Atelier4.ps1` depuis l archive d une revision publiee sur `codex/atelier-2`. Les anciennes images WinPE sont refusees avant tout effacement. Le WIM est reconstruit sur Windows avec l ADK, les pilotes et le certificat du serveur.
+**Commencer ici :** [guide utilisateur](docs/GUIDE-UTILISATEUR.md) et [mise à jour ATELIER-4, limites et nettoyage](docs/ATELIER-4.md). La mise à jour utilise `scripts/Upgrade-Atelier4.ps1` depuis l’archive d’une révision publiée sur `codex/atelier-2`. Les anciennes images WinPE sont refusées avant tout effacement. Le WIM est reconstruit sur Windows avec l’ADK, les pilotes et le certificat du serveur.
 
-La console serveur **IQ-5.4** ajoute une [maintenance mensuelle des images Windows](docs/MAINTENANCE-IMAGES-WINDOWS.md) : sauvegarde du WIM, correctifs Microsoft et .NET Framework sur une copie, profils TEST puis publication seulement apres deploiements Windows reussis. La preparation automatique ne remplace pas l image de production. Cette fonction serveur seule ne demande pas de reconstruire WinPE.
+La console serveur **IQ-5.4** ajoute une [maintenance mensuelle des images Windows](docs/MAINTENANCE-IMAGES-WINDOWS.md) : sauvegarde du WIM, correctifs Microsoft et .NET Framework sur une copie, profils TEST puis publication seulement après déploiements Windows réussis. La préparation automatique ne remplace pas l’image de production. Cette fonction serveur seule ne demande pas de reconstruire WinPE.
 
-Les tests automatises ne remplacent pas un deploiement reel sur Server 2025/WinPE : ce controle doit etre effectue sur un poste de laboratoire.
+Les tests automatisés ne remplacent pas un déploiement réel sur Server 2025/WinPE : ce contrôle doit être effectué sur un poste de laboratoire.
 
 ![Console Atelier PXE avec des données synthétiques de test](docs/console.png)
 
 Cette première version est un atelier **supervisé**, à valider sur un PC de laboratoire. Le code Windows est fourni mais n’a pas été exécuté sur Server 2025/WinPE dans l’environnement Linux de développement. Un état `staged` signifie « image appliquée et démarrage préparé » ; les clients ATELIER-2 transmettent ensuite les états Windows et leur rapport à la console.
 
+
+## Français et UTF-8
+
+La révision IQ-5.5.1 rétablit les accents dans le site, WinPE, les outils IQ et les rapports. Les scripts PowerShell utilisent un BOM UTF-8 pour PowerShell 5.1 ; leurs sorties restent en UTF-8. Les identifiants techniques et les clés des anciens inventaires restent stables. Voir [les règles d’encodage](docs/ENCODAGE.md) et [le journal des modifications](docs/CHANGELOG.md).
 
 ## Historique : parcours ATELIER-2
 

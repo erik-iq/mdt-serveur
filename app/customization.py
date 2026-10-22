@@ -1,4 +1,4 @@
-"""Validated installation settings and catalogue metadata shared by the API."""
+"""Paramètres d’installation validés et métadonnées du catalogue partagés par l’API."""
 from typing import Literal
 from uuid import UUID
 import re
@@ -10,9 +10,9 @@ from app.identity import normalize_serial, normalize_mac
 
 
 KEYBOARDS = [
-    {'id': '040c:0000040c', 'name': 'Francais - AZERTY'},
-    {'id': '080c:0000080c', 'name': 'Francais - Belgique'},
-    {'id': '100c:0000100c', 'name': 'Francais - Suisse'},
+    {'id': '040c:0000040c', 'name': 'Français - AZERTY'},
+    {'id': '080c:0000080c', 'name': 'Français - Belgique'},
+    {'id': '100c:0000100c', 'name': 'Français - Suisse'},
     {'id': '0409:00000409', 'name': 'Anglais - Etats-Unis'},
     {'id': '0809:00000809', 'name': 'Anglais - Royaume-Uni'},
     {'id': '0407:00000407', 'name': 'Allemand - Allemagne'},
@@ -22,7 +22,7 @@ TIMEZONES = [
     {'id': 'W. Europe Standard Time', 'name': 'Zurich / Berlin / Rome'},
     {'id': 'GMT Standard Time', 'name': 'Londres / Lisbonne'},
     {'id': 'UTC', 'name': 'UTC'},
-    {'id': 'Eastern Standard Time', 'name': 'Montreal / New York'},
+    {'id': 'Eastern Standard Time', 'name': 'Montréal / New York'},
     {'id': 'Pacific Standard Time', 'name': 'Vancouver / Los Angeles'},
     {'id': 'Arabian Standard Time', 'name': 'Dubai'},
     {'id': 'Tokyo Standard Time', 'name': 'Tokyo'},
@@ -38,7 +38,7 @@ SOFTWARE_PRESETS = [
 ]
 OPTIONS = {'software_packages': SOFTWARE_PACKAGES, 'keyboards': KEYBOARDS, 'timezones': TIMEZONES, 'regions': REGIONS,
            'software_presets': SOFTWARE_PRESETS,
-           'themes': [{'id': 'unchanged', 'name': 'Conserver le theme Windows'},
+           'themes': [{'id': 'unchanged', 'name': 'Conserver le thème Windows'},
                       {'id': 'light', 'name': 'Clair'}, {'id': 'dark', 'name': 'Sombre'}]}
 
 
@@ -84,14 +84,14 @@ class Personalization(BaseModel):
     @classmethod
     def printable(cls, value):
         if any(ord(c) < 32 for c in value):
-            raise ValueError('Caracteres de controle interdits')
+            raise ValueError('Caractères de contrôle interdits')
         return value
 
     @field_validator('application_ids', 'bundle_ids', 'winget_packages')
     @classmethod
     def unique_ids(cls, value):
         if len(value) != len(set(value)):
-            raise ValueError('Selection dupliquee')
+            raise ValueError('Sélection dupliquee')
         return value
 
 
@@ -109,7 +109,7 @@ class ApplicationInput(BaseModel):
     @classmethod
     def printable(cls, value):
         if any(ord(c) < 32 for c in value):
-            raise ValueError('Caracteres de controle interdits')
+            raise ValueError('Caractères de contrôle interdits')
         return value
 
     @field_validator('entry_point')
@@ -117,7 +117,7 @@ class ApplicationInput(BaseModel):
     def safe_entry(cls, value):
         if value and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/-]*\.(exe|msi)', value, re.I)
                       or any(part in {'', '.', '..'} for part in value.split('/'))):
-            raise ValueError('Indiquez un chemin relatif .exe/.msi dans le ZIP, sans traversee de dossier')
+            raise ValueError('Indiquez un chemin relatif .exe/.msi dans le ZIP, sans traversée de dossier')
         return value
 
 
@@ -159,7 +159,7 @@ class BootIdentity(BaseModel):
     @model_validator(mode='after')
     def identity_present(self):
         if not self.serial_number and not self.macs:
-            raise ValueError('Numero de serie requis ; MAC seulement pour les anciens clients')
+            raise ValueError('Numéro de série requis ; MAC seulement pour les anciens clients')
         return self
 
 

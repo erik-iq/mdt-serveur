@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param(
@@ -8,20 +8,28 @@ param(
     [ValidateSet('100c:0000100c')][string]$WinPEKeyboardLayout='100c:0000100c',
     [string]$DriversPath
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Console-Installation.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation -InstallPath $InstallPath
-Write-Host ('Console existante detectee : ' + $InstallPath)
+Write-Host ('Console existante détectée : ' + $InstallPath)
 $source=Split-Path $PSScriptRoot -Parent
 $configPath=Join-Path $InstallPath 'data-runtime.json'
-if (-not (Test-Path $configPath)) { throw 'Installation existante introuvable. Ce script met a jour DEPLOY-01, sans installer WDS ou Windows Server.' }
-if (-not (Test-Path -LiteralPath $TrustedRootCertificate -PathType Leaf)) { throw 'Certificat public .cer absent : preciser -TrustedRootCertificate.' }
+if (-not (Test-Path $configPath)) { throw 'Installation existante introuvable. Ce script met à jour DEPLOY-01, sans installer WDS ou Windows Server.' }
+if (-not (Test-Path -LiteralPath $TrustedRootCertificate -PathType Leaf)) { throw 'Certificat public .cer absent : préciser -TrustedRootCertificate.' }
 if ($DriversPath -and -not (Test-Path -LiteralPath $DriversPath -PathType Container)) { throw 'Dossier de pilotes WinPE absent.' }
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath
 $config=Get-Content $configPath -Encoding UTF8 -Raw | ConvertFrom-Json
 $health=Invoke-RestMethod -Uri ($config.base_url + '/health') -TimeoutSec 10
-if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '4.0') { throw 'La console ne confirme pas la revision ATELIER-4.0.' }
+if ($health.release -ne 'ATELIER-2' -or $health.revision -ne '4.0') { throw 'La console ne confirme pas la révision ATELIER-4.0.' }
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath
 $parameters=@{
     ServerUrl=$config.base_url
@@ -35,4 +43,4 @@ if ($DriversPath) { $parameters.DriversPath=$DriversPath }
 & (Join-Path $InstallPath 'scripts\Build-WinPE.ps1') @parameters
 Import-Module WDS
 Get-WdsBootImage | Format-Table ImageName,Architecture,FileName
-Write-Host 'Mise a jour terminee. Creer une nouvelle autorisation et choisir la nouvelle image ATELIER-2 pour le prochain test.' -ForegroundColor Green
+Write-Host 'Mise à jour terminée. Créer une nouvelle autorisation et choisir la nouvelle image ATELIER-2 pour le prochain test.' -ForegroundColor Green

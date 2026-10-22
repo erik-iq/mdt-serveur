@@ -1,4 +1,12 @@
-# Functions only. Upload through HTTPS with the deployment reporting token, no writable SMB share.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. Envoi HTTPS avec le jeton de rapport du déploiement, sans partage SMB inscriptible.
 function Send-AtelierInventory {
     param([string]$DataPath,[string]$InventoryDirectory)
     $configuration=Join-Path $DataPath 'reporting.json'
@@ -23,7 +31,7 @@ function Send-AtelierInventory {
         }
         return $true
     } catch {
-        Add-Content -LiteralPath (Join-Path $DataPath 'reporting.log') -Value ((Get-Date -Format o) + ' Inventaire XML/CSV non transmis ; cache prive conserve pour reprise.') -Encoding UTF8
+        Add-Content -LiteralPath (Join-Path $DataPath 'reporting.log') -Value ((Get-Date -Format o) + ' Inventaire XML/CSV non transmis ; cache privé conserve pour reprise.') -Encoding UTF8
         return $false
     }
 }

@@ -1,3 +1,11 @@
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
 #requires -Version 5.1
 #requires -RunAsAdministrator
 $ErrorActionPreference='Stop'
@@ -27,5 +35,5 @@ Install-Module -Name Microsoft.WinGet.Client -Scope AllUsers -Force -AllowClobbe
 Import-Module Microsoft.WinGet.Client
 Repair-WinGetPackageManager -AllUsers
 $winget=Get-AtelierPreparedWinGet
-if (-not $winget) { throw 'WinGet non executable apres sa preparation. Consulter software-logs\winget-preparation.log ; verifier App Installer et la connexion Internet.' }
+if (-not $winget) { throw 'WinGet non exécutable après sa préparation. Consulter software-logs\winget-preparation.log ; vérifier App Installer et la connexion Internet.' }
 & $winget --version

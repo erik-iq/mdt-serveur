@@ -1,4 +1,12 @@
-# Functions only. Every DISM write targets a private candidate, never the source.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. Toutes les écritures DISM visent une candidate privée, jamais la source.
 function Assert-AtelierServicingPath {
     param([string]$Path)
     $full=[IO.Path]::GetFullPath($Path)
@@ -18,7 +26,7 @@ function Write-AtelierServicingJson {
         [IO.File]::WriteAllText($temporary,($Value | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
         Move-Item -LiteralPath $temporary -Destination $Path -Force
     } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
-    # The web service reads a separate status mirror, never the private mounts.
+    # Le service web lit un miroir de suivi distinct, jamais les montages privés.
     $run=Split-Path $Path -Parent;$runs=Split-Path $run -Parent;$root=Split-Path $runs -Parent
     if ((Split-Path $Path -Leaf) -eq 'report.json' -and (Split-Path $root -Leaf) -eq 'windows-servicing' -and $Value.run_id -match '^[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$') {
         $mirrorTemp=$null
@@ -29,7 +37,7 @@ function Write-AtelierServicingJson {
         $mirrorTemp=$mirror+'.tmp-'+[guid]::NewGuid().ToString('N')
         [IO.File]::WriteAllText($mirrorTemp,($Value | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
         Move-Item -LiteralPath $mirrorTemp -Destination $mirror -Force
-        } catch { Write-Warning ('Suivi web non publie ; le rapport prive reste conserve : '+$_.Exception.Message) }
+        } catch { Write-Warning ('Suivi web non publié ; le rapport privé reste conservé : '+$_.Exception.Message) }
         finally { if($mirrorTemp){Remove-Item -LiteralPath $mirrorTemp -Force -ErrorAction SilentlyContinue} }
     }
 }
@@ -96,7 +104,7 @@ function Get-AtelierOfflineWindowsVersion {
     } finally {
         [GC]::Collect();[GC]::WaitForPendingFinalizers()
         & reg.exe unload ('HKLM\'+$hive) | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw ('Registre du WIM encore ouvert : HKLM\'+$hive+'. Fermer ce registre avant de demonter le WIM.') }
+        if ($LASTEXITCODE -ne 0) { throw ('Registre du WIM encore ouvert : HKLM\'+$hive+'. Fermer ce registre avant de démonter le WIM.') }
     }
 }
 
@@ -104,8 +112,8 @@ function Get-AtelierServicingDism {
     param([int]$Build)
     $paths=@((Join-Path $env:SystemRoot 'System32\dism.exe'))
     if (${env:ProgramFiles(x86)}) { $paths+=(Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\DISM\dism.exe') }
-    # Enablement releases share the underlying servicing platform. The official
-    # September 2026 ADK 26100.9457 explicitly supports Windows 11 26H2 (26300).
+    # Les éditions activées par enablement partagent la plateforme de maintenance sous-jacente.
+    # L’ADK officiel 26100.9457 de septembre 2026 prend en charge Windows 11 26H2, build 26300.
     $minimum=switch ($Build) {
         {$_ -in @(19042,19043,19044,19045)} { [version]'10.0.19041.0';break }
         22631 { [version]'10.0.22621.0';break }
@@ -114,10 +122,10 @@ function Get-AtelierServicingDism {
         default { [version]('10.0.'+$Build+'.0') }
     }
     $tools=@($paths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Item -LiteralPath $_ } | Sort-Object { [version]::new($_.VersionInfo.FileMajorPart,$_.VersionInfo.FileMinorPart,$_.VersionInfo.FileBuildPart,$_.VersionInfo.FilePrivatePart) } -Descending)
-    if (-not $tools.Count) { throw 'DISM absent ; installer les outils de deploiement de l ADK.' }
+    if (-not $tools.Count) { throw 'DISM absent ; installer les outils de déploiement de l''ADK.' }
     $selected=$tools[0].VersionInfo
     $version=[version]::new($selected.FileMajorPart,$selected.FileMinorPart,$selected.FileBuildPart,$selected.FilePrivatePart)
-    if ($version -lt $minimum) { throw ('DISM trop ancien pour le build '+$Build+' (minimum '+$minimum+'). Mettre l ADK a jour sur .250 avant la maintenance.') }
+    if ($version -lt $minimum) { throw ('DISM trop ancien pour le build '+$Build+' (minimum '+$minimum+'). Mettre l''ADK à jour sur .250 avant la maintenance.') }
     return $tools[0].FullName
 }
 
@@ -140,7 +148,7 @@ function Invoke-AtelierImageDism {
         $code=$LASTEXITCODE
     }
     finally { $ErrorActionPreference=$saved }
-    if ($code -notin @(0,3010)) { throw ('DISM en echec (code '+$code+'). Journal : '+$LogPath) }
+    if ($code -notin @(0,3010)) { throw ('DISM en échec (code '+$code+'). Journal : '+$LogPath) }
     return [int]$code
 }
 
@@ -150,14 +158,14 @@ function Invoke-AtelierServicingStage {
     $Report.active_stage=$Name;$Report.active_index=$Index;$Report.updated_at=$started.ToString('o')
     $script:AtelierServicingProgress=@{report=$Report;run=$Run;last=$started}
     Write-AtelierServicingJson $Report (Join-Path $Run 'report.json')
-    Write-Host ('Etape '+$Name+$(if($Index){' - index '+$Index}else{''}))
+    Write-Host ('Étape '+$Name+$(if($Index){' - index '+$Index}else{''}))
     try { & $Action;$status='completed' }
     finally {
         $watch.Stop()
         $Report.timings+=@{stage=$Name;index=$Index;status=$status;started_at=$started.ToString('o');duration_seconds=[math]::Round($watch.Elapsed.TotalSeconds,2)}
         $Report.updated_at=[DateTime]::UtcNow.ToString('o')
         Write-AtelierServicingJson $Report (Join-Path $Run 'report.json')
-        Write-Host ('Duree '+$Name+' : '+[math]::Round($watch.Elapsed.TotalSeconds,1)+' s')
+        Write-Host ('Durée '+$Name+' : '+[math]::Round($watch.Elapsed.TotalSeconds,1)+' s')
         $script:AtelierServicingProgress=$null
     }
 }
@@ -179,7 +187,7 @@ function Get-AtelierServicingPlan {
     } finally { $ErrorActionPreference=$saved }
     if ($code -ne 0 -or -not (Test-Path -LiteralPath $OutputPath)) {
         $detail=if (Test-Path -LiteralPath $log) { (Get-Content -LiteralPath $log -Encoding UTF8 -Tail 8) -join ' ' } else { 'Aucune sortie Python.' }
-        throw ('Telechargement ou selection des correctifs Microsoft en echec (code '+$code+'). '+$detail+' Journal : '+$log)
+        throw ('Téléchargement ou sélection des correctifs Microsoft en échec (code '+$code+'). '+$detail+' Journal : '+$log)
     }
     return (Get-Content -LiteralPath $OutputPath -Raw -Encoding UTF8 | ConvertFrom-Json)
 }
@@ -245,26 +253,26 @@ function New-AtelierServicedWindowsImage {
     $held=[IO.File]::Open((Join-Path $root 'maintenance.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
     $reader=$null;$mounted=$false;$report=$null;$dism=$null;$mount=$null;$run=$null
     try {
-        # Holding a read-only sharing handle prevents source replacement or writes
-        # while copying. Existing deployments may continue reading the source.
+        # Garder un handle partagé en lecture seule empêche toute écriture ou remplacement
+        # de la source pendant la copie. Les déploiements existants peuvent continuer à la lire.
         $reader=[IO.File]::Open($source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
         $actual=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'Le WIM source a change depuis son enregistrement. Ne pas maintenir un fichier modifie.' }
+        if ($actual -ne $ExpectedHash.ToLowerInvariant()) { throw 'Le WIM source a change depuis son enregistrement. Ne pas maintenir un fichier modifié.' }
         $summaries=@(Get-WindowsImage -ImagePath $source)
         if (-not $summaries.Count) { throw 'Aucun index Windows dans le WIM.' }
         $allIndexes=@($summaries | ForEach-Object { Get-WindowsImage -ImagePath $source -Index $_.ImageIndex })
-        # Match Windows edition IDs, not translated names or unstable WIM positions.
-        # N, Single Language, Education and Workstations are separate editions.
+        # Comparer les identifiants d’édition Windows, sans utiliser les traductions ni les positions du WIM.
+        # N, Single Language, Éducation et Workstations sont des éditions distinctes.
         $indexes=@($allIndexes | Where-Object { $_.EditionId -in @('Core','Professional') })
         $skipped=@($allIndexes | Where-Object { $_.EditionId -notin @('Core','Professional') })
         if (-not $indexes.Count) { throw 'Aucun index Windows Famille (Core) ou Pro (Professional) dans ce WIM.' }
-        Write-Host ('Maintenance limitee a Famille et Pro : '+$indexes.Count+' index sur '+$allIndexes.Count+'.')
+        Write-Host ('Maintenance limitée a Famille et Pro : '+$indexes.Count+' index sur '+$allIndexes.Count+'.')
         foreach ($info in $skipped) { Write-Host ('Index ignore '+$info.ImageIndex+' : '+$info.ImageName+' ('+$info.EditionId+').') }
         if (@($indexes | Where-Object { [int]$_.Architecture -notin @(9,12) }).Count) { throw 'Seules les images Windows x64 ou ARM64 sont prises en charge.' }
         $maxBuild=($indexes | ForEach-Object { ([version]$_.Version).Build } | Measure-Object -Maximum).Maximum
         $dism=Get-AtelierServicingDism -Build $maxBuild
         $drive=Get-PSDrive -Name ([IO.Path]::GetPathRoot($root).TrimEnd([char[]]'\/:')) -ErrorAction SilentlyContinue
-        if ($drive -and $null -ne $drive.Free -and $drive.Free -lt ($reader.Length*3+25GB)) { throw 'Espace insuffisant : prevoir trois fois le WIM et 25 Go pour les correctifs et le montage.' }
+        if ($drive -and $null -ne $drive.Free -and $drive.Free -lt ($reader.Length*3+25GB)) { throw 'Espace insuffisant : prévoir trois fois le WIM et 25 Go pour les correctifs et le montage.' }
         $cached=Find-AtelierServicingCache -Root $root -Hash $actual -SourceAssetId $SourceAssetId -Indexes $indexes -PythonPath $PythonPath
         if ($cached) { return $cached }
         $backupRoot=Join-Path $root 'backups';New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
@@ -286,7 +294,7 @@ function New-AtelierServicedWindowsImage {
             Assert-AtelierServicingPath $temporary | Out-Null
             try {
                 Copy-Item -LiteralPath $source -Destination $temporary
-                if ((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ine $actual) { throw 'Verification de sauvegarde en echec.' }
+                if ((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ine $actual) { throw 'Vérification de sauvegarde en échec.' }
                 Move-Item -LiteralPath $temporary -Destination $backup
             } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
         }
@@ -302,8 +310,8 @@ function New-AtelierServicedWindowsImage {
         foreach ($entry in $mapping) {
             $info=@($indexes | Where-Object { [int]$_.ImageIndex -eq $entry.source_index })[0]
             $index=[int]$entry.index;$log=Join-Path $run ('dism-index-'+$index+'.log')
-            Write-Host ('Maintenance de l index '+$index+' : '+$info.ImageName)
-            # Mark before calling DISM: even a failed mount may need discarding.
+            Write-Host ('Maintenance de l''index '+$index+' : '+$info.ImageName)
+            # Marquer avant DISM : même un montage en échec peut demander un abandon.
             $mounted=$true
             Invoke-AtelierServicingStage -Report $report -Run $run -Name 'mount' -Index $index -Action {
                 Invoke-AtelierImageDism $dism @('/Mount-Image',('/ImageFile:'+$candidate),('/Index:'+$index),('/MountDir:'+$mount),'/CheckIntegrity') $log | Out-Null
@@ -324,19 +332,19 @@ function New-AtelierServicedWindowsImage {
             $plan=$plans[$planKey]
             $steps=@()
             foreach ($group in @($plan.groups)) {
-                Write-Host ('Integration '+$group.kb+' : '+$group.title)
+                Write-Host ('Intégration '+$group.kb+' : '+$group.title)
                 foreach ($file in @($group.files)) {
-                    if ((Get-FileHash -LiteralPath $file.path -Algorithm SHA256).Hash -ine $file.sha256) { throw ('Paquet modifie avant integration : '+$file.path) }
+                    if ((Get-FileHash -LiteralPath $file.path -Algorithm SHA256).Hash -ine $file.sha256) { throw ('Paquet modifie avant intégration : '+$file.path) }
                 }
-                # The target's folder contains only its MSU and the checkpoints
-                # returned by Microsoft. DISM resolves their required order.
+                # Le dossier contient seulement le MSU cible et les checkpoints
+                # renvoyés par Microsoft. DISM détermine leur ordre requis.
                 $code=Invoke-AtelierServicingStage -Report $report -Run $run -Name ('integrate_'+$group.kb) -Index $index -Action {
                     Invoke-AtelierImageDism $dism @(('/Image:'+$mount),'/Add-Package',('/PackagePath:'+$group.target_path),'/NoRestart') $log
                 }
                 $steps+=@{kind=$group.kind;update_id=$group.id;kb=$group.kb;title=$group.title;exit_code=$code;files=@($group.files);target_build=$group.target_build}
             }
             $packages=@(Get-WindowsPackage -Path $mount)
-            if (-not $packages.Count -or @($packages | Where-Object { [string]$_.PackageState -in @('PartiallyInstalled','UninstallPending') }).Count) { throw 'Etat des paquets Windows incoherent apres integration.' }
+            if (-not $packages.Count -or @($packages | Where-Object { [string]$_.PackageState -in @('PartiallyInstalled','UninstallPending') }).Count) { throw 'État des paquets Windows incohérent après intégration.' }
             $packages | Select-Object PackageName,PackageState,ReleaseType,InstallTime | Export-Csv -LiteralPath (Join-Path $run ('packages-index-'+$index+'.csv')) -NoTypeInformation -Encoding UTF8
             Invoke-AtelierServicingStage -Report $report -Run $run -Name 'commit' -Index $index -Action {
                 Invoke-AtelierImageDism $dism @('/Unmount-Image',('/MountDir:'+$mount),'/Commit','/CheckIntegrity') $log | Out-Null
@@ -345,10 +353,10 @@ function New-AtelierServicedWindowsImage {
             $report.indexes+=@{source_index=[int]$entry.source_index;index=$index;name=[string]$info.ImageName;edition=[string]$info.EditionId;version=$version;architecture=$arch;updates=$steps;package_count=$packages.Count}
             Write-AtelierServicingJson $report (Join-Path $run 'report.json')
         }
-        # Read back the committed WIM. Source and its recorded hash stay intact.
-        if (@(Get-WindowsImage -ImagePath $candidate).Count -ne $mapping.Count) { throw 'Le WIM final doit contenir uniquement les index Famille et Pro exportes.' }
+        # Relire le WIM enregistré. La source et son empreinte restent intactes.
+        if (@(Get-WindowsImage -ImagePath $candidate).Count -ne $mapping.Count) { throw 'Le WIM final doit contenir uniquement les index Famille et Pro exportés.' }
         foreach ($entry in $mapping) {
-            if ((Get-WindowsImage -ImagePath $candidate -Index $entry.index).EditionId -ne $entry.edition) { throw 'Edition du WIM exporte incorrecte ; aucune publication.' }
+            if ((Get-WindowsImage -ImagePath $candidate -Index $entry.index).EditionId -ne $entry.edition) { throw 'Édition du WIM exporte incorrecte ; aucune publication.' }
         }
         $report['candidate_sha256']=Invoke-AtelierServicingStage -Report $report -Run $run -Name 'verify_hash' -Action {
             (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -362,13 +370,13 @@ function New-AtelierServicedWindowsImage {
         $failure=$_.Exception.Message
         if ($mounted -and $dism) {
             try { Invoke-AtelierImageDism $dism @('/Unmount-Image',('/MountDir:'+$mount),'/Discard') (Join-Path $run 'discard.log') | Out-Null;$mounted=$false }
-            catch { $failure+=' Demontage en echec : '+$_.Exception.Message }
+            catch { $failure+=' Démontage en échec : '+$_.Exception.Message }
         }
         if ($report) {
             $report.status=if ($mounted) {'failed_cleanup_required'} else {'failed'}
             $report.error=$failure
             Write-AtelierServicingJson $report (Join-Path $run 'report.json')
-            # Never recursively delete a mounted Windows directory.
+            # Ne jamais supprimer récursivement un dossier Windows monté.
             if (-not $mounted -and (Test-Path -LiteralPath $report.candidate_path)) { Remove-Item -LiteralPath $report.candidate_path -Force }
         }
         throw $failure

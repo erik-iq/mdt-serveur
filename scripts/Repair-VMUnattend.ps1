@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param(
@@ -7,28 +7,36 @@ param(
     [string]$Locale = 'fr-FR',
     [string]$BackupPath = (Join-Path $env:TEMP ('AtelierPXE-Reparation-' + [guid]::NewGuid().ToString('N')))
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Unattend.ps1')
 Import-Module Hyper-V -ErrorAction Stop
 $vm = Get-VM -Name $VMName -ErrorAction Stop
-if ($vm.State -ne 'Off') { throw "La VM $VMName doit etre arretee avant la reparation." }
+if ($vm.State -ne 'Off') { throw "La VM $VMName doit être arrêtée avant la réparation." }
 $drives = @(Get-VMHardDiskDrive -VMName $VMName -ErrorAction Stop)
-if ($drives.Count -ne 1 -or -not $drives[0].Path) { throw 'Un unique disque virtuel est requis pour cette reparation.' }
+if ($drives.Count -ne 1 -or -not $drives[0].Path) { throw 'Un unique disque virtuel est requis pour cette réparation.' }
 $diskPath = $drives[0].Path
-if ((Get-VHD -Path $diskPath -ErrorAction Stop).Attached) { throw 'Le disque virtuel est deja attache. Reparation interrompue.' }
+if ((Get-VHD -Path $diskPath -ErrorAction Stop).Attached) { throw 'Le disque virtuel est déjà attache. Réparation interrompue.' }
 if (Test-Path -LiteralPath $BackupPath) { throw 'Utilisez un nouveau dossier de sauvegarde.' }
 New-Item -ItemType Directory -Path $BackupPath | Out-Null
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $userGrant = '*' + $identity.User.Value + ':(OI)(CI)F'
 & icacls.exe $BackupPath /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' $userGrant | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Impossible de proteger la sauvegarde.' }
+if ($LASTEXITCODE -ne 0) { throw 'Impossible de protéger la sauvegarde.' }
 $mounted = $false
 try {
     $image = Mount-VHD -Path $diskPath -NoDriveLetter -Passthru -ErrorAction Stop
     $mounted = $true
     Update-HostStorageCache -ErrorAction Stop
     $disk = Get-Disk -Number $image.DiskNumber -ErrorAction Stop
-    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly) { throw 'Le disque monte n est pas une cible de reparation accessible.' }
+    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsOffline -or $disk.IsReadOnly) { throw 'Le disque monte n''est pas une cible de réparation accessible.' }
     $roots = @()
     foreach ($partition in @(Get-Partition -DiskNumber $disk.Number -ErrorAction Stop)) {
         foreach ($path in @($partition.AccessPaths)) {
@@ -36,9 +44,9 @@ try {
         }
     }
     $roots = @($roots | Select-Object -Unique)
-    if ($roots.Count -ne 1) { throw 'Impossible d identifier une unique installation Windows sur le disque de la VM.' }
+    if ($roots.Count -ne 1) { throw 'Impossible d''identifier une unique installation Windows sur le disque de la VM.' }
     $report = Repair-AtelierOfflineUnattend -WindowsPath $roots[0] -ComputerName $ComputerName -Locale $Locale -BackupDirectory $BackupPath
-    Write-Host ('Fichier de reponses remplace et verifie : ' + $report.size_bytes + ' octets ; SHA-256 ' + $report.sha256) -ForegroundColor Green
-    Write-Host "Sauvegarde de l original et rapport : $BackupPath"
+    Write-Host ('Fichier de réponses remplace et vérifie : ' + $report.size_bytes + ' octets ; SHA-256 ' + $report.sha256) -ForegroundColor Green
+    Write-Host "Sauvegarde de l’original et rapport : $BackupPath"
 } finally { if ($mounted) { Dismount-VHD -Path $diskPath -ErrorAction Stop } }
-Write-Host 'La VM reste arretee. Demarrez-la sur Windows Boot Manager pour verifier la reprise du premier demarrage.'
+Write-Host 'La VM reste arrêtée. Demarrez-la sur Windows Boot Manager pour vérifier la reprise du premier démarrage.'

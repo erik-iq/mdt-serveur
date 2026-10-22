@@ -58,7 +58,7 @@ def run():
                 assert response.headers['cache-control']=='no-store'
                 css=page.locator('link[rel="stylesheet"]').get_attribute('href')
                 assert css=='/static/style.css?v='+hashlib.sha256((ROOT/'app'/'static'/'style.css').read_bytes()).hexdigest()[:16]
-                expect(page.locator('#connection')).to_have_text('Console connectee')
+                expect(page.locator('#connection')).to_have_text('Console connectée')
                 assert_logo(page)
                 gradient=page.locator('.heading').first.evaluate('(el)=>getComputedStyle(el).backgroundImage')
                 assert 'rgb(210, 228, 241)' in gradient and 'rgb(233, 217, 234)' in gradient,gradient
@@ -75,7 +75,7 @@ def run():
                 page.set_viewport_size({'width':1440,'height':1000});page.reload();assert_logo(page)
                 assert not errors,errors
                 browser.close()
-            print('Theme browser passed: stale CSS reproduces the fault; content versions restore blue/lilac; logo is 40x40 at top right on desktop/mobile/large and with legacy CSS.')
+            print('Thème browser passed: stale CSS reproduces the fault; content versions restore blue/lilac; logo is 40x40 at top right on desktop/mobile/large and with legacy CSS.')
         finally:
             process.terminate();process.wait(timeout=10)
 

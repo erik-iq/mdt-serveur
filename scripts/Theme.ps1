@@ -1,10 +1,18 @@
-# One palette for WinPE and the interactive Windows tools.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Palette commune à WinPE et aux outils Windows interactifs.
 $script:AtelierTheme=Get-Content (Join-Path $PSScriptRoot 'theme.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 function Get-AtelierColor([string]$Name) { return [Drawing.ColorTranslator]::FromHtml($script:AtelierTheme.$Name) }
 function New-AtelierFont {
     param([single]$Size=10,[bool]$Bold=$false,[string]$Family='Segoe UI')
     $style=if ($Bold) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
-    # Four explicitly typed arguments avoid the Font(Font, FontStyle) overload.
+    # Quatre arguments explicitement typés évitent la surcharge Font(Font, FontStyle).
     return (New-Object Drawing.Font -ArgumentList @($Family,[single]$Size,$style,[Drawing.GraphicsUnit]::Point))
 }
 function New-AtelierLogo {

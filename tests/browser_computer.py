@@ -39,9 +39,9 @@ def run():
             identifier=session['id'];token=session['agent_token']
             api('/agent/'+identifier+'/configure',{'profile_id':profile['id'],'hostname':'PC-8323','settings':profile['settings']},token)
             reporter=api('/agent/'+identifier+'/claim',{},token)['report_token']
-            api('/agent/'+identifier+'/events',{'status':'staged','progress':100,'message':'Image appliquee'},token)
+            api('/agent/'+identifier+'/events',{'status':'staged','progress':100,'message':'Image appliquée'},token)
             api('/windows/'+identifier+'/timings',{'measurements':[{'run_id':str(uuid.uuid4()),'source':'winpe','stage':'image','status':'completed','started_at':'2026-10-19T09:00:00Z','duration_seconds':125}]},reporter)
-            report={'hostname':'PC-8323','status':'completed','generated_at':'2026-10-19T09:15:00Z','inventory':{'Constructeur':'HP','Modele':'EliteBook','Numero de serie':'SN8323','Windows':'Windows 11 Pro','Garantie constructeur':'active_confirmee_operateur','Garantie debut / fin':'2025-01-01 / 2028-01-01'},'steps':[{'name':'Test webcam','status':'passed','message':'Test operateur'}],'warnings':[]}
+            report={'hostname':'PC-8323','status':'completed','generated_at':'2026-10-19T09:15:00Z','inventory':{'Constructeur':'HP','Modele':'EliteBook','Numero de serie':'SN8323','Windows':'Windows 11 Pro','Garantie constructeur':'active_confirmee_operateur','Garantie debut / fin':'2025-01-01 / 2028-01-01'},'steps':[{'name':'Test webcam','status':'passed','message':'Test opérateur'}],'warnings':[]}
             api('/windows/'+identifier+'/report',report,reporter)
             hp_html=b'<html><body>HP installation completed fixture</body></html>'
             hp_zip=io.BytesIO()
@@ -53,7 +53,7 @@ def run():
             with sync_playwright() as p:
                 browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectee')
+                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectée')
                 with page.expect_download() as hp_download:
                     page.locator('#deployments').get_by_role('button',name='Rapport HP (HTML)',exact=True).click()
                 assert hp_download.value.suggested_filename=='Rapport-Installation-HP.html'
@@ -61,7 +61,7 @@ def run():
                 page.get_by_role('button',name='Fiche ordinateur',exact=True).click()
                 expect(page.locator('#computer-title')).to_have_text('PC-8323')
                 expect(page.locator('#computer-summary')).to_contain_text('SN8323')
-                page.get_by_text('Durees par etape',exact=True).click()
+                page.get_by_text('Durées par étape',exact=True).click()
                 expect(page.locator('#computer-history')).to_contain_text('2 min 5 s')
                 expect(page.locator('#computer-report')).to_contain_text('Test webcam')
                 expect(page.locator('#computer-report')).to_contain_text('2028-01-01')
@@ -69,14 +69,14 @@ def run():
                     page.locator('#computer-history').get_by_role('button',name='Rapport HP (HTML)',exact=True).click()
                 assert Path(hp_download.value.path()).read_bytes()==hp_html
                 page.get_by_label('Technicien (facultatif)').fill('Erik')
-                page.get_by_label('Observation',exact=True).fill('Ecran verifie <script>test</script>')
-                page.get_by_role('button',name='Ajouter l observation',exact=True).click()
-                expect(page.locator('#computer-notes')).to_contain_text('Ecran verifie <script>test</script>')
+                page.get_by_label('Observation',exact=True).fill('Écran vérifié <script>test</script>')
+                page.get_by_role('button',name='Ajouter l’observation',exact=True).click()
+                expect(page.locator('#computer-notes')).to_contain_text('Écran vérifié <script>test</script>')
                 assert page.locator('#computer-notes script').count()==0
                 page.screenshot(path='/tmp/atelier-computer.png',full_page=True)
-                page.reload();expect(page.locator('#connection')).to_have_text('Console connectee')
+                page.reload();expect(page.locator('#connection')).to_have_text('Console connectée')
                 page.locator('[data-page="machines"]').click();page.locator('#machines [data-computer]').click()
-                expect(page.locator('#computer-notes')).to_contain_text('Ecran verifie')
+                expect(page.locator('#computer-notes')).to_contain_text('Écran vérifié')
                 page.set_viewport_size({'width':390,'height':844});assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
                 page.screenshot(path='/tmp/atelier-computer-mobile.png',full_page=True)
                 assert not errors,errors

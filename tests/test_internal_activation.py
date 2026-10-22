@@ -1,4 +1,4 @@
-"""Execute the real activation guard using SQLite/Python and legacy native quoting."""
+"""Exécute the real activation guard using SQLite/Python and legacy native quoting."""
 import json
 import os
 from pathlib import Path
@@ -47,6 +47,6 @@ try {
     assert report['count'] == expected, report
     assert report['failed'] == (expected is None), report
     if expected is None:
-        assert 'Terminez les deploiements' not in report['message']
+        assert 'Terminez les déploiements' not in report['message']
     if case == 'missing':
         assert not database.exists()  # Read-only URI must not create an empty database.

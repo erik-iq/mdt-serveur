@@ -31,8 +31,8 @@ function Receive-AtelierHpArchive {
 '''.replace('ARCHIVE',str(tmp_path/'server.zip')).replace('DATA',str(data)))
     archive=tmp_path/'server.zip'
     with zipfile.ZipFile(archive,'w') as z:
-        z.writestr('.repository/cache/offline/platformList.cab','Reference fixture')
-        z.writestr('.repository/cache/8AB8_64_11.0.25h2.cab','Reference fixture')
+        z.writestr('.repository/cache/offline/platformList.cab','Référence fixture')
+        z.writestr('.repository/cache/8AB8_64_11.0.25h2.cab','Référence fixture')
         z.writestr('sp12345.exe','Package fixture - never executed')
         if case in {'package_cache','bad_cache_signature'}:
             z.writestr('sp12345.cva','CVA fixture')
@@ -82,7 +82,7 @@ function Invoke-RestMethod {
  if($Headers.Authorization -ne 'Bearer private-fixture-token-not-real'){throw 'Wrong reporting credential'}
  $request=[Text.Encoding]::UTF8.GetString($Body)|ConvertFrom-Json
  if($request.platform -ne '8AB8' -or $request.os -ne 'win11' -or $request.os_version -ne '25H2'){throw 'Wrong repository key'}
- if('CASE' -notin @('analysis_network_failure','no_updates') -and (@($request.required_softpaqs).Count -ne 1 -or $request.required_softpaqs[0] -ne 'SP12345')){throw 'Installed or obsolete packages requested'}
+ if('CASE' -notin @('analysis_network_failure','no_updates') -and (@($request.required_softpaqs).Count -ne 1 -or $request.required_softpaqs[0] -ne 'SP12345')){throw 'Installed or obsolète packages requested'}
  $status=if('CASE' -in @('pending','agent_unavailable')){'queued'}elseif('CASE' -in @('failed_sync','failed_worker_offline')){'failed'}else{'ready'}
  @{status=$status;worker_available=$(if('CASE' -in @('agent_unavailable','cached_worker_offline','failed_worker_offline')){$false}else{$true});message='CMSL fixture';platform='8AB8';os='win11';os_version='25H2';snapshot=@{id='SNAPSHOT';url='/api/windows/ID/hp-repository/SNAPSHOT.zip';size=SIZE;sha256='HASH'}}
 }

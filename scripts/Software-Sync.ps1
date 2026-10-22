@@ -1,5 +1,13 @@
-# Validation helpers for the single-installer YAML emitted by winget download.
-# This is deliberately not a general YAML evaluator; no manifest code is executed.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Validation du YAML limité à un installateur, produit par winget download.
+# Ceci n’est pas un interpréteur YAML général ; aucun code du manifeste n’est exécuté.
 function Get-AtelierManifestScalar {
     param([string]$Text,[string]$Name)
     $matches=[regex]::Matches($Text,'(?m)^\s*(?:-\s*)?' + [regex]::Escape($Name) + ':\s*([^\r\n]+)\s*$')
@@ -23,14 +31,14 @@ function Get-AtelierDownloadedInstaller {
         $url=[uri](Get-AtelierManifestScalar $text 'InstallerUrl')
         $architecture=Get-AtelierManifestScalar $text 'Architecture'
         if ($version -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]{0,39}$' -or $hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Version ou SHA-256 de manifeste invalide.' }
-        if ($architecture -ne $Source.architecture) { throw 'Architecture differente de la source configuree.' }
-        if ($url.Scheme -ne 'https' -or $url.UserInfo -or $url.Host -notin $Source.hosts) { throw ('URL editeur inattendue pour ' + $Source.key) }
+        if ($architecture -ne $Source.architecture) { throw 'Architecture différente de la source configurée.' }
+        if ($url.Scheme -ne 'https' -or $url.UserInfo -or $url.Host -notin $Source.hosts) { throw ('URL éditeur inattendue pour ' + $Source.key) }
         $file=Get-Item -LiteralPath $path
         if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Installateur lie refuse.' }
         $actual=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($actual -ne $hash.ToLowerInvariant()) { throw 'SHA-256 different du manifeste WinGet : publication refusee.' }
+        if ($actual -ne $hash.ToLowerInvariant()) { throw 'SHA-256 différent du manifeste WinGet : publication refusée.' }
         $signature=Get-AuthenticodeSignature -LiteralPath $path
-        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch $Source.publisher) { throw 'Signature ou editeur de l installateur refuse.' }
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch $Source.publisher) { throw 'Signature ou éditeur de l''installateur refuse.' }
         $candidates += [pscustomobject]@{path=$path;version=$version;sha256=$actual;url=$url.AbsoluteUri;publisher=$signature.SignerCertificate.Subject}
     }
     if ($candidates.Count -ne 1) { throw 'WinGet doit exporter exactement un manifeste et un installateur compatibles.' }
@@ -49,10 +57,10 @@ function Find-AtelierSoftwareBinding {
     $used=@($State.bundles | ForEach-Object { $_.application_ids }) + @($State.profiles | ForEach-Object { $_.settings.application_ids })
     $referenced=@($candidates | Where-Object { $_.id -in $used })
     if ($referenced.Count -eq 1) { return $referenced[0] }
-    throw ('Plusieurs entrees pour ' + $Source.key + ' : preciser -ApplicationBindings @{'+$Source.key+"='identifiant'} une fois.")
+    throw ('Plusieurs entrées pour ' + $Source.key + ' : préciser -ApplicationBindings @{'+$Source.key+"='identifiant'} une fois.")
 }
 
-# Keep the cause of background-job and native-command failures, without credentials.
+# Conserver la cause des erreurs des tâches et commandes natives, sans identifiants.
 function Get-AtelierSoftwareErrorText {
     param($Record,[string[]]$Secrets=@())
     $text=[string]$Record
@@ -71,8 +79,8 @@ function Get-AtelierSoftwareErrorText {
 
 function Invoke-AtelierWinGetDownload {
     param([string]$Executable,[string[]]$Arguments)
-    # Windows PowerShell 5.1 treats stderr as ErrorRecord even for native tools.
-    # Check WinGet's exit code; do not abort on an informational stderr line.
+    # PowerShell 5.1 traite stderr comme un ErrorRecord, même pour les outils natifs.
+    # Contrôler le code de retour WinGet ; une ligne informative sur stderr ne suffit pas à arrêter.
     $ErrorActionPreference='Continue'
     $tail=New-Object 'Collections.Generic.Queue[string]'
     $global:LASTEXITCODE=$null
@@ -85,7 +93,7 @@ function Invoke-AtelierWinGetDownload {
     }
     $code=$global:LASTEXITCODE
     if ($null -eq $code -or $code -ne 0) {
-        $description=if ($null -eq $code) { 'programme non demarre' } else { 'code ' + $code + ' / 0x' + ([int]$code).ToString('X8') }
-        throw ('WinGet download en echec (' + $description + '). ' + ($tail.ToArray() -join ' | ') + ' Ancienne version conservee.')
+        $description=if ($null -eq $code) { 'programme non démarré' } else { 'code ' + $code + ' / 0x' + ([int]$code).ToString('X8') }
+        throw ('WinGet download en échec (' + $description + '). ' + ($tail.ToArray() -join ' | ') + ' Ancienne version conservée.')
     }
 }

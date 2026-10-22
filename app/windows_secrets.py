@@ -1,4 +1,4 @@
-"""Read a server-local DPAPI machine secret, never included in catalogues or WIMs."""
+"""Lecture du secret DPAPI local au serveur, exclu des catalogues et des WIM."""
 import base64
 import ctypes
 import json

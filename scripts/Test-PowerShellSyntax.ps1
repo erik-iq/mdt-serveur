@@ -1,4 +1,12 @@
-param([string]$ScriptsPath = $PSScriptRoot)
+﻿param([string]$ScriptsPath = $PSScriptRoot)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 $count = 0
 foreach ($file in Get-ChildItem $ScriptsPath -Filter '*.ps1') {
@@ -11,4 +19,4 @@ foreach ($file in Get-ChildItem $ScriptsPath -Filter '*.ps1') {
     }
     $count++
 }
-Write-Host "PowerShell syntax verified: $count files. Windows operations were not executed."
+Write-Host "Syntaxe PowerShell vérifiée : $count fichiers. Les opérations Windows n’ont pas été exécutées."

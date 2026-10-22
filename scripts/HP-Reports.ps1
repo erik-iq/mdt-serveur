@@ -1,25 +1,33 @@
-# Send detailed HP reports before disposable deployment credentials are removed.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Envoyer les rapports HP détaillés avant de supprimer les identifiants temporaires du déploiement.
 function Send-AtelierHpReports {
     param([string]$DataPath,[string]$ToolsPath,$Config)
     . (Join-Path $DataPath 'HP-Repository.ps1')
     Assert-AtelierHpTree $DataPath
     $resultPath=Join-Path $DataPath 'hpia-result.json'
-    $result=if (Test-Path $resultPath) { Get-Content $resultPath -Encoding UTF8 -Raw } else { '{"status":"not_run","message":"Traitement HP non execute ; verifier le rapport de preparation."}' }
+    $result=if (Test-Path $resultPath) { Get-Content $resultPath -Encoding UTF8 -Raw } else { '{"status":"not_run","message":"Traitement HP non exécuté ; vérifier le rapport de préparation."}' }
     $state=$result | ConvertFrom-Json
     $files=New-Object 'Collections.Generic.List[object]'
     $files.Add(@{name='hpia-result.json';content=$result})
     $allowed=[IO.Path]::GetFullPath((Join-Path $ToolsPath 'Rapports\HPImageAssistant')).TrimEnd([char[]]'\/')
     if ($state.report_directory) {
         $root=[IO.Path]::GetFullPath([string]$state.report_directory).TrimEnd([char[]]'\/')
-        if ($root -ne $allowed -and -not $root.StartsWith($allowed+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Dossier des rapports HP non autorise.' }
+        if ($root -ne $allowed -and -not $root.StartsWith($allowed+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Dossier des rapports HP non autorisé.' }
         Assert-AtelierHpTree $root
         foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Recurse)) {
             $relative=$file.FullName.Substring($root.Length+1).Replace('\','/')
             if ($relative -notmatch '^[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)$') { continue }
             if ($file.Name -in @('reporting.json','personalization.json','data-runtime.json')) { continue }
-            if ($file.Length -gt 16MB) { throw 'Un rapport HP depasse 16 Mo ; archive locale conservee.' }
+            if ($file.Length -gt 16MB) { throw 'Un rapport HP depasse 16 Mo ; archive locale conservée.' }
             $content=[IO.File]::ReadAllText($file.FullName)
-            # Normalize native UTF-16/XML declarations to the uploaded UTF-8.
+            # Mettre les déclarations XML/UTF-16 natives en cohérence avec l’envoi UTF-8.
             if ($file.Extension -eq '.xml') { $content=$content -replace '(?i)(<\?xml[^>]*encoding\s*=\s*["''])([^"'']+)(["''])','$1utf-8$3' }
             if ($file.Extension -eq '.html') { $content=$content -replace '(?i)(charset\s*=\s*["'']?)[A-Za-z0-9_-]+','$1utf-8' }
             $files.Add(@{name=$relative;content=$content})
@@ -47,7 +55,7 @@ function Send-AtelierHpReports {
             try { $output.Write($encoded,0,$encoded.Length) } finally { $output.Dispose() }
         }
     } finally { $zip.Dispose();$stream.Dispose() }
-    if ((Get-Item $archive).Length -gt 32MB) { throw 'Archive HP superieure a 32 Mo ; copie locale conservee.' }
+    if ((Get-Item $archive).Length -gt 32MB) { throw 'Archive HP supérieure a 32 Mo ; copie locale conservée.' }
     $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     $receipt=Join-Path $DataPath 'hp-reports-sent.json'
     if (Test-Path $receipt) {
@@ -55,8 +63,8 @@ function Send-AtelierHpReports {
         if ($saved.deployment_id -eq $Config.id -and $saved.sha256 -eq $hash -and (-not $summaryHash -or $saved.summary_sha256 -eq $summaryHash)) { return $hash }
     }
     $reply=Invoke-RestMethod -Uri ($Config.server_url+'/api/windows/'+$Config.id+'/inventory/hp_reports') -Method Post -Headers @{Authorization=('Bearer '+$Config.token)} -ContentType 'application/zip' -InFile $archive -TimeoutSec 60
-    if (-not $reply.accepted -or $reply.deployment_id -ne $Config.id -or $reply.sha256 -ne $hash) { throw 'Rapports HP non confirmes par .250.' }
-    if ($summaryHash -and $reply.hp_summary.sha256 -ne $summaryHash) { throw 'Rapport HTML HP non confirme par .250 ; fichiers locaux conserves.' }
+    if (-not $reply.accepted -or $reply.deployment_id -ne $Config.id -or $reply.sha256 -ne $hash) { throw 'Rapports HP non confirmés par .250.' }
+    if ($summaryHash -and $reply.hp_summary.sha256 -ne $summaryHash) { throw 'Rapport HTML HP non confirmé par .250 ; fichiers locaux conservés.' }
     @{deployment_id=$Config.id;sha256=$hash;summary_sha256=$summaryHash;timestamp=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $receipt -Encoding UTF8
     return $hash
 }

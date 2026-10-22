@@ -1,8 +1,16 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 param([string]$OutputDirectory=$PSScriptRoot)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
-# Loopback is a secure browser context for camera/audio. No images or sound leave this PC.
+# La boucle locale fournit un contexte navigateur sûr pour la caméra et le son, qui restent sur ce PC.
 $reservation=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0)
 $reservation.Start();$port=$reservation.LocalEndpoint.Port;$reservation.Stop()
 $nonce=[guid]::NewGuid().ToString('N')
@@ -37,7 +45,7 @@ try {
                 $tests=@()
                 foreach ($name in @('son','webcam','clavier')) {
                     $test=@($inputJson.tests | Where-Object { $_.name -eq $name })
-                    if ($test.Count -ne 1 -or $test[0].status -notin @('not_tested','passed','failed')) { throw 'Resultat de test invalide.' }
+                    if ($test.Count -ne 1 -or $test[0].status -notin @('not_tested','passed','failed')) { throw 'Résultat de test invalide.' }
                     $comment=[string]$test[0].comment
                     if ($comment.Length -gt 500) { throw 'Commentaire trop long.' }
                     $tests += @{name=$name;status=$test[0].status;comment=$comment}

@@ -1,5 +1,6 @@
-"""Bounded, printable deployment reports without a browser or PDF dependency."""
+"""Rapports de déploiement bornés et imprimables, sans navigateur ni dépendance PDF."""
 from typing import Literal
+from app.text import inventory_label, status_label
 import textwrap
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,7 +19,7 @@ class ComputerReport(BaseModel):
     hostname: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9-]{0,14}$')
     status: Literal['completed', 'needs_attention', 'failed']
     generated_at: str = Field(max_length=50)
-    # Named display values, not a process environment or a license/product key.
+    # Valeurs d’affichage nommées, sans environnement de processus ni clé de licence.
     inventory: dict[str, str] = Field(max_length=60)
     steps: list[ReportStep] = Field(max_length=250)
     warnings: list[str] = Field(default_factory=list, max_length=60)
@@ -32,31 +33,31 @@ class WindowsProgress(BaseModel):
 
 
 def report_lines(report, events=()):
-    yield 'ATELIER PXE - Rapport de deploiement'
-    yield f"Poste : {report['hostname']} | Etat : {report['status']}"
-    yield f"Genere : {report['generated_at']}"
+    yield 'ATELIER PXE - Rapport de déploiement'
+    yield f"Poste : {report['hostname']} | État : {status_label(report['status'])}"
+    yield f"Généré : {report['generated_at']}"
     yield ''
     yield 'INVENTAIRE'
     for label, value in report['inventory'].items():
-        yield f'{label} : {value}'
+        yield f'{inventory_label(label)} : {status_label(value)}'
     yield ''
-    yield 'DEROULEMENT'
+    yield 'DÉROULEMENT'
     for step in report['steps']:
-        yield f"{step.get('timestamp', '')} [{step['status']}] {step['name']} : {step.get('message', '')}"
+        yield f"{step.get('timestamp', '')} [{status_label(step['status'])}] {step['name']} : {step.get('message', '')}"
     if events:
         yield ''
         yield 'HISTORIQUE WINPE (CONSOLE)'
         for event in events:
-            yield f"{event['created_at']} [{event['status']}] {event['message']}"
+            yield f"{event['created_at']} [{status_label(event['status'])}] {event['message']}"
     yield ''
     yield 'AVERTISSEMENTS ET LIMITES'
     yield from report.get('warnings', [])
-    yield 'Les tests son, webcam et clavier exigent une verification humaine.'
-    yield 'Windows Update et Microsoft Store restent a effectuer manuellement.'
+    yield 'Les tests son, webcam et clavier exigent une vérification humaine.'
+    yield 'Windows Update et Microsoft Store restent à effectuer manuellement.'
 
 
 def make_pdf(lines):
-    """A4, WinAnsi Helvetica, escaped text and byte-accurate xref, multiple pages."""
+    """PDF A4 multipage, Helvetica WinAnsi, texte échappé et références aux octets exacts."""
     wrapped = []
     for line in lines:
         clean = ''.join(c if ord(c) >= 32 else ' ' for c in str(line))

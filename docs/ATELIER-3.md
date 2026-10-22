@@ -1,6 +1,6 @@
-**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont ete retirees du site.
+**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont été retirées du site.
 
-# ATELIER-3 — image Windows, logiciels ensuite et inventaires sur .250
+# ATELIER-3 , image Windows, logiciels ensuite et inventaires sur .250
 
 ## Ce qui change
 
@@ -10,7 +10,7 @@
 4. Au premier démarrage Windows, le compte administrateur prépare WinGet si nécessaire, puis télécharge et installe silencieusement les logiciels cochés. Les mises à jour Windows suivent. La progression et les erreurs remontent dans l’activité du site.
 5. Le PC transmet ses inventaires XML/CSV au serveur par HTTPS, avec son jeton de rapport. Aucun partage SMB en écriture n’est ouvert aux ordinateurs déployés.
 
-Le choix du disque et son contrôle local restent nécessaires ; l’arrivée automatique dans le site n’efface aucun disque. Le mode interne doit déjà être configuré sur le réseau de l’atelier. Le parcours normal nécessite une connexion Internet sur chaque PC pour WinGet/Microsoft et les éditeurs. L’installation réelle des logiciels dépend de cette connexion et des installateurs disponibles dans WinGet.
+Le choix du disque et son contrôle local restent nécessaires ; l’arrivée automatique dans le site n’effacé aucun disque. Le mode interne doit déjà être configuré sur le réseau de l’atelier. Le parcours normal nécessite une connexion Internet sur chaque PC pour WinGet/Microsoft et les éditeurs. L’installation réelle des logiciels dépend de cette connexion et des installateurs disponibles dans WinGet.
 
 Le catalogue et les bundles historiques restent conservés, mais sont masqués et ignorés pour les nouvelles installations lorsque `client_software` est activé. Les choix sont dans **Profils Windows → Installation silencieuse après Windows**, puis modifiables sur le poste dans WinPE. Une liste vide signifie qu’aucun des quatre logiciels ne sera installé. Le bouton de téléchargement serveur des versions précédentes ne pilote plus ce parcours, et sa tâche agent sur .250 est arrêtée/désactivée. Il n’est plus nécessaire de garder une session administrateur ouverte sur le serveur pour les logiciels. Les scripts de diagnostic IQ et le rapport PDF restent disponibles. Si un HP Image Assistant portable est déjà enregistré dans le catalogue, il est téléchargé depuis l’API sur les PC HP après Windows, vérifié puis ouvert à la fin de la préparation comme auparavant. Il ne dépend plus d’un bundle ni d’une copie SMB dans WinPE.
 
@@ -24,7 +24,7 @@ D:\AtelierPXE\data\inventaires\NOM-DU-PC\IDENTIFIANT-DU-DEPLOIEMENT\
     Inventaire-Technique.csv
 ```
 
-Le certificat public de confiance intégré à WinPE est également transmis et enregistré dans Windows pour permettre les remontées HTTPS vers .250. Aucun PFX ni clé privée n’est copié, et la validation TLS reste active.
+Le certificat public de confiance intégré à WinPE est également transmis et enregistré dans Windows pour permettre les remontées HTTPS vers .250. Aucun PFX ni clé privée n’est copié, et la validation TLS reste activé.
 
 Le sous-dossier par déploiement évite d’écraser l’historique si un PC est réinstallé. Dans l’activité, cliquer sur **Dossier inventaire** sur la ligne du PC. La fenêtre affiche les fichiers reçus, leurs liens de téléchargement et le chemin Windows à copier sur .250. C’est une vue web du dossier : les navigateurs ne lancent pas automatiquement l’Explorateur du serveur.
 
@@ -50,7 +50,7 @@ Le script détecte l’installation, sauvegarde le code/configuration et SQLite,
     -DriversPath 'D:\AtelierPXE\Drivers\WinPE-x64'
 ```
 
-Depuis IQ-5.2, la construction ajoute un seul pilote Intel I219 cible aux pilotes Microsoft ADK. Aucun ancien dossier `Drivers\WinPE-x64` n est repris automatiquement ; utiliser `-DriversPath` explicitement pour ajouter un autre pilote. Il faut Windows ADK, son complément WinPE, WDS et le certificat public .cer déjà utilisés par l’atelier. La construction native exige Windows : elle n’est pas réalisable dans l’environnement Linux de développement. Tester la nouvelle image sur une VM avant les autres PC. Une ancienne version WinPE est refusée lorsque ce nouveau parcours est activé, pour éviter une installation sans ses scripts de logiciels et d’inventaire.
+Depuis IQ-5.2, la construction ajoute un seul pilote Intel I219 cible aux pilotes Microsoft ADK. Aucun ancien dossier `Drivers\WinPE-x64` n’est repris automatiquement ; utiliser `-DriversPath` explicitement pour ajouter un autre pilote. Il faut Windows ADK, son complément WinPE, WDS et le certificat public .cer déjà utilisés par l’atelier. La construction native exige Windows : elle n’est pas réalisable dans l’environnement Linux de développement. Tester la nouvelle image sur une VM avant les autres PC. Une ancienne version WinPE est refusée lorsque ce nouveau parcours est activé, pour éviter une installation sans ses scripts de logiciels et d’inventaire.
 
 La maintenance refuse de remplacer la console pendant une installation ou une synchronisation serveur active. Elle conserve données, images Windows, profils, rapports et configuration IIS. Les réponses PXE WDS ne sont pas activées ou désactivées par cette mise à jour. Pour les essais, un seul des deux serveurs Atelier/ancien MDT doit répondre au PXE.
 

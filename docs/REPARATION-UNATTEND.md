@@ -29,7 +29,7 @@ Le script refuse une VM active, un disque déjà monté, plusieurs disques ou un
 
 Le disque de la VM est monté **en écriture** pendant la réparation, sans lettre. Un dossier privé sur l’hôte reçoit `unattend.original.bin` et `repair.json`. Le fichier original est aussi conservé à côté de la cible avec un suffixe `.previous-…`. Le XML régénéré est écrit en UTF-8 explicite, avec vidage des tampons, puis relu et vérifié par SHA-256 et analyse XML. Le montage est retiré à la fin, y compris en cas d’erreur ; la VM reste arrêtée.
 
-Attendu : **Fichier de reponses remplace et verifie**, avec taille, SHA-256 et chemin de sauvegarde. En cas d’erreur, conserver le message ; ne pas démarrer la VM avant diagnostic. L’analyse XML ne remplace pas une validation WSIM avec le catalogue exact de l’image Windows.
+Attendu : **Fichier de réponses remplace et vérifie**, avec taille, SHA-256 et chemin de sauvegarde. En cas d’erreur, conserver le message ; ne pas démarrer la VM avant diagnostic. L’analyse XML ne remplace pas une validation WSIM avec le catalogue exact de l’image Windows.
 
 ## 3. Vérifier la reprise du premier démarrage
 

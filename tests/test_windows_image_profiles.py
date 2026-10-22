@@ -136,7 +136,7 @@ def test_cancelled_preparations_never_create_test_profiles_or_replace_production
     report = json.loads(path.read_text())
     report['status'] = status
     path.write_text(json.dumps(report))
-    with pytest.raises(ValueError, match='non prete'):
+    with pytest.raises(ValueError, match='non prête'):
         workflow.register_test(data, path)
     with workflow.database(data) as con:
         assert con.execute('SELECT COUNT(*) FROM windows_image_candidates').fetchone()[0] == 0
@@ -152,8 +152,8 @@ def test_reduced_wim_remaps_indexes_and_keeps_other_editions_on_original_image(a
     with workflow.database(data, write=True) as con:
         con.execute('UPDATE profiles SET image_index=6 WHERE id=?', (pro['id'],))
         con.execute('UPDATE profiles SET image_index=1 WHERE id=?', (home['id'],))
-    other = client.post('/api/profiles', json={'name':'Education conservee', 'asset_id':pro['asset_id'],
-        'image_index':3, 'edition':'Education'}).json()
+    other = client.post('/api/profiles', json={'name':'Éducation conservée', 'asset_id':pro['asset_id'],
+        'image_index':3, 'edition':'Éducation'}).json()
     path = candidate(data, pro['asset_id'])
     report = json.loads(path.read_text())
     report.update(schema=2, scope='home_pro', indexes=[{'source_index':1,'index':1}, {'source_index':6,'index':2}])

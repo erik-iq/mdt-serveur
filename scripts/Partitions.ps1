@@ -1,14 +1,22 @@
-# Functions only. Loading this file never partitions or formats a disk.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. Le chargement ne partitionne et ne formate aucun disque.
 function Get-AtelierVolumeGuid {
     param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$DriveLetter)
-    # The storage provider can omit DriveLetter on an ESP. Resolve the actual
-    # DOS mount to a volume GUID, then compare it with the target's AccessPaths.
+    # Le fournisseur de stockage peut omettre DriveLetter sur une partition ESP.
+    # Résoudre le montage DOS en GUID de volume, puis le comparer aux AccessPaths de la cible.
     $result = & mountvol.exe "${DriveLetter}:\" /L 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Volume ${DriveLetter}: non accessible (mountvol : $LASTEXITCODE)." }
     $paths = @($result | ForEach-Object { ([string]$_).Trim() } | Where-Object {
         $_ -match '^\\\\\?\\Volume\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}\\$'
     } | Select-Object -Unique)
-    if ($paths.Count -ne 1) { throw "Impossible d identifier le volume de ${DriveLetter}:." }
+    if ($paths.Count -ne 1) { throw "Impossible d’identifier le volume de ${DriveLetter}:." }
     return $paths[0]
 }
 
@@ -16,7 +24,7 @@ function Get-AtelierVolumeIdentity {
     param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$DriveLetter)
     $path = Get-AtelierVolumeGuid -DriveLetter $DriveLetter
     $drive = New-Object IO.DriveInfo("${DriveLetter}:\")
-    if (-not $drive.IsReady) { throw "Volume ${DriveLetter}: non pret." }
+    if (-not $drive.IsReady) { throw "Volume ${DriveLetter}: non prêt." }
     return [pscustomobject]@{Path=$path; FileSystem=$drive.DriveFormat}
 }
 
@@ -39,18 +47,18 @@ function Wait-AtelierTargetPartitions {
         try {
             Update-HostStorageCache -ErrorAction Stop
             $currentDisk = Get-Disk -Number $DiskNumber -ErrorAction Stop
-        } catch { throw "Impossible de verifier le disque cible apres DiskPart : $($_.Exception.Message)" }
-        # A different disk is a hard failure, never a reason to repair mounts.
+        } catch { throw "Impossible de vérifier le disque cible après DiskPart : $($_.Exception.Message)" }
+        # Un disque différent est un échec, jamais un motif pour réparer ses montages.
         if ($currentDisk.Number -ne $DiskNumber -or $currentDisk.UniqueId -ne $ExpectedUniqueId -or $currentDisk.Size -ne $ExpectedSize) {
-            throw 'L identite du disque cible a change apres DiskPart. Application de Windows refusee.'
+            throw 'L''identité du disque cible a change après DiskPart. Application de Windows refusée.'
         }
         try {
-            if ($currentDisk.PartitionStyle -ne 'GPT') { throw 'Le disque cible n est pas GPT.' }
+            if ($currentDisk.PartitionStyle -ne 'GPT') { throw 'Le disque cible n''est pas GPT.' }
             $partitions = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction Stop)
-            if ($partitions.Count -ne 4) { throw "Quatre partitions attendues sur le disque $DiskNumber ; $($partitions.Count) detectees." }
+            if ($partitions.Count -ne 4) { throw "Quatre partitions attendues sur le disque $DiskNumber ; $($partitions.Count) détectées." }
             foreach ($spec in $expected) {
                 $matches = @($partitions | Where-Object { $_.PartitionNumber -eq $spec.Number })
-                if ($matches.Count -ne 1) { throw "Partition $($spec.Number) absente ou ambigue." }
+                if ($matches.Count -ne 1) { throw "Partition $($spec.Number) absente ou ambiguë." }
                 $partition = $matches[0]
                 if ($partition.DiskNumber -ne $DiskNumber -or [Guid]$partition.GptType -ne [Guid]$spec.Type -or $partition.Size -lt $spec.MinSize) {
                     throw "Partition $($spec.Number) : disque, type GPT ou taille incorrects."
@@ -59,7 +67,7 @@ function Wait-AtelierTargetPartitions {
                     $volume = Get-AtelierVolumeIdentity -DriveLetter $spec.Letter
                     $paths = @($partition.AccessPaths | ForEach-Object { ([string]$_).TrimEnd('\') })
                     if (([string]$volume.Path).TrimEnd('\') -notin $paths) {
-                        throw "Le volume $($spec.Letter): ne correspond pas a la partition $($spec.Number) du disque $DiskNumber."
+                        throw "Le volume $($spec.Letter): ne correspond pas à la partition $($spec.Number) du disque $DiskNumber."
                     }
                     if ($volume.FileSystem -ne $spec.FileSystem) { throw "Volume $($spec.Letter): attendu en $($spec.FileSystem), detecte en $($volume.FileSystem)." }
                 }
@@ -68,5 +76,5 @@ function Wait-AtelierTargetPartitions {
         } catch { $lastReason = $_.Exception.Message }
         if ($attempt -lt $Attempts) { Start-Sleep -Milliseconds $RetryDelayMilliseconds }
     }
-    throw "Partitionnement non valide apres $Attempts controles : $lastReason Application de Windows refusee."
+    throw "Partitionnement non validé après $Attempts contrôles : $lastReason Application de Windows refusée."
 }

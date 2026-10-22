@@ -91,11 +91,11 @@ En cas d’échec, relever le message affiché et consulter le choix **5** avant
 
 ## 4. Autoriser et installer sur le VHDX de test
 
-Dans **https://192.168.99.250**, garder la machine **PC-TEST-PXE**, MAC **00:15:5D:63:FD:02** si elle correspond toujours à sa carte. Annuler l’ancienne autorisation seulement si elle est encore en attente. Créer un déploiement interactif, profil **Windows 11 Pro FR — Test**, avec le numéro réel du **VHDX de test**. Le code PXE expire après deux heures et devient inutilisable au début de l’installation.
+Dans **https://192.168.99.250**, garder la machine **PC-TEST-PXE**, MAC **00:15:5D:63:FD:02** si elle correspond toujours à sa carte. Annuler l’ancienne autorisation seulement si elle est encore en attente. Créer un déploiement interactif, profil **Windows 11 Pro FR , Test**, avec le numéro réel du **VHDX de test**. Le code PXE expire après deux heures et devient inutilisable au début de l’installation.
 
 Dans l’assistant : code PXE, compte **DEPLOY-01\DeployRead** et son mot de passe. Choisir le profil Windows (index **6** pour le WIM multiédition d’origine), nom **PC-TEST-PXE**, région/clavier/fuseau, bundle **Poste standard** et fond **Fond-Atelier.png**. Sur la VM Microsoft, les outils HP et Lenovo sont exclus ; VLC, Chrome et Reader restent sélectionnables.
 
-Au récapitulatif, vérifier numéro et taille du VHDX. La phrase finale affichée, par exemple **EFFACER PC-TEST-PXE DISQUE 0**, autorise la suppression de ses partitions. **0 est un exemple à contrôler.** Le simple démarrage PXE n’efface aucun disque.
+Au récapitulatif, vérifier numéro et taille du VHDX. La phrase finale affichée, par exemple **EFFACER PC-TEST-PXE DISQUE 0**, autorise la suppression de ses partitions. **0 est un exemple à contrôler.** Le simple démarrage PXE n’effacé aucun disque.
 
 Après **Image appliquée**, fermer l’assistant, choisir **0**, puis exécuter `wpeutil shutdown`. Dans Hyper-V, mettre le disque / **Windows Boot Manager** avant le réseau dans la VM arrêtée. Relancer la VM et terminer OOBE avec le premier compte administrateur. Contrôler logiciels et `C:\ProgramData\AtelierPXE\result.json` après cette connexion. Voir [les contrôles de premier démarrage](ASSISTANT-PXE.md#10-installer-réellement-sur-le-disque-de-test).
 

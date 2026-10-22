@@ -1,4 +1,4 @@
-"""Exercise the local IQ page with a simulated webcam and human selections."""
+"""Exercise the local IQ page with a simulated webcam and human sélections."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -42,14 +42,14 @@ def run():
             expect(page.locator('#key-ArrowLeft')).to_have_class('key pressed')
             page.locator('#son').select_option('passed');page.locator('#webcam').select_option('passed')
             page.locator('#clavier').select_option('failed');page.locator('#clavier-comment').fill('Une touche manque')
-            page.locator('#save').click();expect(page.locator('#notice')).to_contain_text('Resultats enregistres')
+            page.locator('#save').click();expect(page.locator('#notice')).to_contain_text('Résultats enregistrés')
             assert received[0]['tests'][2]['status']=='failed'
             assert page.evaluate("document.getElementById('preview').srcObject === null")
             assert not errors,errors
             browser.close()
     finally:
         server.shutdown();server.server_close();thread.join()
-    print('IQ browser passed: audio channels, simulated camera, keyboard, operator results, saved JSON, camera stopped.')
+    print('IQ browser passed: audio channels, simulated caméra, keyboard, operator results, saved JSON, caméra stopped.')
 
 
 if __name__=='__main__':

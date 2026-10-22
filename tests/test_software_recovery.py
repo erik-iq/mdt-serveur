@@ -82,7 +82,7 @@ def test_native_success_requires_current_registration_and_executable(tmp_path,ca
     if case=='damaged_checkpoint':
         (data/'winget-client-state.json').write_text('corrupted checkpoint from old payload')
     if case=='registry_only':
-        Path(str(exe)+'.registry.json').write_text(json.dumps([{'DisplayName':'VLC media player','Publisher':'VideoLAN','InstallLocation':str(tmp_path/'VLC'),'DisplayVersion':'old'}]))
+        Path(str(exe)+'.registry.json').write_text(json.dumps([{'DisplayName':'VLC média player','Publisher':'VideoLAN','InstallLocation':str(tmp_path/'VLC'),'DisplayVersion':'old'}]))
     if case=='executable_only':
         (tmp_path/'VLC').mkdir();(tmp_path/'VLC'/'vlc.exe').write_bytes(b'not registered')
     script+="""
@@ -123,7 +123,7 @@ ConvertTo-Json -InputObject $result|Set-Content 'DATA/out.json'
 @pytest.mark.parametrize('mode',['success','no_op','failure'])
 def test_first_logon_rechecks_captured_completion_instead_of_skipping_software(tmp_path,mode):
     data,exe,script=setup_client(tmp_path,mode)
-    # Replace the updater library after setup so its native operations are inert.
+    # Replace the updater library after setup so its native opérations are inert.
     (data/'result.json').write_text('{"status":"completed","deployment_id":"reference-image","applications":[]}')
     (data/'Timings.ps1').write_text('function Start-AtelierTiming {return ""};function Stop-AtelierTiming {};function Sync-AtelierTimings {}')
     script+="\n& 'DATA/FirstLogon.ps1' -DataPath 'DATA'\n".replace('DATA',str(data))
@@ -142,7 +142,7 @@ def test_first_logon_rechecks_captured_completion_instead_of_skipping_software(t
 def test_repair_installs_only_original_selection_and_refreshes_final_status(tmp_path):
     data,exe,script=setup_client(tmp_path)
     (data/'result.json').write_text('{"status":"completed","applications":[]}')
-    (data/'maintenance.json').write_text('{"status":"completed","message":"obsolete success"}')
+    (data/'maintenance.json').write_text('{"status":"completed","message":"obsolète success"}')
     # Repair uses a source archive, and the target contains independent old files.
     source=tmp_path/'source';shutil.copytree(data,source)
     (data/'Export-Inventaire.ps1').write_text('param($OutputDirectory);New-Item -ItemType Directory -Path $OutputDirectory -Force|Out-Null;Set-Content (Join-Path $OutputDirectory "Inventaire-Technique.xml") "fixture";Set-Content (Join-Path $OutputDirectory "Inventaire-Technique.csv") "fixture";[pscustomobject]@{SectionsIndisponibles=0}')
@@ -151,7 +151,7 @@ def test_repair_installs_only_original_selection_and_refreshes_final_status(tmp_
     result=json.loads((data/'result.json').read_text(encoding='utf-8-sig'))
     state=json.loads((data/'maintenance.json').read_text(encoding='utf-8-sig'))
     assert result['software_status']=='completed' and result['software_summary']['verified']==1
-    assert state['status']=='completed' and 'Logiciels verifies : 1' in state['message']
+    assert state['status']=='completed' and 'Logiciels vérifiés : 1' in state['message']
     assert Path(str(exe)+'.calls').read_text().splitlines()==['install']
     assert len(list((data/'repair-backups').glob('software-*')))==1
 

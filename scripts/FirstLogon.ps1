@@ -1,7 +1,15 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 $resultPath = Join-Path $DataPath 'result.json'
 $logPath = Join-Path $DataPath 'first-logon.log'
@@ -22,13 +30,13 @@ function Start-Maintenance {
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Action $action -Trigger $triggers -Principal $principal -Settings $taskSettings -Force | Out-Null
-    # Maintenance runs in SYSTEM; the open desktop remains available throughout.
+    # La maintenance s’exécute sous SYSTEM ; le bureau reste disponible.
     . (Join-Path $DataPath 'Updates.ps1')
     Disable-AtelierAutoLogon
-    # Old clients used an interactive task to open HPIA after maintenance.
+    # Les anciens postes utilisaient une tâche interactive pour ouvrir HPIA après maintenance.
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
-    $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installes ou non verifies : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels verifies : '+$script:softwareSummary.verified+'.' }
-    Set-Progress 'running' 75 ($detail+' Finalisation et rapport en arriere-plan ; mises a jour Windows / Store manuelles.')
+    $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installés ou non vérifiés : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels vérifiés : '+$script:softwareSummary.verified+'.' }
+    Set-Progress 'running' 75 ($detail+' Finalisation et rapport en arrière-plan ; mises à jour Windows / Store manuelles.')
     Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
 }
@@ -41,7 +49,7 @@ function Write-Trace([string]$Message) {
 }
 function Assert-FileHash([string]$Path, [string]$Expected) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf) -or (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) {
-        throw "Integrite du fichier refusee : $Path"
+        throw "Intégrité du fichier refusée : $Path"
     }
 }
 function Expand-SafeZip([string]$Path, [string]$Destination) {
@@ -53,7 +61,7 @@ function Expand-SafeZip([string]$Path, [string]$Destination) {
         $size = 0L
         foreach ($entry in $zip.Entries) {
             $size += $entry.Length
-            if ($size -gt 25GB) { throw 'Archive trop volumineuse apres extraction.' }
+            if ($size -gt 25GB) { throw 'Archive trop volumineuse après extraction.' }
             $target = [IO.Path]::GetFullPath((Join-Path $root $entry.FullName))
             if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or $entry.FullName -match '[:\x00]') {
                 throw 'Chemin dangereux dans le ZIP.'
@@ -73,13 +81,13 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
     $info.CreateNoWindow = $true
     $process = [Diagnostics.Process]::Start($info)
     try {
-        if (-not $process.WaitForExit(2700000)) { throw 'Installateur encore actif apres 45 minutes : consultez le processus avant toute reprise.' }
+        if (-not $process.WaitForExit(2700000)) { throw 'Installateur encore actif après 45 minutes : consultez le processus avant toute reprise.' }
         return $process.ExitCode
     } finally { $process.Dispose() }
 }
 
 try {
-    # This task is detached from OOBE. Wait for Explorer without blocking sign-in.
+    # Cette tâche est indépendante d’OOBE. Attendre Explorer sans bloquer la connexion.
     $desktopDeadline=(Get-Date).AddSeconds(60)
     while (-not (Get-Process explorer -ErrorAction SilentlyContinue) -and (Get-Date) -lt $desktopDeadline) { Start-Sleep -Seconds 1 }
     Initialize-AtelierReportTrust -DataPath $DataPath
@@ -87,12 +95,12 @@ try {
         $self=Get-Process -Id $PID
         @{pid=$PID;started=$self.StartTime.ToUniversalTime().ToString('o')} | ConvertTo-Json | Set-Content (Join-Path $DataPath 'preparation-worker.json') -Encoding UTF8
     }
-    # Always check the requested applications against this Windows installation.
-    # Captured WIMs and resumed clients may contain obsolete success files.
-    Set-Progress 'running' 5 'Preparation du bureau et des logiciels...'
+    # Vérifier les applications demandées dans cette installation réelle de Windows.
+    # Les WIM capturés et les reprises peuvent contenir d’anciens résultats de réussite.
+    Set-Progress 'running' 5 'Préparation du bureau et des logiciels...'
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
-    Write-Trace 'Debut de la personnalisation du premier compte administrateur.'
+    Write-Trace 'Début de la personnalisation du premier compte administrateur.'
     $theme = $payload.settings.theme
     if ($theme -in @('light','dark')) {
         $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
@@ -113,8 +121,8 @@ try {
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AtelierWallpaper { [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool SystemParametersInfo(int action,int parameter,string value,int flags); }'
-        if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraichir le fond d ecran.' }
-        Write-Trace 'Fond d ecran applique.'
+        if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraîchir le fond d''écran.' }
+        Write-Trace 'Fond d''écran applique.'
     }
     . (Join-Path $DataPath 'Client-Software.ps1')
     $hpWinGetTool=$null
@@ -154,7 +162,7 @@ try {
         $asset = $application.asset
         if ($application.install_mode -ne 'portable' -and $checkpoints.ContainsKey($application.id) -and $checkpoints[$application.id].sha256 -eq $asset.sha256) {
             $results.Add($checkpoints[$application.id]); $restartNeeded=$restartNeeded -or $checkpoints[$application.id].exit_code -eq 3010
-            Write-Trace ('Logiciel deja prepare et verifie : ' + $application.name)
+            Write-Trace ('Logiciel déjà préparé et vérifié : ' + $application.name)
             continue
         }
         $source = Join-Path $DataPath ('Packages\' + $asset.filename)
@@ -166,11 +174,11 @@ try {
             } else { Join-Path $DataPath ('Expanded\' + $application.id) }
             Expand-SafeZip $source $folder
             $executable = [IO.Path]::GetFullPath((Join-Path $folder $application.entry_point))
-            if (-not $executable.StartsWith(([IO.Path]::GetFullPath($folder).TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Point d entree hors du bundle.' }
+            if (-not $executable.StartsWith(([IO.Path]::GetFullPath($folder).TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Point d''entrée hors du bundle.' }
         }
         if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw ("Installateur absent : " + $application.name) }
         $signature = Get-AuthenticodeSignature -LiteralPath $executable
-        if ($signature.Status -ne 'Valid') { throw ("Signature editeur invalide : " + $application.name) }
+        if ($signature.Status -ne 'Valid') { throw ("Signature éditeur invalide : " + $application.name) }
         if ($application.install_mode -eq 'portable') {
             $shell = New-Object -ComObject WScript.Shell
             try {
@@ -189,33 +197,33 @@ try {
             $arguments = '/i "{0}" /qn /norestart /L*v "{1}" {2}' -f $executable, $installerLog, $application.arguments
             $exitCode = Invoke-Installer (Join-Path $env:SystemRoot 'System32\msiexec.exe') $arguments (Split-Path $executable -Parent)
         } else { $exitCode = Invoke-Installer $executable $application.arguments }
-        if ($exitCode -notin @(0,3010)) { throw ("Echec de " + $application.name + " (code $exitCode)") }
+        if ($exitCode -notin @(0,3010)) { throw ("Échec de " + $application.name + " (code $exitCode)") }
         if ($exitCode -eq 3010) { $restartNeeded = $true }
         $entry=@{id=$application.id;sha256=$asset.sha256;name=$application.name;version=$application.version;status='completed';exit_code=$exitCode}
         $results.Add($entry); $checkpoints[$application.id]=$entry
         Write-AtelierVerifiedUtf8File -Path $checkpointPath -Content (ConvertTo-Json -InputObject @($checkpoints.Values) -Depth 6) -NoBackup | Out-Null
-        Write-Trace ("Logiciel prepare : " + $application.name)
+        Write-Trace ("Logiciel prépare : " + $application.name)
     }
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'ready-tools.json') -Content (ConvertTo-Json -InputObject @($readyTools.ToArray()) -Depth 4) -NoBackup | Out-Null
     Stop-AtelierTiming $DataPath $toolsTiming
     Sync-AtelierTimings $DataPath
-    Set-Progress 'running' 65 'Creation du dossier C:\IQ_ et des diagnostics...'
+    Set-Progress 'running' 65 'Création du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
-    # Export once at finalization, after software and updates; no duplicate CIM scan.
+    # Exporter une seule fois à la fin, après les logiciels et pilotes, sans doubler le relevé CIM.
     $script:softwareSummary=Get-AtelierSoftwareSummary -Packages $clientPackages -Results @($results.ToArray())
     $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { $script:softwareSummary.status }
     @{status='completed';software_status=$softwareStatus;software_summary=$script:softwareSummary;deployment_id=[string]$payload.deployment.id;timestamp=(Get-Date).ToString('o'); restart_needed=$restartNeeded; applications=@($results.ToArray())} | ConvertTo-Json -Depth 8 | Set-Content $resultPath -Encoding UTF8
     Start-Maintenance
-    Write-Trace 'Personnalisation terminee. Consultez result.json pour les logiciels et le redemarrage eventuel.'
+    Write-Trace 'Personnalisation terminée. Consultez result.json pour les logiciels et le redémarrage éventuel.'
 } catch {
     if ($softwareTiming) { Stop-AtelierTiming $DataPath $softwareTiming 'failed' }
     if ($toolsTiming) { Stop-AtelierTiming $DataPath $toolsTiming 'failed' }
     Sync-AtelierTimings $DataPath
     @{status='failed'; timestamp=(Get-Date).ToString('o'); message=$_.Exception.Message; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
-    Set-Progress 'failed' 0 ('Preparation interrompue : ' + $_.Exception.Message)
+    Set-Progress 'failed' 0 ('Préparation interrompue : ' + $_.Exception.Message)
     . (Join-Path $DataPath 'Updates.ps1')
     if ($payload.settings.unattended) { Disable-AtelierAutoLogon }
     Complete-AtelierReport $DataPath
-    Write-Trace ('Echec : ' + $_.Exception.Message)
+    Write-Trace ('Échec : ' + $_.Exception.Message)
     throw
 }

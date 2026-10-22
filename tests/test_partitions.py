@@ -1,4 +1,4 @@
-"""Execute the partition guard with simulated storage; never modify a real disk."""
+"""Exécute the partition guard with simulated storage; never modify a real disk."""
 import json
 import os
 from pathlib import Path
@@ -121,7 +121,7 @@ def test_disk_identity_change_is_immediately_rejected(tmp_path, field, value):
     fixture['disk'][field] = value
     answer = run_ps(tmp_path, GUARD, fixture)
     assert answer['success'] is False
-    assert 'identite du disque cible a change' in answer['reason']
+    assert 'identité du disque cible a change' in answer['reason']
     assert answer['queries'] == 0 and answer['refreshes'] == 1
 
 

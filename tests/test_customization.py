@@ -40,7 +40,7 @@ def test_bundle_deduplication_personalization_and_scoped_selection(system):
         'application_ids': [app['id'], hp['id']]}).json()
     settings = {**first['settings'], 'theme': 'dark', 'wallpaper_asset_id': wallpaper['id'],
                 'application_ids': [app['id']], 'bundle_ids': [bundle['id']],
-                'registered_owner': 'Equipe & IT', 'organization': 'Atelier'}
+                'registered_owner': 'Équipe & IT', 'organization': 'Atelier'}
     profile = client.post('/api/profiles', headers=auth(), json={'name': 'Windows personnalise',
         'asset_id': first['asset_id'], 'windows_version': '26H2', 'edition': 'Pro', 'settings': settings}).json()
     job = client.post('/api/deployments', headers=auth(), json={**payload, 'wizard_enabled': True}).json()
@@ -178,7 +178,7 @@ def test_invalid_setting_and_wrong_resource_kind_rejected(system):
 
 
 def test_real_v01_database_migration_preserves_existing_authorization(tmp_path):
-    """Use the old schema, rather than a database already migrated by this version."""
+    """Use the old schéma, rather than a database already migrated by this version."""
     artifacts = tmp_path / 'artifacts'
     artifacts.mkdir()
     content = b'MSWIM\0\0\0legacy-fixture'

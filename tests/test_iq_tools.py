@@ -44,8 +44,8 @@ function powercfg.exe {
     [IO.File]::WriteAllText($path,'<html>Simulated battery report</html>')
     $global:LASTEXITCODE=0
 }
-& 'PREPARE' -DataPath 'DATA' -OutputDirectory 'OUTPUT'
-# Parse and execute only the generated command with a fake Start-Process.
+& 'PRÉPARE' -DataPath 'DATA' -OutputDirectory 'OUTPUT'
+# Parse and exécute only the generated command with a fake Start-Process.
 function Start-Process { param($FilePath,$Verb,$ArgumentList); $script:launcherArguments=$ArgumentList }
 $line=(Get-Content 'OUTPUT/Diagnostics/Test-Batterie.cmd')[1]
 $command=$line.Substring($line.IndexOf('-Command "')+10).TrimEnd('"')
@@ -63,7 +63,7 @@ if (HP_ENABLED) {
 }
 '''.replace('HAS_BATTERY','$true' if battery else '$false').replace('LICENSE_STATUS',str(license_status))
       .replace('PROGRAM',str(tmp_path/'Program Files')).replace('HP_ENABLED','$true' if hpia else '$false').replace('HP_EXE',str(tool))
-      .replace('PREPARE',str(ROOT/'scripts'/'Prepare-IQTools.ps1').replace("'","''"))
+      .replace('PRÉPARE',str(ROOT/'scripts'/'Prepare-IQTools.ps1').replace("'","''"))
       .replace('DATA',str(data).replace("'","''")).replace('OUTPUT',str(output).replace("'","''")),encoding='utf-8-sig')
     result=subprocess.run([PWSH,'-NoProfile','-NonInteractive','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stderr

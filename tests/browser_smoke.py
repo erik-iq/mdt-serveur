@@ -43,10 +43,10 @@ def run(internal=False):
                     break
                 except OSError:
                     if process.poll() is not None:
-                        raise RuntimeError('Le serveur de test a echoue au demarrage.')
+                        raise RuntimeError('Le serveur de test a échoué au démarrage.')
                     time.sleep(.1)
             else:
-                raise RuntimeError('Timeout au demarrage du serveur.')
+                raise RuntimeError('Timeout au démarrage du serveur.')
             with sync_playwright() as p:
                 browser = p.chromium.launch(executable_path=chromium, headless=True, args=['--no-sandbox'])
                 page = browser.new_page(viewport={'width':1440,'height':1100}, timezone_id='Europe/Zurich')
@@ -54,7 +54,7 @@ def run(internal=False):
                 page.on('pageerror',lambda error: errors.append(str(error)))
                 page.goto(origin)
                 if internal:
-                    expect(page.locator('#connection')).to_have_text('Console connectee')
+                    expect(page.locator('#connection')).to_have_text('Console connectée')
                     assert not page.locator('#login-dialog').is_visible()
                     assert not page.locator('#logout').is_visible()
                 else:
@@ -63,8 +63,8 @@ def run(internal=False):
                     page.wait_for_selector('#login-dialog',state='hidden')
                 page.get_by_role('button',name='Enregistrer une machine',exact=True).click()
                 page.get_by_label('Nom Windows du poste').fill('PC-LAB-01')
-                page.get_by_label('Numero de serie BIOS').fill('HP-BROWSER-1234')
-                page.get_by_label('MAC observee (facultatif)').fill('00:11:22:33:44:55')
+                page.get_by_label('Numéro de série BIOS').fill('HP-BROWSER-1234')
+                page.get_by_label('MAC observée (facultatif)').fill('00:11:22:33:44:55')
                 page.get_by_label('Description',exact=True).fill('Poste de laboratoire')
                 page.locator('#submit-resource').click()
                 page.wait_for_selector('#form-dialog',state='hidden')
@@ -88,8 +88,8 @@ def run(internal=False):
                 page.get_by_label('Image Windows',exact=True).select_option(index=1)
                 page.get_by_label('Version Windows',exact=True).fill('26H2')
                 page.get_by_label('Edition',exact=True).select_option('Pro')
-                page.get_by_label('Theme Windows').select_option('dark')
-                page.get_by_label('Fond d ecran',exact=True).select_option(label='desktop.png')
+                page.get_by_label('Thème Windows').select_option('dark')
+                page.get_by_label('Fond d’écran',exact=True).select_option(label='desktop.png')
                 page.locator('#form-dialog').get_by_label('VLC',exact=True).check()
                 page.locator('#submit-resource').click()
                 page.wait_for_selector('#form-dialog',state='hidden')
@@ -133,14 +133,14 @@ def run(internal=False):
                 callback('/events',{'status':'running','progress':35,'message':'Test navigateur : image en cours'})
                 page.locator('#refresh').click()
                 page.locator(f'[data-job="{identifier}"] .badge.running').wait_for()
-                callback('/events',{'status':'staged','progress':100,'message':'Test navigateur : image preparee, demarrage non verifie'})
+                callback('/events',{'status':'staged','progress':100,'message':'Test navigateur : image préparée, démarrage non vérifié'})
                 page.locator('#refresh').click()
                 page.locator(f'[data-job="{identifier}"] .badge.staged').wait_for()
                 page.locator(f'[data-events="{identifier}"]').click()
-                page.get_by_text('Test navigateur : image preparee, demarrage non verifie',exact=True).wait_for()
+                page.get_by_text('Test navigateur : image préparée, démarrage non vérifié',exact=True).wait_for()
                 page.locator('[data-close="events-dialog"]').click()
                 report={'hostname':'PC-LAB-01','status':'completed','generated_at':'2026-10-15T16:00:00Z',
-                        'inventory':{'Modele':'HP navigateur'},'steps':[{'name':'Windows Update','status':'completed','message':'Test termine'}],'warnings':[]}
+                        'inventory':{'Modele':'HP navigateur'},'steps':[{'name':'Windows Update','status':'completed','message':'Test terminé'}],'warnings':[]}
                 request=Request(origin+'/api/windows/'+identifier+'/report',method='POST',headers={'Authorization':'Bearer '+reporting_token,'Content-Type':'application/json'},data=json.dumps(report).encode())
                 with urlopen(request) as response:
                     assert response.status==200

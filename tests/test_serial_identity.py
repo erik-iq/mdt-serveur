@@ -151,7 +151,7 @@ def test_booting_another_dock_cannot_reimage_windows_still_being_prepared(automa
     claim=client.post(route+'/claim',headers=headers).json()
     assert client.post(route+'/events',headers=headers,json={'status':'staged','progress':100,'message':'Image ready'}).status_code==200
     assert boot(client,'HP-REBOOT-1234',['00:11:22:33:44:66']).status_code==409
-    assert client.post('/api/windows/'+session['id']+'/progress',headers=auth(claim['report_token']),json={'status':'completed','progress':100,'message':'Preparation complete'}).status_code==200
+    assert client.post('/api/windows/'+session['id']+'/progress',headers=auth(claim['report_token']),json={'status':'completed','progress':100,'message':'Préparation complète'}).status_code==200
     again=boot(client,'HP-REBOOT-1234',['00:11:22:33:44:66'])
     assert again.status_code==200 and again.json()['id']!=session['id']
     state=client.get('/api/state').json()

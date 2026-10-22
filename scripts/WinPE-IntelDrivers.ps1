@@ -1,5 +1,13 @@
-# Intel download record 727998, Wired_driver_31.2.2_x64.zip (July 2026).
-# Only the legacy NDIS I219 package is selected, never the complete driver set.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Téléchargement Intel 727998, Wired_driver_31.2.2_x64.zip, juillet 2026.
+# Sélectionner uniquement le paquet NDIS I219 historique, sans l’ensemble des pilotes.
 function Assert-AtelierIntelCachePath {
     param([string]$Path)
     $item=Get-Item -LiteralPath $Path -Force
@@ -26,7 +34,7 @@ function Expand-AtelierIntelArchive {
     try {
         if ($zip.Entries.Count -gt 16000 -or ($zip.Entries | Measure-Object Length -Sum).Sum -gt 1GB) { throw 'Archive Intel hors limites.' }
         $seen=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-        # Validate every path before writing any entry, including on .NET Framework.
+        # Valider chaque chemin avant toute écriture, y compris sous .NET Framework.
         $targets=New-Object 'Collections.Generic.List[object]'
         foreach ($entry in $zip.Entries) {
             $name=$entry.FullName.Replace('\','/')
@@ -73,7 +81,7 @@ function Select-AtelierIntelI219Inf {
     param([string]$Path,[version]$WinPEVersion)
     $candidates=New-Object 'Collections.Generic.List[object]'
     foreach ($inf in Get-ChildItem -LiteralPath $Path -Recurse -Filter '*.inf' -File) {
-        # e1dn is NetAdapterCx, not the legacy NDIS e1d package wanted here.
+        # e1dn utilise NetAdapterCx ; ce n’est pas le paquet NDIS historique e1d recherché.
         if ($inf.Name -notmatch '^e1d(?:6[0-9]x64)?\.inf$') { continue }
         $sections=Read-AtelierIntelInfSections $inf.FullName
         if (-not $sections.Version -or -not $sections.Manufacturer) { continue }
@@ -95,7 +103,7 @@ function Select-AtelierIntelI219Inf {
             if ($model -and $model.text -match '(?im)^[^=\r\n]+=[^,\r\n]+,\s*"?PCI\\VEN_8086&DEV_15D7(?:[&",\s]|$)' -and $model.text -match '(?im)^[^=\r\n]+=[^,\r\n]+,\s*"?PCI\\VEN_8086&DEV_15D8(?:[&",\s]|$)') { $matchesHardware=$true;$targetVersion=$model.minimum;break }
         }
         if (-not $matchesHardware) { continue }
-        # Keep the original directory; DISM resolves the INF's own file references.
+        # Conserver le dossier original ; DISM résout les références de fichiers de l’INF.
         $catalog=$null
         foreach ($row in $versionText.Split("`n")) {
             if ($row -match '^CatalogFile(?:\.NTamd64)?\s*=\s*"?([^"\r\n]+?)"?\s*$') {
@@ -124,10 +132,10 @@ function Get-AtelierIntelI219Driver {
     $lock=$null;$staging=$null
     try {
         try { $lock=[IO.File]::Open((Join-Path $cache 'build.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None) }
-        catch { throw 'Le cache Intel WinPE est deja utilise par une autre construction.' }
+        catch { throw 'Le cache Intel WinPE est déjà utilisé par une autre construction.' }
         $archiveValid=(Test-Path $archive -PathType Leaf) -and (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $expectedHash
         if (-not $archiveValid) {
-            Write-Host 'Telechargement Intel Ethernet 31.2.2 : environ 39 Mo, conserve sur .250...'
+            Write-Host 'Téléchargement Intel Ethernet 31.2.2 : environ 39 Mo, conserve sur .250...'
             [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $partial -TimeoutSec 300
             if ((Get-Item -LiteralPath $partial).Length -gt 100MB -or (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedHash) { throw 'Empreinte SHA-256 Intel incorrecte. Aucun pilote importe.' }
@@ -155,7 +163,7 @@ function Get-AtelierIntelI219Driver {
         $selected=Select-AtelierIntelI219Inf -Path $drivers -WinPEVersion $WinPEVersion
         $result=[pscustomobject]@{network_infs=@($selected.path);family='Intel I219-LM/V';version=$selected.version.ToString();archive_version='31.2.2';source=$url;sha256=$expectedHash;winpe_version=$WinPEVersion.ToString();hardware_ids=@('PCI\VEN_8086&DEV_15D7','PCI\VEN_8086&DEV_15D8')}
         $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $cache 'selection.json') -Encoding UTF8
-        Write-Host ('Reseau WinPE : 1 seul INF Intel I219 ('+[IO.Path]::GetFileName($selected.path)+', version '+$selected.version+').')
+        Write-Host ('Réseau WinPE : 1 seul INF Intel I219 ('+[IO.Path]::GetFileName($selected.path)+', version '+$selected.version+').')
         return $result
     } finally {
         if ($lock) { try { if (Test-Path $partial) { Remove-Item -LiteralPath $partial -Force };if ($staging -and (Test-Path $staging)) { Remove-Item -LiteralPath $staging -Recurse -Force } } finally { $lock.Dispose() } }

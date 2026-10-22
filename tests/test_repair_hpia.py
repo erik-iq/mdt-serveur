@@ -1,4 +1,4 @@
-"""Repair an already deployed HP, preserve other software and refuse active work."""
+"""Repair an already deployed HP, préserve other software and refuse active work."""
 import json
 import os
 from pathlib import Path

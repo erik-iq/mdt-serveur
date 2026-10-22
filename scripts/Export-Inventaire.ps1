@@ -1,7 +1,15 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$OutputDirectory='C:\IQ_')
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 $collected=[DateTime]::UtcNow.ToString('o')
 $computer=[string]$env:COMPUTERNAME
@@ -13,7 +21,7 @@ function Convert-InventoryValue($Value) {
     if ($Value -is [datetime]) { return $Value.ToString('o',[Globalization.CultureInfo]::InvariantCulture) }
     if ($Value -is [bool]) { return $Value.ToString().ToLowerInvariant() }
     if ($Value -is [IFormattable]) { return $Value.ToString($null,[Globalization.CultureInfo]::InvariantCulture) }
-    # XML 1.0 forbids some control characters returned by device firmware.
+    # XML 1.0 interdit certains caractères de contrôle renvoyés par les firmwares.
     return ([string]$Value -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
 }
 
@@ -75,7 +83,7 @@ Add-InventorySection 'VolumesStockage' { Get-Volume -ErrorAction Stop } @('Drive
 Add-InventorySection 'TPM' { Get-Tpm -ErrorAction Stop } @('TpmPresent','TpmReady','TpmEnabled','TpmActivated','TpmOwned','ManufacturerId','ManufacturerIdTxt','ManufacturerVersion','ManagedAuthLevel','OwnerClearDisabled','AutoProvisioning','LockedOut','LockoutCount','LockoutMax')
 Add-InventorySection 'SecureBoot' { [pscustomobject]@{Active=(Confirm-SecureBootUEFI -ErrorAction Stop)} }
 Add-InventorySection 'BitLocker' { Get-BitLockerVolume -ErrorAction Stop } @('MountPoint','VolumeType','CapacityGB','VolumeStatus','EncryptionPercentage','EncryptionMethod','ProtectionStatus','LockStatus','AutoUnlockEnabled')
-# Never export OA3xOriginalProductKey, registry DigitalProductId, OwnerAuth or BitLocker key protectors.
+# Ne jamais exporter OA3xOriginalProductKey, DigitalProductId, OwnerAuth ou les clés BitLocker.
 Add-InventorySection 'LicencesWindows' {
     Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f'" -OperationTimeoutSec 15 -ErrorAction Stop | Where-Object { $_.Name -like 'Windows*' -and -not $_.LicenseIsAddon }
 } @('ID','ApplicationID','Name','Description','LicenseStatus','LicenseStatusReason','GracePeriodRemaining','EvaluationEndDate','ProductKeyChannel','LicenseFamily','LicenseIsAddon','VLActivationTypeEnabled','VLActivationInterval','VLRenewalInterval','KeyManagementServiceMachine','KeyManagementServicePort')
@@ -86,7 +94,7 @@ Add-InventorySection 'DemarrageRapide' { Get-ItemProperty 'HKLM:\SYSTEM\CurrentC
 Add-InventorySection 'FuseauHoraire' { Get-TimeZone -ErrorAction Stop } @('Id','DisplayName','StandardName','DaylightName','BaseUtcOffset','SupportsDaylightSavingTime')
 Add-InventorySection 'RoutesReseau' { Get-NetRoute -ErrorAction Stop } @('InterfaceIndex','DestinationPrefix','NextHop','RouteMetric','Protocol','State','AddressFamily')
 Add-InventorySection 'ServicesWindows' { Get-CimInstance -ClassName Win32_Service -OperationTimeoutSec 15 -ErrorAction Stop } @('Name','DisplayName','State','StartMode','StartName','ExitCode')
-# Win32_Product is deliberately not queried: enumerating it can repair/reconfigure MSI applications.
+# Ne pas interroger Win32_Product : son énumération peut réparer ou reconfigurer les MSI.
 foreach ($view in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')) {
     $category=if ($view.StartsWith('HKCU')) {'LogicielsUtilisateur'} elseif ($view -match 'WOW6432Node') {'Logiciels32bits'} else {'Logiciels64bits'}
     Add-InventorySection $category { Get-ItemProperty -Path $view -ErrorAction Stop | Where-Object { $_.DisplayName } | Sort-Object DisplayName,DisplayVersion } @('DisplayName','DisplayVersion','Publisher','InstallDate','EstimatedSize','InstallLocation','SystemComponent','ReleaseType')
@@ -106,7 +114,7 @@ try {
         $writer.WriteStartDocument();$writer.WriteStartElement('InventaireOrdinateur')
         $writer.WriteAttributeString('schemaVersion','1');$writer.WriteAttributeString('ordinateur',$computer);$writer.WriteAttributeString('collecteUTC',$collected)
         $writer.WriteStartElement('Collecte')
-        $writer.WriteElementString('Portee','Inventaire technique accessible a Windows. Les absences et erreurs de fournisseur sont explicites. Aucune cle de produit, mot de passe, cle TPM ou cle BitLocker.')
+        $writer.WriteElementString('Portee','Inventaire technique accessible à Windows. Les absences et erreurs de fournisseur sont explicites. Aucune clé de produit, mot de passe, clé TPM ou clé BitLocker.')
         foreach ($section in $sections) {
             $writer.WriteStartElement('Section');$writer.WriteAttributeString('nom',$section.Nom);$writer.WriteAttributeString('etat',$section.Etat);$writer.WriteAttributeString('elements',[string]$section.Elements)
             if ($section.Erreur) { $writer.WriteElementString('Erreur',$section.Erreur) }
@@ -119,7 +127,7 @@ try {
         }
         $writer.WriteEndElement();$writer.WriteEndElement();$writer.WriteEndDocument()
     } finally { $writer.Dispose() }
-    # Semicolon + UTF-8 BOM for Excel. Prefix formula-looking strings only in CSV.
+    # Point-virgule et BOM UTF-8 pour Excel. Préfixer les formules potentielles seulement dans le CSV.
     $csvEncoding=if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { 'UTF8' }
     $rows | ForEach-Object {
         $csvRow=$_.PSObject.Copy()

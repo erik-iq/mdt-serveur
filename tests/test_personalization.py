@@ -1,4 +1,4 @@
-"""Execute the shared XML generator and hardware rules; no Windows operations."""
+"""Exécute the shared XML generator and hardware rules; no Windows opérations."""
 import json
 import os
 from pathlib import Path
@@ -24,7 +24,7 @@ def execute(tmp_path, script):
     return result.stdout.lstrip('\ufeff').strip()
 
 
-@pytest.mark.parametrize('owner', ['', 'Equipe & IT <atelier> "Paris"'])
+@pytest.mark.parametrize('owner', ['', 'Équipe & IT <atelier> "Paris"'])
 def test_unattend_settings_escaping_and_first_logon_without_credentials(tmp_path, owner):
     plan = {'hostname':'HP-TEST-01', 'locale':'fr-FR', 'settings':{
         'keyboard':'040c:0000040c', 'timezone':'Romance Standard Time', 'user_locale':'fr-CH',

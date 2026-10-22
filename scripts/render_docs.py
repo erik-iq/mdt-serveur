@@ -1,4 +1,4 @@
-"""Render the repository's two operator guides with only Python's standard library."""
+"""Génération des guides du dépôt avec la seule bibliothèque standard Python."""
 from html import escape
 import hashlib
 from pathlib import Path
@@ -55,7 +55,7 @@ def render(source):
 
 if __name__ == '__main__':
     for filename, destination in [('GUIDE-UTILISATEUR.md','guide.html'), ('MISE-A-JOUR-ATELIER-2.md','upgrade.html'), ('LOGICIELS-AUTOMATIQUES.md','software-guide.html'), ('ATELIER-3.md','atelier3.html'), ('ATELIER-4.md','atelier4.html'), ('MAINTENANCE-IMAGES-WINDOWS.md','windows-image-maintenance.html'), ('VALIDATION-DEPLOIEMENT.md','deployment-validation.html')]:
-        body=render((ROOT/'docs'/filename).read_text())
+        body=render((ROOT/'docs'/filename).read_text(encoding='utf-8'))
         body=body.replace('href="ATELIER-4.md"','href="/static/atelier4.html"')
         body=body.replace('href="MAINTENANCE-IMAGES-WINDOWS.md"','href="/static/windows-image-maintenance.html"')
         body=body.replace('href="VALIDATION-DEPLOIEMENT.md"','href="/static/deployment-validation.html"')
@@ -63,10 +63,10 @@ if __name__ == '__main__':
         body=body.replace('href="LOGICIELS-AUTOMATIQUES.md"','href="/static/software-guide.html"')
         body=body.replace('href="MISE-A-JOUR-ATELIER-2.md"','href="/static/upgrade.html"').replace('href="GUIDE-UTILISATEUR.md"','href="/static/guide.html"')
         body=re.sub(r'href="([A-Z][A-Z0-9-]+\.md(?:#[a-z0-9-]+)?)"', r'href="https://github.com/erik-iq/mdt-serveur/blob/main/docs/\1"', body)
-        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise a jour</a><img class="brand-logo" src="/static/brand-logo.png" width="40" height="40" alt="IQ"></nav><main>'+body+'</main></body></html>'
+        html='<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atelier PXE - Documentation</title><link rel="stylesheet" href="/static/guide.css"><body><nav><a href="/">Console Atelier</a> | <a href="/static/guide.html">Guide utilisateur</a> | <a href="/static/atelier4.html">Mise à jour</a><img class="brand-logo" src="/static/brand-logo.png" width="40" height="40" alt="IQ"></nav><main>'+body+'</main></body></html>'
         for asset_name in ('guide.css','brand-logo.png'):
             asset_path=ROOT/'app'/'static'/asset_name
             fingerprint=hashlib.sha256(asset_path.read_bytes()).hexdigest()[:16]
             original='/static/'+asset_name
             html=html.replace('"'+original+'"','"'+original+'?v='+fingerprint+'"')
-        (ROOT/'app'/'static'/destination).write_text(html)
+        (ROOT/'app'/'static'/destination).write_text(html, encoding='utf-8')

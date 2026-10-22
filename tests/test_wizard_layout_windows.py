@@ -22,7 +22,7 @@ Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 . 'PROJECT/scripts/Theme.ps1'
 $accent=Get-AtelierColor 'accent';$ink=Get-AtelierColor 'ink';$paper=Get-AtelierColor 'paper';$muted=Get-AtelierColor 'muted'
-$Config=@{boot_release='TEST'};$script:steps=@('Connexion','Windows','Poste & region','Logiciels & bureau','Recapitulatif','Installation')
+$Config=@{boot_release='TEST'};$script:steps=@('Connexion','Windows','Poste & région','Logiciels & bureau','Récapitulatif','Installation')
 $script:page=5;$script:running=$false;$script:resizing=$false
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile('PROJECT/scripts/Wizard.ps1',[ref]$tokens,[ref]$errors)

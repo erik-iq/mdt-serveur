@@ -1,6 +1,14 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 param([Parameter(Mandatory)][string]$InstallPath)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $root=Join-Path $config.data_dir 'hp-repository'
@@ -33,7 +41,7 @@ try {
                 $lastServicingStatus=[DateTime]::UtcNow
             }
             Import-Module HPCMSL -MinimumVersion '1.9.0' -ErrorAction Stop
-            Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='ready';message='Agent CMSL pret'} | Out-Null
+            Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='ready';message='Agent CMSL prêt'} | Out-Null
             $job=(Invoke-HpWorkerApi '/worker/claim' @{worker_id=$worker;state='ready'}).job
             if ($job) {
                 $child=Start-Job -ScriptBlock {
@@ -49,14 +57,14 @@ try {
                         try { Publish-AtelierServicingStatus -DataRoot $config.data_dir } catch { Write-HpWorkerLog ('Lecture du suivi WIM : '+$_.Exception.Message) }
                         $lastServicingStatus=[DateTime]::UtcNow
                     }
-                    if ((Get-AtelierHpFreeSpace $root) -lt 2GB) { throw 'Synchronisation CMSL arretee : moins de 2 Go libres sur le serveur.' }
-                    Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='busy';message=('Preparation des pilotes HP '+$job.platform+' / '+$job.os_version)} | Out-Null
-                    if ($clock.Elapsed.TotalHours -ge 4) { throw 'Synchronisation CMSL interrompue apres quatre heures ; aucune archive publiee.' }
+                    if ((Get-AtelierHpFreeSpace $root) -lt 2GB) { throw 'Synchronisation CMSL arrêtée : moins de 2 Go libres sur le serveur.' }
+                    Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='busy';message=('Préparation des pilotes HP '+$job.platform+' / '+$job.os_version)} | Out-Null
+                    if ($clock.Elapsed.TotalHours -ge 4) { throw 'Synchronisation CMSL interrompue après quatre heures ; aucune archive publiée.' }
                     Start-Sleep -Seconds 5
                 }
                 $result=Receive-Job $child -ErrorAction Stop
-                if ($child.State -ne 'Completed' -or -not $result.id) { throw 'CMSL n a pas produit de depot complet.' }
-                Invoke-HpWorkerApi ('/worker/jobs/'+$job.id+'/finish') @{worker_id=$worker;success=$true;state='ready';message='Pilotes HP synchronises et conserves sur le serveur'} | Out-Null
+                if ($child.State -ne 'Completed' -or -not $result.id) { throw 'CMSL n''a pas produit de dépôt complet.' }
+                Invoke-HpWorkerApi ('/worker/jobs/'+$job.id+'/finish') @{worker_id=$worker;success=$true;state='ready';message='Pilotes HP synchronisés et conservés sur le serveur'} | Out-Null
             }
         } catch {
             $message=$_.Exception.Message.Replace($secret,'[REDACTED]');Write-HpWorkerLog $message
@@ -67,7 +75,7 @@ try {
                 try {
                     $partial=Join-Path $root ('snapshots\'+[guid]::Parse([string]$job.id).ToString()+'.zip.partial')
                     if (Test-Path $partial) { Assert-AtelierHpTree (Split-Path $partial -Parent);Remove-Item -LiteralPath $partial -Force }
-                } catch { Write-HpWorkerLog 'Archive HP incomplete conservee ; aucun depot publie remplace.' }
+                } catch { Write-HpWorkerLog 'Archive HP incomplète conservée ; aucun dépôt publie remplace.' }
             }
             try {
                 if ($job) { Invoke-HpWorkerApi ('/worker/jobs/'+$job.id+'/finish') @{worker_id=$worker;success=$false;state='ready';message=$message.Substring(0,[math]::Min(500,$message.Length))} | Out-Null }

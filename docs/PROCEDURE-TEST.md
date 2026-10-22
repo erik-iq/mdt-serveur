@@ -1,4 +1,4 @@
-# Procédure de test — Atelier PXE sur Windows Server 2025
+# Procédure de test , Atelier PXE sur Windows Server 2025
 
 Serveur : **192.168.99.250**. Commencer par la console locale, puis tester le démarrage PXE et enfin une installation Windows sur un **poste de laboratoire avec disque sacrifiable**. Les tests API ont été exécutés dans le cloud ; les étapes Windows ci-dessous constituent la recette à exécuter sur votre matériel, pas une installation déjà validée sur Server 2025.
 
@@ -160,7 +160,7 @@ Get-WindowsFeature -Name DHCP,WDS,Web-Server
 
 Ne pas installer un second DHCP si un routeur, pare-feu ou autre serveur fournit déjà les baux. Si les postes sont sur un autre VLAN, configurer les relais DHCP/IP helpers vers le DHCP existant **et vers 192.168.99.250**. Ne pas définir automatiquement les options 66/67, car le fichier de boot dépend du firmware et de l’architecture.
 
-**Attendu :** le client reçoit une adresse valide sur le réseau prévu. Une adresse `169.254.x.x` sur son interface de test indique qu’un bail DHCP n’a pas été obtenu.
+**Attendu :** le client reçoit une adresse valide sur le réseau prévu. Une adresse `169.254.x.x` sur son interface de test indiqué qu’un bail DHCP n’a pas été obtenu.
 
 ## 6. Installer WDS et préparer WinPE
 
@@ -256,7 +256,7 @@ powershell.exe -NoProfile -Command "Get-Disk | Format-Table Number,FriendlyName,
 
 Remplacer `NOM-DU-SERVEUR` par le nom relevé à l’étape 7. Le `*` demande le mot de passe localement. Relever l’état des partitions et l’identité du disque pour les comparer après ce premier essai.
 
-**Attendu :** WinPE a une IP correcte, le WIM est accessible, le disque interne sacrifiable est visible. Si le numéro diffère de celui du déploiement, annuler celui-ci dans la console et le recréer avec le numéro correct. Ne pas déployer avec une cible ambiguë.
+**Attendu :** WinPE à une IP correcte, le WIM est accessible, le disque interne sacrifiable est visible. Si le numéro diffère de celui du déploiement, annuler celui-ci dans la console et le recréer avec le numéro correct. Ne pas déployer avec une cible ambiguë.
 
 Relancer le lanceur :
 

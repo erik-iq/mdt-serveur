@@ -1,4 +1,12 @@
-# Measured wall durations inside one process. No reboot/offline interval is invented.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Durées réelles dans un même processus, sans inventer les intervalles de redémarrage ou d’arrêt.
 if (-not $script:AtelierTimingClocks) { $script:AtelierTimingClocks=@{} }
 function Start-AtelierTiming {
     param([string]$DataPath,[string]$Stage,[ValidateSet('winpe','windows')][string]$Source='windows')

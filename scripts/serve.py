@@ -1,4 +1,4 @@
-"""Windows startup-task entrypoint; logs rotate outside the source tree."""
+"""Entrée de la tâche de démarrage Windows ; rotation des journaux hors des sources."""
 import json
 import logging
 from logging.handlers import RotatingFileHandler

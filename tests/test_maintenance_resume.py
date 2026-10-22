@@ -29,7 +29,7 @@ function Invoke-AtelierHpia {
  param($DataPath,$ToolsPath,$OnProgress)
  Add-Content (Join-Path $DataPath 'hp-calls') 'run'
  & $OnProgress 'Analyse des SoftPaq HP'
- [pscustomobject]@{status='HP_STATUS';message='Resultat HP simule';reboot_required=HP_RESTART}
+ [pscustomobject]@{status='HP_STATUS';message='Résultat HP simulé';reboot_required=HP_RESTART}
 }
 '''.replace('HP_STATUS',hp_status).replace('HP_RESTART','$true' if hp_restart else '$false'),encoding='utf-8-sig')
     wrapper=tmp_path/'run.ps1'
@@ -60,13 +60,13 @@ def test_requested_restart_is_reported_but_never_started(tmp_path,source):
     state=run_worker(tmp_path,package_restart=source=='package',hp_restart=source=='hp')
     assert state['status']=='needs_attention' and state['reboot_required'] is True
     assert state['passes']==state['reboots']==0
-    assert 'Redemarrage necessaire' in state['message']
+    assert 'Redémarrage nécessaire' in state['message']
 
 
 def test_hp_failure_is_visible_without_reintroducing_update_scans(tmp_path):
     state=run_worker(tmp_path,hp_status='needs_attention')
     assert state['status']=='needs_attention' and state['attempts']==1
-    assert 'Resultat HP simule' in state['message']
+    assert 'Résultat HP simulé' in state['message']
 
 
 def test_old_pending_reboot_is_preserved_without_rescanning(tmp_path):
@@ -96,7 +96,7 @@ def test_unchecked_hpia_never_runs_softpaqs_even_with_an_old_result(tmp_path,pac
     (tmp_path/'hpia-result.json').write_text('{"status":"completed","message":"old HP run"}')
     state=run_worker(tmp_path,packages=packages)
     assert state['status']=='completed'
-    assert state['hpia']['status']=='skipped' and 'non coche' in state['hpia']['message']
+    assert state['hpia']['status']=='skipped' and 'non coché' in state['hpia']['message']
     assert not (tmp_path/'hp-calls').exists()
 
 
@@ -106,4 +106,4 @@ def test_missing_or_unverified_applications_cannot_keep_a_completed_status(tmp_p
     (tmp_path/'maintenance.json').write_text(json.dumps({'status':'completed','attempts':1,'message':'old success'}))
     state=run_worker(tmp_path,packages=['vlc'])
     assert state['status']=='needs_attention'
-    assert 'vlc' in state['message'] and 'incomplete' in state['message']
+    assert 'vlc' in state['message'] and 'incomplète' in state['message']

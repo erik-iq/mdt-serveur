@@ -1,4 +1,4 @@
-"""Microsoft catalog parsing, checkpoints, payload integrity and fail-closed selection."""
+"""Microsoft catalog parsing, checkpoints, payload integrity and fail-closed sélection."""
 from datetime import date
 import hashlib
 from io import BytesIO
@@ -67,7 +67,7 @@ def test_selection_only_never_downloads_payload_or_creates_cache(tmp_path, monke
     monkeypatch.setattr(catalog, 'search', lambda *args: [row()])
     class NoDownload:
         def open(self, *args, **kwargs):
-            raise AssertionError('Selection must not request a download dialog or a payload')
+            raise AssertionError('Sélection must not request a download dialog or a payload')
     plan = catalog.select_plan('11', '26H2', 'x64', '', NoDownload())
     assert plan['groups'][0]['id'] == ID
     assert 'files' not in plan['groups'][0] and not list(tmp_path.iterdir())
@@ -81,7 +81,7 @@ def test_metadata_deadline_stops_new_requests_and_clamps_socket_timeout(monkeypa
     opener=catalog.DeadlineOpener(Opener(),3)
     assert opener.open('fixture',90)=='fixture response' and seen==[3]
     clock[0]=14
-    with pytest.raises(TimeoutError,match='Delai maximal'):
+    with pytest.raises(TimeoutError,match='Délai maximal'):
         opener.open('fixture',90)
 
 
@@ -137,9 +137,9 @@ def test_catalog_delivery_url_and_redirect_remain_scoped_to_microsoft():
                    url.replace('https://', 'http://'),
                    url.replace('https://', 'https://user:password@'),
                    url.replace('.com/', '.com:8443/')):
-        with pytest.raises(ValueError, match='non autorisee'):
+        with pytest.raises(ValueError, match='non autorisée'):
             redirect.redirect_request(request, None, 302, 'Found', {}, unsafe)
-    with pytest.raises(ValueError, match='non autorisee'):
+    with pytest.raises(ValueError, match='non autorisée'):
         catalog.safe_url(url, catalog=True)
 
 

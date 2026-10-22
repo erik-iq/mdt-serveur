@@ -146,7 +146,7 @@ def test_real_report_packaging_is_deterministic_redacts_tokens_and_validates_rec
     data=tmp_path/'data';data.mkdir();identifier=str(uuid.uuid4())
     iq=tmp_path/'IQ_';reports=iq/'Rapports'/'HPImageAssistant'/identifier
     (reports/'Installation').mkdir(parents=True)
-    (reports/'Installation'/'native.log').write_text('HP detail private-fixture-report-token')
+    (reports/'Installation'/'native.log').write_text('HP détail private-fixture-report-token')
     (reports/'Installation'/'native.xml').write_text('<?xml version="1.0" encoding="utf-16"?><Report>Fixture</Report>',encoding='utf-16')
     (reports/'Installation'/'Readme (20261021 152514).html').write_text('<html>Native installation summary</html>')
     (reports/'Rapport-Installation-HP.html').write_text('<html>Canonical private-fixture-report-token</html>')
@@ -212,11 +212,11 @@ def test_final_report_archives_hp_before_receipt_even_while_manual_reboot_is_pen
         passage=reports/f'Passage-{number:02}'/'Installation';passage.mkdir(parents=True)
         (passage/'native.log').write_text(f'HP pass {number}')
     (data/'hpia-result.json').write_text(json.dumps({'status':'completed','source':'depot_250','reboot_required':True,'report_directory':str(reports),'pass_number':2,'resumed_after_reboot':True,'history':[{'pass_number':1,'status':'reboot_pending','message':'BIOS applied; restart required','exit_code':3010,'timestamp':'2026-10-20T10:00:00Z','packages':[{'softpaq_id':'SP12345','name':'System BIOS','code':3010}]}]}))
-    (iq/'Licence').mkdir();(iq/'Licence'/'Licence-Windows.json').write_text('{"etat":"ACTIVE"}')
+    (iq/'Licence').mkdir();(iq/'Licence'/'Licence-Windows.json').write_text('{"état":"ACTIVE"}')
     (data/'Export-Inventaire.ps1').write_text(r'''param($OutputDirectory)
 New-Item -ItemType Directory -Path $OutputDirectory -Force|Out-Null
 Set-Content (Join-Path $OutputDirectory 'Inventaire-Technique.xml') '<InventaireOrdinateur ordinateur="PC-LAB-01"/>'
-Set-Content (Join-Path $OutputDirectory 'Inventaire-Technique.csv') "Ordinateur;Categorie;Propriete;Valeur`nPC-LAB-01;CPU;Name;Fixture"
+Set-Content (Join-Path $OutputDirectory 'Inventaire-Technique.csv') "Ordinateur;Catégorie;Propriété;Valeur`nPC-LAB-01;CPU;Name;Fixture"
 [pscustomobject]@{SectionsIndisponibles=0}
 ''')
     script=r'''
@@ -254,9 +254,9 @@ function Invoke-RestMethod {
     assert (data/'reporting.json').exists()
     report=json.loads((iq/'Rapports'/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
     assert report['inventory']['Revision preparation']=='IQ-4.9'
-    assert report['inventory']['Source des pilotes HP']=='Depot local .250'
-    assert any(step['name']=='HP passage 1 avant redemarrage' for step in report['steps'])
-    assert any(step['name']=='Reprise HP apres redemarrage' for step in report['steps'])
-    assert b'HP passage 1 avant redemarrage' in (iq/'Rapports'/'Rapport-Deploiement.pdf').read_bytes()
+    assert report['inventory']['Source des pilotes HP']=='Dépôt local .250'
+    assert any(step['name']=='HP passage 1 avant redémarrage' for step in report['steps'])
+    assert any(step['name']=='Reprise HP après redémarrage' for step in report['steps'])
+    assert 'HP passage 1 avant redémarrage'.encode('cp1252') in (iq/'Rapports'/'Rapport-Deploiement.pdf').read_bytes()
     with zipfile.ZipFile(tmp_path/'hp-sent.zip') as z:
         assert {'Passage-01/Installation/native.log','Passage-02/Installation/native.log'} <= set(z.namelist())

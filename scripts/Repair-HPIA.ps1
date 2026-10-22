@@ -1,22 +1,30 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$DataPath='C:\ProgramData\AtelierPXE',[string]$ToolsPath='C:\IQ_')
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
-if ([string](Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 15).Manufacturer -notmatch '(?i)^(HP|Hewlett[ -]Packard)(\b|\s)') { throw 'Executer cet outil sur le PC HP deploye, pas sur le serveur PXE.' }
+if ([string](Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 15).Manufacturer -notmatch '(?i)^(HP|Hewlett[ -]Packard)(\b|\s)') { throw 'Exécuter cet outil sur le PC HP déploye, pas sur le serveur PXE.' }
 $resultPath=Join-Path $DataPath 'result.json'
-if (-not (Test-Path $resultPath)) { throw 'Preparation Atelier absente. Utiliser le nouveau WinPE pour un nouveau deploiement.' }
+if (-not (Test-Path $resultPath)) { throw 'Préparation Atelier absente. Utiliser le nouveau WinPE pour un nouveau déploiement.' }
 $customization=Get-Content $resultPath -Encoding UTF8 -Raw | ConvertFrom-Json
-if ($customization.status -ne 'completed') { throw 'Attendre la fin de la preparation Atelier avant la reparation HP.' }
+if ($customization.status -ne 'completed') { throw 'Attendre la fin de la préparation Atelier avant la réparation HP.' }
 foreach ($taskName in @('AtelierPXE-Preparation','AtelierPXE-Maintenance')) {
-    if ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State -eq 'Running') { throw 'Une preparation Atelier est encore active. Attendre sa fin avant la reparation HP.' }
+    if ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State -eq 'Running') { throw 'Une préparation Atelier est encore activé. Attendre sa fin avant la réparation HP.' }
 }
 if (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)^(HPImageAssistant|HpFirmwareUpdRec.*|HPBIOSUPDREC.*|HPBIOSUpdate.*)$' }).Count) { throw 'HPIA ou un flash HP est encore actif. Aucun processus interrompu ; attendre sa fin.' }
 $files=@('Client-Software.ps1','Install-WinGet.ps1','software-sources.json','HP-ImageAssistant.ps1','Reporting.ps1','Timings.ps1','New-DeploymentReport.ps1','Maintenance.ps1','Updates.ps1','IQ-Paths.ps1')
-foreach ($name in $files) { if (-not (Test-Path (Join-Path $PSScriptRoot $name) -PathType Leaf)) { throw ('Archive incomplete : '+$name+' absent.') } }
+foreach ($name in $files) { if (-not (Test-Path (Join-Path $PSScriptRoot $name) -PathType Leaf)) { throw ('Archive incomplète : '+$name+' absent.') } }
 $mutex=New-Object Threading.Mutex($false,'Global\AtelierPXE-Maintenance')
 $owned=$mutex.WaitOne(0)
-if (-not $owned) { $mutex.Dispose();throw 'Finalisation Atelier encore active. Reessayer apres sa fin.' }
+if (-not $owned) { $mutex.Dispose();throw 'Finalisation Atelier encore activé. Réessayer après sa fin.' }
 try {
     $backup=Join-Path $DataPath ('repair-backups\hpia-'+[guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
@@ -35,7 +43,7 @@ try {
     . (Join-Path $DataPath 'HP-ImageAssistant.ps1')
     Initialize-AtelierReportTrust $DataPath
     $entry=@(Install-AtelierClientSoftware -DataPath $DataPath -Packages @('hpia') -OnProgress {param($Percent,$Message);Write-Host $Message}) | Select-Object -First 1
-    if (-not $entry -or $entry.status -ne 'completed' -or -not $entry.tool) { throw ('Installation HPIA non verifiee : '+[string]$entry.reason) }
+    if (-not $entry -or $entry.status -ne 'completed' -or -not $entry.tool) { throw ('Installation HPIA non vérifiée : '+[string]$entry.reason) }
     $toolsPathJson=Join-Path $DataPath 'ready-tools.json'
     $tools=@()
     if (Test-Path $toolsPathJson) {
@@ -59,10 +67,10 @@ try {
         $restart=$restart -or [bool]$old.reboot_required
     }
     $status=if ($hp.status -eq 'completed' -and $customization.software_status -eq 'completed' -and -not $restart) { 'completed' } else { 'needs_attention' }
-    $state=@{status=$status;attempts=1;passes=0;reboots=0;hpia=$hp;reboot_required=$restart;timestamp=[DateTime]::UtcNow.ToString('o');message=[string]$hp.message;windows=@{status='manual';message='Windows Update a lancer manuellement'};store=@{status='manual';message='Microsoft Store a lancer manuellement'}}
+    $state=@{status=$status;attempts=1;passes=0;reboots=0;hpia=$hp;reboot_required=$restart;timestamp=[DateTime]::UtcNow.ToString('o');message=[string]$hp.message;windows=@{status='manual';message='Windows Update à lancer manuellement'};store=@{status='manual';message='Microsoft Store à lancer manuellement'}}
     Write-AtelierVerifiedUtf8File -Path $oldMaintenancePath -Content ($state | ConvertTo-Json -Depth 8) -NoBackup | Out-Null
     & (Join-Path $DataPath 'New-DeploymentReport.ps1') -DataPath $DataPath -OutputDirectory $ToolsPath -RefreshInventory
     Write-Host $hp.message
-    if ($restart) { Write-Host 'Redemarrage manuel necessaire. Atelier ne lance aucun redemarrage.' }
+    if ($restart) { Write-Host 'Redémarrage manuel nécessaire. Atelier ne lance aucun redémarrage.' }
     Write-Host ('Rapports HP : '+(Join-Path $ToolsPath 'Rapports\HPImageAssistant'))
 } finally { $mutex.ReleaseMutex();$mutex.Dispose() }

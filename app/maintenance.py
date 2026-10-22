@@ -1,4 +1,4 @@
-"""Authenticated maintenance dashboards. Viewing never mounts or patches an image."""
+"""Suivi de maintenance authentifié. Consulter une image ne la monte et ne la modifie jamais."""
 from datetime import datetime, timezone
 import json
 import os
@@ -20,7 +20,7 @@ RUN = re.compile(r'[0-9]{8}-[0-9]{6}-[a-f0-9]{8}')
 def checked(data, path):
     if not path.resolve().is_relative_to(data.resolve()) or any(
             p.is_symlink() or getattr(p, 'is_junction', lambda: False)() for p in [path, *path.parents]):
-        raise HTTPException(409, 'Chemin de suivi non autorise')
+        raise HTTPException(409, 'Chemin de suivi non autorisé')
     return path
 
 
@@ -111,7 +111,7 @@ class Maintenance:
                 categories.append({**item, 'name':names.get(item['name'],item['name']), 'measured_at':private.get('generated_at')})
         except (OSError, ValueError): pass
         result = {'generated_at':datetime.now(timezone.utc).isoformat(),'volumes':volumes,'categories':categories,
-                  'note':'Tailles logiques des fichiers Atelier. Les autres donnees du volume et les montages Windows ne sont pas inclus dans ces categories.'}
+                  'note':'Tailles logiques des fichiers Atelier. Les autres données du volume et les montages Windows ne sont pas inclus dans ces catégories.'}
         self.cache['storage'] = now, result
         return result
 
@@ -141,7 +141,7 @@ class Maintenance:
             path = self.hp.checked(self.hp.root / 'snapshots' / (snapshot['id']+'.zip'))
             try:
                 if not path.is_file() or path.stat().st_size != snapshot['size']:
-                    raise ValueError('Archive serveur absente ou taille modifiee')
+                    raise ValueError('Archive serveur absente ou taille modifiée')
                 signature=(path.stat().st_size,path.stat().st_mtime_ns)
                 cache_key='snapshot:'+snapshot['id']
                 cached=self.cache.get(cache_key)
@@ -178,7 +178,7 @@ class Maintenance:
 
     def windows_status(self):
         try: worker = read_json(self.data, self.public / 'status.json')
-        except (OSError, ValueError): worker = {'task_state':'Unknown','generated_at':None,'message':'Suivi serveur pas encore publie'}
+        except (OSError, ValueError): worker = {'task_state':'Unknown','generated_at':None,'message':'Suivi serveur pas encore publié'}
         reports = []
         folder=checked(self.data,self.public/'runs')
         if folder.exists():
@@ -203,7 +203,7 @@ class Maintenance:
         try: latest_check=read_json(self.data,self.public/'catalog-check.json')
         except (OSError,ValueError): latest_check={'status':'not_checked','contexts':[]}
         if latest_check.get('status')=='running' and not self.check_lock.locked():
-            latest_check={**latest_check,'status':'interrupted','message':'Verification precedente interrompue ; vous pouvez la relancer.'}
+            latest_check={**latest_check,'status':'interrupted','message':'Vérification précédente interrompue ; vous pouvez la relancer.'}
         return {'worker':worker,'images':images,'reports':reports,'catalog_check':latest_check,'storage':self.storage()}
 
     def check_catalog(self):
@@ -218,7 +218,7 @@ class Maintenance:
                     if key not in contexts:
                         known=[{k:g.get(k) for k in ('kind','update_id','kb','target_build')} for g in entry['updates']]
                         remaining=deadline-time.monotonic()
-                        if remaining<=0: raise TimeoutError('Recherche arretee apres 90 secondes ; aucun correctif installe')
+                        if remaining<=0: raise TimeoutError('Recherche arrêtée après 90 secondes ; aucun correctif installe')
                         plan=select_plan(*key,timeout_seconds=remaining)
                         latest=[{k:g.get(k) for k in ('kind','id','kb','title','published','target_build')} for g in plan['groups']]
                         for g in latest:
@@ -248,17 +248,17 @@ class Maintenance:
 
         @api.post('/api/maintenance/windows/check',dependencies=[Depends(admin)],status_code=202)
         def check(background:BackgroundTasks):
-            if not self.check_lock.acquire(blocking=False): raise HTTPException(409,'Verification du catalogue deja en cours')
+            if not self.check_lock.acquire(blocking=False): raise HTTPException(409,'Vérification du catalogue déjà en cours')
             try:
                 self.write_check({'status':'running','checked_at':datetime.now(timezone.utc).isoformat(),'contexts':[]})
                 background.add_task(self.check_catalog)
             except Exception:
                 self.check_lock.release();raise
-            return {'accepted':True,'message':'Verification des KB uniquement ; aucun MSU telecharge et aucun DISM lance'}
+            return {'accepted':True,'message':'Vérification des KB uniquement ; aucun MSU téléchargé et aucun DISM lancé'}
 
         @api.get('/api/maintenance/windows/runs/{identifier}/report',dependencies=[Depends(admin)])
         def report(identifier:str):
-            if not RUN.fullmatch(identifier): raise HTTPException(404,'Preparation inconnue')
+            if not RUN.fullmatch(identifier): raise HTTPException(404,'Préparation inconnue')
             try:
                 result=public_report(read_json(self.data,self.public/'runs'/(identifier+'.json')))
                 if result['run_id']!=identifier: raise ValueError('Identifiant du rapport incorrect')

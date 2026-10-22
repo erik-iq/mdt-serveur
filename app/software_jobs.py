@@ -1,4 +1,4 @@
-"""Bounded WinGet requests, executed by a separate interactive Windows worker."""
+"""Demandes WinGet bornées, exécutées par un agent Windows interactif distinct."""
 from datetime import datetime, timezone
 import hmac
 import json
@@ -57,7 +57,7 @@ class SoftwareJobs:
                 pass
         self.key = key_file.read_text().strip()
         if len(self.key) < 24:
-            raise ValueError('Cle agent WinGet invalide : restaurer software-sync/worker-key depuis une sauvegarde privee')
+            raise ValueError('Clé agent WinGet invalide : restaurer software-sync/worker-key depuis une sauvegarde privee')
         with db(write=True) as con:
             con.executescript('''
                 CREATE TABLE IF NOT EXISTS software_jobs (
@@ -74,7 +74,7 @@ class SoftwareJobs:
 
         def worker_auth(authorization: str = Header(default='')):
             if not hmac.compare_digest(authorization.encode(), ('Bearer ' + self.key).encode()):
-                raise HTTPException(401, 'Agent logiciel non autorise')
+                raise HTTPException(401, 'Agent logiciel non autorisé')
 
         @api.get('/api/software-sync', dependencies=[Depends(admin)])
         def status():
@@ -85,14 +85,14 @@ class SoftwareJobs:
         def queue(body: Selection):
             keys = {s['key'] for s in self.sources}
             if len(set(body.packages)) != len(body.packages) or not set(body.packages) <= keys:
-                raise HTTPException(400, 'Selection de logiciels invalide')
+                raise HTTPException(400, 'Sélection de logiciels invalide')
             bundles = list(dict.fromkeys(str(b) for b in body.bundle_ids))
             with db(write=True) as con:
                 self.no_active(con)
                 self.no_deployments(con)
                 worker = self.state(con)['worker']
                 if not worker['available'] or worker['state'] != 'ready':
-                    raise HTTPException(409, 'Agent WinGet indisponible. Ouvrir la session Windows configuree et verifier WinGet.')
+                    raise HTTPException(409, 'Agent WinGet indisponible. Ouvrir la session Windows configurée et vérifier WinGet.')
                 for identifier in bundles:
                     if not con.execute('SELECT 1 FROM bundles WHERE id=?', (identifier,)).fetchone():
                         raise HTTPException(404, 'Bundle introuvable')
@@ -100,7 +100,7 @@ class SoftwareJobs:
                 con.execute('''INSERT INTO software_jobs
                     (id,packages_json,bundle_ids_json,status,message,created_at,updated_at)
                     VALUES (?,?,?,'queued',?,?,?)''',
-                    (identifier, json.dumps(body.packages), json.dumps(bundles), 'En attente de l agent WinGet', time, time))
+                    (identifier, json.dumps(body.packages), json.dumps(bundles), 'En attente de l’agent WinGet', time, time))
                 return self.job(con.execute('SELECT * FROM software_jobs WHERE id=?', (identifier,)).fetchone())
 
         @api.post('/api/software-sync/jobs/{identifier}/cancel', dependencies=[Depends(admin)])
@@ -110,19 +110,19 @@ class SoftwareJobs:
                 if not record:
                     raise HTTPException(404, 'Demande introuvable')
                 if record['status'] != 'queued':
-                    raise HTTPException(409, 'Seule une demande en attente peut etre annulee. Attendre la fin du telechargement en cours.')
+                    raise HTTPException(409, 'Seule une demande en attente peut être annulée. Attendre la fin du téléchargement en cours.')
                 con.execute("UPDATE software_jobs SET status='interrupted',message=?,updated_at=? WHERE id=?",
-                            ('Demande annulee avant son demarrage', timestamp(), identifier))
+                            ('Demande annulée avant son démarrage', timestamp(), identifier))
                 return {'accepted': True}
 
         @api.post('/api/software-sync/worker/heartbeat', dependencies=[Depends(worker_auth)])
         def heartbeat(body: Worker):
             with db(write=True) as con:
-                # A new process must acquire the OS mutex before registering its identity.
+                # Un nouveau processus doit obtenir le mutex système avant d’enregistrer son identité.
                 previous = con.execute('SELECT worker_id FROM software_worker WHERE singleton=1').fetchone()
                 if previous and previous['worker_id'] != str(body.worker_id):
                     con.execute("UPDATE software_jobs SET status='interrupted',message=?,updated_at=? WHERE status='running'",
-                                ('Agent redemarre ; relancer la mise a jour', timestamp()))
+                                ('Agent redémarre ; relancer la mise à jour', timestamp()))
                 con.execute('INSERT OR REPLACE INTO software_worker VALUES (1,?,?,?,?)',
                             (str(body.worker_id), body.state, body.message, timestamp()))
                 if body.job_id:
@@ -134,13 +134,13 @@ class SoftwareJobs:
             with db(write=True) as con:
                 record = con.execute('SELECT * FROM software_worker WHERE singleton=1').fetchone()
                 if not record or record['worker_id'] != str(body.worker_id) or body.state != 'ready':
-                    raise HTTPException(409, 'Agent non enregistre ou indisponible')
+                    raise HTTPException(409, 'Agent non enregistré ou indisponible')
                 queued = con.execute("SELECT * FROM software_jobs WHERE status='queued'").fetchone()
                 if not queued:
                     return {'job': None}
                 self.no_deployments(con)
                 con.execute("UPDATE software_jobs SET status='running',worker_id=?,message=?,updated_at=? WHERE id=?",
-                            (str(body.worker_id), 'Preparation de WinGet', timestamp(), queued['id']))
+                            (str(body.worker_id), 'Préparation de WinGet', timestamp(), queued['id']))
                 return {'job': self.job(con.execute('SELECT * FROM software_jobs WHERE id=?', (queued['id'],)).fetchone())}
 
         @api.post('/api/software-sync/jobs/{identifier}/progress', dependencies=[Depends(worker_auth)])
@@ -155,7 +155,7 @@ class SoftwareJobs:
         def finish(identifier: str, body: Finish):
             results = json.dumps(body.results, ensure_ascii=False)
             if len(results.encode()) > 64000:
-                raise HTTPException(413, 'Resultat trop volumineux')
+                raise HTTPException(413, 'Résultat trop volumineux')
             with db(write=True) as con:
                 self.owned(con, identifier, str(body.worker_id))
                 con.execute("UPDATE software_jobs SET status=?,progress=CASE WHEN ?='completed' THEN 100 ELSE progress END,message=?,results_json=?,updated_at=? WHERE id=?",
@@ -174,7 +174,7 @@ class SoftwareJobs:
 
     def state(self, con):
         record = con.execute('SELECT * FROM software_worker WHERE singleton=1').fetchone()
-        worker = dict(record) if record else {'state': 'not_ready', 'message': 'Agent WinGet non configure', 'last_seen': None}
+        worker = dict(record) if record else {'state': 'not_ready', 'message': 'Agent WinGet non configuré', 'last_seen': None}
         worker.pop('worker_id', None)
         worker.pop('singleton', None)
         worker['available'] = bool(record and (datetime.now(timezone.utc) - datetime.fromisoformat(record['last_seen'])).total_seconds() < 30)
@@ -184,12 +184,12 @@ class SoftwareJobs:
     @staticmethod
     def no_active(con):
         if con.execute("SELECT 1 FROM software_jobs WHERE status IN ('queued','running')").fetchone():
-            raise HTTPException(409, 'Une mise a jour logicielle est deja en cours ; attendre sa fin')
+            raise HTTPException(409, 'Une mise à jour logicielle est déjà en cours ; attendre sa fin')
 
     @staticmethod
     def no_deployments(con):
         if con.execute("SELECT 1 FROM deployments WHERE status IN ('queued','running')").fetchone():
-            raise HTTPException(409, 'Terminer ou annuler les autorisations WinPE actives avant la mise a jour des logiciels')
+            raise HTTPException(409, 'Terminer ou annuler les autorisations WinPE actives avant la mise à jour des logiciels')
 
     @staticmethod
     def owned(con, identifier, worker_id):
@@ -202,9 +202,9 @@ class SoftwareJobs:
         identifier = request.headers.get('X-Atelier-Software-Job')
         if identifier:
             if not hmac.compare_digest(request.headers.get('X-Atelier-Software-Key', '').encode(), self.key.encode()):
-                raise HTTPException(403, 'Cle agent requise')
+                raise HTTPException(403, 'Clé agent requise')
             job = con.execute("SELECT id FROM software_jobs WHERE id=? AND status='running'", (identifier,)).fetchone()
             if not job:
-                raise HTTPException(409, 'Synchronisation interrompue ; modification refusee')
+                raise HTTPException(409, 'Synchronisation interrompue ; modification refusée')
         else:
             self.no_active(con)

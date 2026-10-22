@@ -1,15 +1,23 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param(
     [string]$InstallPath = 'C:\AtelierPXE\console',
     [ValidateSet('characters','digits')][string]$HostnameSuffixMode='digits'
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 function Get-AtelierActiveDeploymentCount {
     param([Parameter(Mandatory)][string]$Runtime, [Parameter(Mandatory)][string]$Database)
-    # Windows PowerShell 5.1 strips embedded quotes in native -c arguments.
-    # Feed Python on stdin instead, keeping SQL out of the native command line.
+    # PowerShell 5.1 retire les guillemets imbriqués des arguments natifs -c.
+    # Transmettre Python par l’entrée standard, sans SQL dans la ligne de commande native.
     $activeCheck = @'
 import sqlite3, sys
 from pathlib import Path
@@ -18,10 +26,10 @@ with sqlite3.connect(uri, uri=True) as connection:
     print(connection.execute("SELECT COUNT(*) FROM deployments WHERE status=?", ("running",)).fetchone()[0])
 '@
     $checkOutput = @($activeCheck | & $Runtime - $Database)
-    if ($LASTEXITCODE -ne 0) { throw 'Controle des deploiements impossible : Python ou SQLite a echoue.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Contrôle des déploiements impossible : Python ou SQLite a échoué.' }
     $count = 0
     if ($checkOutput.Count -ne 1 -or -not [int]::TryParse(([string]$checkOutput[0]).Trim(),[ref]$count) -or $count -lt 0) {
-        throw 'Controle des deploiements impossible : resultat Python invalide.'
+        throw 'Contrôle des déploiements impossible : résultat Python invalide.'
     }
     return $count
 }
@@ -34,7 +42,7 @@ $share = Get-SmbShare -Name 'AtelierImages' -ErrorAction Stop
 if ([IO.Path]::GetFullPath($share.Path).TrimEnd('\') -ne $artifacts) { throw 'Le partage AtelierImages ne correspond pas au dossier des fichiers.' }
 $runtime = Join-Path $InstallPath '.venv\Scripts\python.exe'
 $active = Get-AtelierActiveDeploymentCount -Runtime $runtime -Database (Join-Path $config.data_dir 'deployment.sqlite3')
-if ($active -gt 0) { throw 'Terminez les deploiements en cours avant cette operation.' }
+if ($active -gt 0) { throw 'Terminez les déploiements en cours avant cette opération.' }
 $account = 'AtelierPXERead'
 $secretPath = Join-Path $config.data_dir 'internal-share.json'
 $user = Get-LocalUser -Name $account -ErrorAction SilentlyContinue
@@ -50,7 +58,7 @@ if (Test-Path $secretPath) {
     $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $generator.GetBytes($random); $password = [Convert]::ToBase64String($random) + 'aA1!' } finally { $generator.Dispose() }
     $encrypted = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($password),$null,[Security.Cryptography.DataProtectionScope]::LocalMachine)
-    # Create with private ACL before writing any encrypted credential.
+    # Créer des ACL privées avant d’écrire des identifiants chiffrés.
     New-Item -ItemType File -Path $secretPath -ErrorAction Stop | Out-Null
     & icacls.exe $secretPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-19:R' | Out-Null
     if ($LASTEXITCODE -ne 0) { Remove-Item $secretPath; throw 'Protection du secret impossible.' }
@@ -75,7 +83,7 @@ $config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $configPath -Encodi
 Stop-ScheduledTask -TaskName 'AtelierPXE-Console'
 $deadline = (Get-Date).AddSeconds(20)
 while ((Get-ScheduledTask -TaskName 'AtelierPXE-Console').State -eq 'Running') {
-    if ((Get-Date) -gt $deadline) { throw 'La console ne s arrete pas. Configuration sauvegardee.' }
+    if ((Get-Date) -gt $deadline) { throw 'La console ne s''arrête pas. Configuration sauvegardee.' }
     Start-Sleep -Milliseconds 250
 }
 Start-ScheduledTask -TaskName 'AtelierPXE-Console'
@@ -84,10 +92,10 @@ do {
     try { $options = Invoke-RestMethod ($config.base_url.TrimEnd('/') + '/api/session') -TimeoutSec 2 } catch { $options=$null }
     if ($options.internal_mode -and $options.automatic_windows) {
         Write-Host 'Mode interne actif : console sans jeton, PXE sans code ni saisie SMB.' -ForegroundColor Green
-        Write-Host 'Nouvelles installations : Administrateur sans mot de passe, configuration automatique et mises a jour.'
+        Write-Host 'Nouvelles installations : Administrateur sans mot de passe, configuration automatique et mises à jour.'
         Write-Host 'Reconstruisez maintenant une nouvelle image WinPE INTERNE-1.'
         return
     }
     Start-Sleep -Milliseconds 500
 } while ((Get-Date) -lt $deadline)
-throw "Le mode interne ne repond pas. Configuration precedente : $backup"
+throw "Le mode interne ne repond pas. Configuration précédente : $backup"

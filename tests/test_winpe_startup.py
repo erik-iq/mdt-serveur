@@ -21,8 +21,8 @@ def invoke(script):
 def boot_fixture(tmp_path):
     for name in ('Launch.ps1', 'WinPE-Session.ps1', 'WinPE-NetworkRecovery.ps1'):
         shutil.copyfile(ROOT / 'scripts' / name, tmp_path / name)
-    # Replace only the native input-language operation. The real launcher,
-    # configuration loading, error handling and journal writing still execute.
+    # Replace only the native input-language opération. The real launcher,
+    # configuration loading, error handling and journal writing still exécute.
     with (tmp_path / 'WinPE-Session.ps1').open('a', encoding='utf-8') as helper:
         helper.write('\nfunction Set-AtelierOperatorKeyboard { param($Layout) }\n')
     (tmp_path / 'config.json').write_text(json.dumps({
@@ -42,7 +42,7 @@ def test_wizard_failure_is_reported_without_secrets_and_next_launch_succeeds(tmp
     (tmp_path / 'Wizard.ps1').write_text("throw '" + secrets + "'", encoding='utf-8-sig')
     failed = invoke(launcher)
     assert failed.returncode == 1, failed.stdout + failed.stderr
-    assert 'Echec du lancement' in failed.stdout
+    assert 'Échec du lancement' in failed.stdout
     first_run = entries(tmp_path)
     assert [event['stage'] for event in first_run] == [
         'Starting', 'ConfigurationReady', 'KeyboardReady', 'CertificateReady', 'OpeningWizard', 'Failed']

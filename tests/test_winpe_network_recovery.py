@@ -1,4 +1,4 @@
-"""Startup recovery must target the injected I219 and preserve a working dock."""
+"""Startup recovery must target the injected I219 and préserve a working dock."""
 import hashlib
 
 import pytest

@@ -1,4 +1,4 @@
-"""Execute durable answer-file writes and repair on a synthetic offline tree."""
+"""Exécute durable answer-file writes and repair on a synthetic offline tree."""
 import hashlib
 import json
 import os

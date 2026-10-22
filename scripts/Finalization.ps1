@@ -1,17 +1,25 @@
-# Functions only. Never delete the private payload without server confirmation.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. Ne pas supprimer le dossier privé sans confirmation du serveur.
 function Assert-AtelierPrivateTree {
     param([string]$Path,[Collections.Generic.List[IO.FileStream]]$Handles)
     $item=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     $parent=$item
     while ($parent) {
-        if ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Lien refuse pour le nettoyage.' }
+        if ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Lien refusé pour le nettoyage.' }
         $parent=$parent.Parent
     }
     $pending=New-Object 'Collections.Generic.Stack[string]'
     $pending.Push($item.FullName)
     while ($pending.Count) {
         foreach ($child in @(Get-ChildItem -LiteralPath $pending.Pop() -Force)) {
-            if ($child.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Lien refuse dans le dossier de travail.' }
+            if ($child.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Lien refusé dans le dossier de travail.' }
             if ($child.PSIsContainer) { $pending.Push($child.FullName) }
             elseif ($null -ne $Handles) { $Handles.Add([IO.File]::Open($child.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Delete)) }
         }
@@ -29,7 +37,7 @@ function Send-AtelierDiagnostics {
             if ($file.Name -match '^[a-z0-9_-]{1,80}\.json$') { $files+=@('timings/'+$file.Name) }
         }
     }
-    foreach ($name in @('result.json','maintenance.json')) { if (-not (Test-Path (Join-Path $DataPath $name) -PathType Leaf)) { throw 'Resultats obligatoires absents.' } }
+    foreach ($name in @('result.json','maintenance.json')) { if (-not (Test-Path (Join-Path $DataPath $name) -PathType Leaf)) { throw 'Résultats obligatoires absents.' } }
     $stream=[IO.File]::Open($archivePath,[IO.FileMode]::Create)
     $zip=New-Object IO.Compression.ZipArchive($stream,[IO.Compression.ZipArchiveMode]::Create)
     try {
@@ -47,7 +55,7 @@ function Send-AtelierDiagnostics {
     if ((Get-Item $archivePath).Length -gt 8MB) { throw 'Archive des journaux trop volumineuse ; nettoyage differe.' }
     $hash=(Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $response=Invoke-RestMethod -Uri ($Config.server_url+'/api/windows/'+$Config.id+'/inventory/diagnostics') -Method Post -Headers @{Authorization=('Bearer '+$Config.token)} -ContentType 'application/zip' -InFile $archivePath -TimeoutSec 60
-    if (-not $response.accepted -or $response.deployment_id -ne $Config.id -or $response.sha256 -ne $hash) { throw 'Archive serveur non confirmee.' }
+    if (-not $response.accepted -or $response.deployment_id -ne $Config.id -or $response.sha256 -ne $hash) { throw 'Archive serveur non confirmée.' }
     return $hash
 }
 function Set-AtelierPermanentLinks {
@@ -60,10 +68,10 @@ function Set-AtelierPermanentLinks {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
         $target=$url.AbsoluteUri+'?deployment='+$id+'&view='+$item.view
         $text="param()`r`nStart-Process '"+$target.Replace("'","''")+"'`r`n"
-        [IO.File]::WriteAllText((Join-Path $directory ($item.name+'.ps1')),$text,(New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText((Join-Path $directory ($item.name+'.ps1')),$text,(New-Object Text.UTF8Encoding($true)))
         [IO.File]::WriteAllText((Join-Path $directory ($item.name+'.cmd')),('@echo off'+"`r`n"+'start "" "'+$target+'"'+"`r`n"),[Text.Encoding]::ASCII)
     }
-    Add-Content -LiteralPath (Join-Path $ToolsPath 'Lisez-moi.txt') -Encoding ASCII -Value 'Preparation archivee sur le serveur. Les commandes Rapports et Inventaire ouvrent desormais la fiche serveur. Les diagnostics IQ restent locaux et autonomes ; aucun jeton de deploiement n est conserve.'
+    Add-Content -LiteralPath (Join-Path $ToolsPath 'Lisez-moi.txt') -Encoding UTF8 -Value 'Préparation archivee sur le serveur. Les commandes Rapports et Inventaire ouvrent désormais la fiche serveur. Les diagnostics IQ restent locaux et autonomes ; aucun jeton de déploiement n''est conservé.'
 }
 function Complete-AtelierLocalCleanup {
     param([string]$DataPath,[string]$ToolsPath)
@@ -72,14 +80,14 @@ function Complete-AtelierLocalCleanup {
     try {
         $expected=[IO.Path]::GetFullPath((Join-Path $env:ProgramData 'AtelierPXE'))
         if ([IO.Path]::GetFullPath($DataPath).TrimEnd([char[]]'\/') -ne $expected.TrimEnd([char[]]'\/')) { throw 'Nettoyage limite au dossier ProgramData\AtelierPXE.' }
-        if ([IO.Path]::GetFullPath($ToolsPath).StartsWith($expected,[StringComparison]::OrdinalIgnoreCase)) { throw 'Les outils IQ doivent etre hors du dossier de travail.' }
+        if ([IO.Path]::GetFullPath($ToolsPath).StartsWith($expected,[StringComparison]::OrdinalIgnoreCase)) { throw 'Les outils IQ doivent être hors du dossier de travail.' }
         Assert-AtelierPrivateTree $DataPath
         $safeToLog=$true
         Assert-AtelierPrivateTree $ToolsPath
         $payload=Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         if (-not $payload.deployment.cleanup_after_reporting) { return $false }
         $config=Get-Content (Join-Path $DataPath 'reporting.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-        if ([string]$payload.deployment.id -ne [string]$config.id) { throw 'Identite de deploiement differente.' }
+        if ([string]$payload.deployment.id -ne [string]$config.id) { throw 'Identité de déploiement différente.' }
         $state=Get-Content (Join-Path $DataPath 'maintenance.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         if ($state.status -notin @('completed','needs_attention')) { return $false }
         if (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)^(winget|msiexec|HPImageAssistant|HpFirmwareUpdRec.*|HPBIOSUPDREC.*|HPBIOSUpdate.*)$' }).Count) { return $false }
@@ -121,28 +129,28 @@ function Complete-AtelierLocalCleanup {
         $previous=$null
         if ($payload.deployment.previous_payload_name) {
             $name=[string]$payload.deployment.previous_payload_name
-            if ($name -notmatch '^AtelierPXE-Previous-[a-f0-9]{32}$') { throw 'Ancien dossier non autorise.' }
+            if ($name -notmatch '^AtelierPXE-Previous-[a-f0-9]{32}$') { throw 'Ancien dossier non autorisé.' }
             $previous=Join-Path (Split-Path $DataPath -Parent) $name
             if (Test-Path $previous) { Assert-AtelierPrivateTree $previous }
         }
         Set-AtelierPermanentLinks $ToolsPath $config
-        # Keep read handles permitting deletion, blocking new readers/writers.
-        # A file still held by another process defers cleanup before tasks change.
+        # Garder des handles autorisant la suppression, mais bloquant les nouveaux lecteurs et rédacteurs.
+        # Un fichier ouvert par un autre processus reporte le nettoyage avant toute modification des tâches.
         Assert-AtelierPrivateTree -Path $DataPath -Handles $handles
         if ($previous -and (Test-Path $previous)) { Assert-AtelierPrivateTree -Path $previous -Handles $handles }
         foreach ($task in @('AtelierPXE-Preparation','AtelierPXE-Progress','AtelierPXE-Tools','AtelierPXE-Maintenance')) {
             if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction Stop }
         }
         foreach ($handle in $handles) { Remove-Item -LiteralPath $handle.Name -Force -ErrorAction Stop }
-        # Windows completes DeleteFile when the last shared handle closes.
-        # Close these handles before removing their now-empty directories.
+        # Windows termine DeleteFile lorsque le dernier handle partagé est fermé.
+        # Fermer ces handles avant de retirer les dossiers désormais vides.
         foreach ($handle in $handles) { $handle.Dispose() }
         $handles.Clear()
         if ($previous -and (Test-Path $previous)) { Remove-Item -LiteralPath $previous -Recurse -Force -ErrorAction Stop }
         Remove-Item -LiteralPath $DataPath -Recurse -Force -ErrorAction Stop
-        # Only in-memory credentials remain until this worker exits.
+        # Les identifiants restent seulement en mémoire jusqu’à la sortie de cet agent.
         try {
-            $body=@{status=$state.status;progress=100;message='Preparation archivee sur le serveur. Dossier de travail AtelierPXE supprime du PC.'}|ConvertTo-Json
+            $body=@{status=$state.status;progress=100;message='Préparation archivee sur le serveur. Dossier de travail AtelierPXE supprime du PC.'}|ConvertTo-Json
             Invoke-RestMethod -Uri ($config.server_url+'/api/windows/'+$config.id+'/progress') -Method Post -Headers @{Authorization=('Bearer '+$config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null
         } catch { }
         return $true

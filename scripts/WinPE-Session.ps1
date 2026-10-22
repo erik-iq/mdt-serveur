@@ -1,5 +1,13 @@
-# Shared WinPE startup helpers. Never record error messages, invocation text or
-# session objects: these can contain a boot code, agent token or SMB password.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions communes de démarrage WinPE. Ne jamais journaliser les messages d’erreur,
+# les appels ou les sessions, qui peuvent contenir des codes PXE, jetons ou mots de passe SMB.
 function Write-AtelierBootEvent {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -17,7 +25,7 @@ function Write-AtelierBootEvent {
     try {
         New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
         $entry | ConvertTo-Json -Compress | Add-Content -LiteralPath $Path -Encoding UTF8
-    } catch { Write-Warning 'Impossible de creer le journal de demarrage WinPE.' }
+    } catch { Write-Warning 'Impossible de créer le journal de démarrage WinPE.' }
 }
 
 function Set-AtelierOperatorKeyboard {
@@ -28,13 +36,13 @@ function Set-AtelierOperatorKeyboard {
     )
     & wpeutil.exe SetKeyboardLayout $Layout | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "WinPE ne peut pas activer le clavier $Layout (code $LASTEXITCODE)." }
-    # wpeutil sets the WinPE default. Select the layout on this UI thread too,
-    # using the same fixed French Swiss layout as the offline boot image.
+    # wpeutil règle WinPE. Appliquer aussi la disposition au thread de l’interface,
+    # avec le même clavier français suisse fixe que dans l’image de démarrage.
     Add-Type -AssemblyName System.Windows.Forms
     $cultureId = [Convert]::ToInt32($Layout.Substring(0,4),16)
     $language = [Windows.Forms.InputLanguage]::FromCulture([Globalization.CultureInfo]::GetCultureInfo($cultureId))
     if (-not $language -or $language.Culture.LCID -ne $cultureId) {
-        throw "Le clavier francais suisse $Layout est indisponible. Reconstruire WinPE et consulter le journal de demarrage."
+        throw "Le clavier français suisse $Layout est indisponible. Reconstruire WinPE et consulter le journal de démarrage."
     }
     [Windows.Forms.InputLanguage]::CurrentInputLanguage = $language
 }
@@ -97,15 +105,15 @@ function Get-AtelierWinPENetwork {
             }
         }
     } catch { }
-    $message=if ($ips.Count) { 'IPv4 : '+(@($ips) -join ' / ')+'. Les MAC sont informatives ; identification par numero de serie.' }
-        elseif ($interfaces -eq 0 -and $macs.Count -eq 0) { 'Inventaire reseau WinPE incomplet. La connexion sera tentee avec le numero de serie, sans exiger de MAC.' }
-        else { 'Aucune IPv4 utilisable dans l inventaire. La connexion au serveur sera testee directement.' }
+    $message=if ($ips.Count) { 'IPv4 : '+(@($ips) -join ' / ')+'. Les MAC sont informatives ; identification par numéro de série.' }
+        elseif ($interfaces -eq 0 -and $macs.Count -eq 0) { 'Inventaire réseau WinPE incomplet. La connexion sera tentee avec le numéro de série, sans exiger de MAC.' }
+        else { 'Aucune IPv4 utilisable dans l''inventaire. La connexion au serveur sera testée directement.' }
     return [pscustomobject]@{macs=@($macs | Select-Object -First 16);ipv4=@($ips);message=$message}
 }
 function Get-AtelierConnectionFailure {
     param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$Failure,[string]$Stage,[string]$ServerUrl)
-    # Describe the actual failed operation. Do not infer a missing driver from
-    # empty WMI inventory, or record request bodies, headers or credentials.
+    # Décrire l’opération réellement en échec. Un inventaire WMI vide ne prouve pas
+    # un pilote absent. Ne jamais journaliser les corps, en-têtes ou identifiants des requêtes.
     $exception=$Failure.Exception
     $status='';$http='';$socket=''
     for ($depth=0;$exception -and $depth -lt 10;$depth++) {
@@ -115,11 +123,11 @@ function Get-AtelierConnectionFailure {
         $exception=$exception.InnerException
     }
     $cause=if ($http) { 'Le serveur a repondu HTTP '+$http+'.' }
-        elseif ($status -in @('TrustFailure','SecureChannelFailure')) { 'La connexion TLS a echoue. Verifier le certificat et la date du poste.' }
-        elseif ($status -eq 'NameResolutionFailure') { 'Le nom du serveur ne peut pas etre resolu.' }
-        elseif ($status -eq 'Timeout') { 'Le serveur n a pas repondu dans le delai prevu.' }
-        elseif ($status -eq 'ConnectFailure') { 'La connexion au serveur n a pas pu etre etablie.' }
-        else { 'L operation n a pas abouti.' }
+        elseif ($status -in @('TrustFailure','SecureChannelFailure')) { 'La connexion TLS a échoué. Vérifier le certificat et la date du poste.' }
+        elseif ($status -eq 'NameResolutionFailure') { 'Le nom du serveur ne peut pas être resolu.' }
+        elseif ($status -eq 'Timeout') { 'Le serveur n''a pas repondu dans le délai prévu.' }
+        elseif ($status -eq 'ConnectFailure') { 'La connexion au serveur n''a pas pu être établie.' }
+        else { 'L''opération n''a pas abouti.' }
     $codes=@($status,$socket) | Where-Object { $_ }
     if ($codes) { $cause+=' Code : '+($codes -join ' / ')+'.' }
     $destination=try {
@@ -127,13 +135,13 @@ function Get-AtelierConnectionFailure {
         $origin.UserName='';$origin.Password=''
         $origin.Uri.GetLeftPart([UriPartial]::Authority)
     } catch { 'Adresse invalide' }
-    return ('Etape : '+$Stage+"`r`nServeur : "+$destination+"`r`n"+$cause)
+    return ('Étape : '+$Stage+"`r`nServeur : "+$destination+"`r`n"+$cause)
 }
 function Get-AtelierPreparedWindowsConflict {
     param([System.Management.Automation.ErrorRecord]$Failure,[string]$SerialNumber)
     if (-not $SerialNumber) { return }
-    # Only a structured response for this exact serial enables the recovery choice.
-    # Never infer permission to reinstall from a bare HTTP 409 or its wording.
+    # Seule une réponse structurée pour ce numéro exact autorise le choix de récupération.
+    # Un simple HTTP 409 ou son texte n’autorise jamais une réinstallation.
     $exception=$Failure.Exception;$http=0
     for ($depth=0;$exception -and $depth -lt 10;$depth++) {
         if ($exception.Response -and $exception.Response.StatusCode) { $http=[int]$exception.Response.StatusCode;break }
@@ -176,19 +184,19 @@ function Assert-AtelierMachineIdentity {
     param($Plan)
     if ($Plan.serial_number) {
         $serial=Get-AtelierHardwareSerial
-        if (-not $serial -or $serial -cne [string]$Plan.serial_number) { throw 'Le numero de serie BIOS ne correspond pas au poste autorise. Aucun disque efface.' }
+        if (-not $serial -or $serial -cne [string]$Plan.serial_number) { throw 'Le numéro de série BIOS ne correspond pas au poste autorisé. Aucun disque effacé.' }
     } else {
-        # Retain explicit legacy authorizations; new WinPE discovery always sends a serial.
+        # Conserver les anciennes autorisations explicites ; le nouveau WinPE transmet toujours le SN.
         $network=Get-AtelierWinPENetwork
-        if (-not $Plan.mac -or $Plan.mac -notin $network.macs) { throw 'Ancienne autorisation MAC incompatible. Utiliser une fiche par numero de serie. Aucun disque efface.' }
+        if (-not $Plan.mac -or $Plan.mac -notin $network.macs) { throw 'Ancienne autorisation MAC incompatible. Utiliser une fiche par numéro de série. Aucun disque effacé.' }
     }
 }
 function Restart-AtelierStagedWindows {
     param([bool]$Staged)
     if (-not $Staged) { return }
-    if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Redemarrage automatique autorise uniquement dans WinPE.' }
-    Write-Information -MessageData 'ATELIER|100|Redemarrage vers Windows dans 5 secondes...' -InformationAction Continue
+    if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Redémarrage automatique autorise uniquement dans WinPE.' }
+    Write-Information -MessageData 'ATELIER|100|Redémarrage vers Windows dans 5 secondes...' -InformationAction Continue
     Start-Sleep -Seconds 5
     & wpeutil.exe reboot
-    if ($LASTEXITCODE -ne 0) { throw ('Image preparee, mais redemarrage WinPE en echec (code '+$LASTEXITCODE+'). Utiliser le menu pour redemarrer.') }
+    if ($LASTEXITCODE -ne 0) { throw ('Image préparée, mais redémarrage WinPE en échec (code '+$LASTEXITCODE+'). Utiliser le menu pour redémarrer.') }
 }

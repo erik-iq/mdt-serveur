@@ -1,4 +1,4 @@
-"""Windows regression checks for ADK batch invocation, without DISM or WDS."""
+"""Windows régression checks for ADK batch invocation, without DISM or WDS."""
 
 import ctypes
 import json
@@ -25,7 +25,7 @@ def test_adk_batch_paths_environment_and_failure_codes(tmp_path, environment_exi
         pytest.skip('Build-WinPE.ps1 requires an administrator session')
 
     # Simulate the installed ADK in a separate child process. The actual Windows
-    # command interpreter executes both batches; only the image cmdlets are mocks.
+    # command interpréter executes both batches; only the image cmdlets are mocks.
     program_files = tmp_path / 'Program Files (x86)'
     adk = program_files / 'Windows Kits' / '10' / 'Assessment and Deployment Kit'
     deployment_tools = adk / 'Deployment Tools'

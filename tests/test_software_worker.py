@@ -1,4 +1,4 @@
-"""Execute the supervisor and real PowerShell background job with a fake downloader."""
+"""Exécute the supervisor and real PowerShell background job with a fake downloader."""
 import json
 import os
 from pathlib import Path
@@ -23,14 +23,14 @@ def test_worker_serializes_selection_and_reports_child_result(tmp_path,outcome):
     child=install/'scripts'/'Sync-Applications.ps1'
     child.write_text('''param($InstallPath,$Packages,$BundleIds,$WebJobId,$WorkerId)
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw | ConvertFrom-Json
-@{packages=@($Packages);bundles=@($BundleIds);id=$WebJobId;worker=$WorkerId}|ConvertTo-Json|Set-Content 'SELECTION'
+@{packages=@($Packages);bundles=@($BundleIds);id=$WebJobId;worker=$WorkerId}|ConvertTo-Json|Set-Content 'SÉLECTION'
 if ('OUTCOME' -eq 'failed') { throw 'Fixture preflight failure' }
 if ('OUTCOME' -eq 'nonterminating') { Write-Error 'Fixture nonterminating cause' -ErrorAction Continue;return }
 if ('OUTCOME' -eq 'sensitive') { Write-Error 'Fixture Bearer private-worker-key and private-worker-key' -ErrorAction Continue;return }
 $apps=@(@{package='vlc';status='updated'})
 if ('OUTCOME' -eq 'partial') { $apps+=@{package='chrome';status='failed';message='Fixture rejected'} }
 @{applications=$apps;bundles=@()} | ConvertTo-Json -Depth 6 | Set-Content (Join-Path (Join-Path $config.data_dir 'software-sync/job-results') ($WebJobId + '.json'))
-'''.replace('SELECTION',str(tmp_path/'selection.json')).replace('OUTCOME',outcome),encoding='utf-8-sig')
+'''.replace('SÉLECTION',str(tmp_path/'selection.json')).replace('OUTCOME',outcome),encoding='utf-8-sig')
     wrapper=tmp_path/'run.ps1'
     wrapper.write_text('''$ErrorActionPreference='Stop'
 $global:atelierTestFinished=$false;$global:atelierTestClaimed=$false

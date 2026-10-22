@@ -72,7 +72,7 @@ $again=Invoke-AtelierHpia -DataPath 'DATA' -ToolsPath 'IQ'
     calls=[json.loads(line) for line in (tool.parent/'calls').read_text().splitlines()] if (tool.parent/'calls').exists() else []
     if case in {'limit','unknown_boot'}:
         assert result['first']['status']=='needs_attention' and not calls
-        assert 'Limite' in result['first']['message'] if case=='limit' else 'demarrage' in result['first']['message']
+        assert 'Limite' in result['first']['message'] if case=='limit' else 'démarrage' in result['first']['message']
         return
     assert [c['pass'] for c in calls]==([1,1] if case=='driver' else [1,1,2,2])
     assert '/Action:List' in calls[0]['args'] and '/Action:Install' in calls[1]['args']
@@ -142,7 +142,7 @@ $global:TestBoot=[datetime]'2026-10-21T00:00:00Z'
     before=json.loads((data/'before.json').read_text())
     final=json.loads((data/'maintenance.json').read_text())
     assert before['status']=='reboot_pending' and before['attempts']==1
-    if not restart_ok:assert 'non accepte' in before['message']
+    if not restart_ok:assert 'non accepté' in before['message']
     assert (data/'shutdown').read_text().splitlines()==['requested']
     assert final['status']=='completed' and final['attempts']==1
     assert final['reboots']==1 and not final['reboot_required']

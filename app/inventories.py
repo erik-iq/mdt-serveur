@@ -1,4 +1,4 @@
-"""Deployment-scoped XML/CSV storage on the deployment server."""
+"""Stockage XML/CSV sur le serveur, isolé par déploiement."""
 import csv
 import hashlib
 import io
@@ -37,25 +37,24 @@ def validate_hp_reports(payload):
             if not 1<=len(entries)<=1024 or sum(e.file_size for e in entries)>128*1024*1024:raise ValueError('Limite rapports HP')
             for entry in entries:
                 name=entry.filename
-                if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entree HP invalide')
-                if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privee refusee')
+                if len(name)>240 or not re.fullmatch(r'[A-Za-z0-9_. ()/-]+\.(json|xml|html|csv|log|txt)',name,re.I) or any(p in {'','..','.'} for p in name.split('/')) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>16*1024*1024:raise ValueError('Entrée HP invalide')
+                if name.split('/')[-1].lower() in {'reporting.json','personalization.json','data-runtime.json'}:raise ValueError('Configuration privee refusée')
                 names.add(name.casefold());content=archive.read(entry).decode('utf-8-sig')
                 if name.lower()=='hpia-result.json':json.loads(content)
                 if name.lower().endswith('.xml'):
-                    if re.search(r'<!\s*(?:DOCTYPE|ENTITY)',content,re.I):raise ValueError('DTD HP refusee')
-                    # Native files can be truncated by a failed HP process.
-                    # Preserve them as attachment-only evidence; never evaluate.
-            if 'hpia-result.json' not in names:raise ValueError('Resultat HP absent')
+                    if re.search(r'<!\s*(?:DOCTYPE|ENTITY)',content,re.I):raise ValueError('DTD HP refusée')
+                    # Un processus HP en échec peut tronquer les fichiers natifs.
+                    # Les conserver comme pièces jointes de diagnostic, sans les exécuter.
+            if 'hpia-result.json' not in names:raise ValueError('Résultat HP absent')
     except (ValueError,UnicodeError,ET.ParseError,zipfile.BadZipFile,RuntimeError,NotImplementedError) as exc:
         raise HTTPException(422,'Archive des rapports HP invalide') from exc
 
 
 def hp_installation_summary(payload):
-    """Select the canonical page or a native Readme from an already validated ZIP.
+    """Sélection du bilan ou du Readme natif dans un ZIP déjà validé.
 
-    Return bytes only. This client HTML is never executed or served inline on
-    the console origin; it remains an authenticated downloadable attachment.
-    """
+Renvoyer seulement les octets. Cet HTML du poste reste une pièce jointe
+téléchargeable et authentifiée, jamais une page exécutée sur l’origine de la console."""
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         names=archive.namelist()
         canonical=next((n for n in names if n.casefold()==HP_SUMMARY.casefold()),None)
@@ -78,11 +77,11 @@ def validate_diagnostics(payload):
                 name=entry.filename
                 allowed=name in DIAGNOSTIC_NAMES or re.fullmatch(r'software-logs/(?:vlc|reader|chrome|anydesk|hpia|lenovo_system_update|winget-preparation)\.log',name) or re.fullmatch(r'timings/[a-z0-9_-]{1,80}\.json',name)
                 if not allowed or name in names or entry.flag_bits & 1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>4*1024*1024:
-                    raise ValueError('Entree archive non autorisee')
+                    raise ValueError('Entrée archive non autorisée')
                 names.add(name)
                 content=archive.read(entry).decode('utf-8-sig')
                 if name.endswith('.json'):json.loads(content)
-            if not {'result.json','maintenance.json'} <= names:raise ValueError('Resultats absents')
+            if not {'result.json','maintenance.json'} <= names:raise ValueError('Résultats absents')
     except (ValueError,UnicodeError,zipfile.BadZipFile,RuntimeError,NotImplementedError) as exc:
         raise HTTPException(422,'Archive diagnostic invalide') from exc
 
@@ -102,7 +101,7 @@ class Inventories:
     def folder(self, hostname, identifier):
         if not re.fullmatch(r'[A-Za-z][A-Za-z0-9-]{0,14}', hostname):
             raise HTTPException(409, 'Nom du poste invalide pour le dossier inventaire')
-        # Windows reserved device names cannot be directory names.
+        # Les noms de périphériques réservés par Windows ne peuvent pas nommer un dossier.
         name = hostname.upper()
         if re.fullmatch(r'CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9]', name):
             name += '-PC'
@@ -110,7 +109,7 @@ class Inventories:
 
     def checked(self, path):
         if not path.resolve().is_relative_to(self.root.resolve()):
-            raise HTTPException(409, 'Dossier inventaire non autorise')
+            raise HTTPException(409, 'Dossier inventaire non autorisé')
         if any((p.is_symlink() or getattr(p, 'is_junction', lambda: False)()) for p in [path, *path.parents] if p != self.root.parent):
             raise HTTPException(409, 'Lien symbolique refuse')
         return path
@@ -127,7 +126,7 @@ class Inventories:
         async def upload(identifier: str, kind: str, request: Request, authorization: str = Header(default='')):
             if kind not in {'xml', 'csv','diagnostics','hp_reports'}:
                 raise HTTPException(404, 'Format inventaire inconnu')
-            # Authenticate before parsing or writing any inventory data.
+            # Authentifier avant de lire ou d’écrire des données d’inventaire.
             with self.db() as con:
                 job = windows_agent(con, identifier, authorization)
                 selected = json.loads(job['selection_json'])
@@ -148,17 +147,17 @@ class Inventories:
                 text = '' if kind in {'diagnostics','hp_reports'} else payload.decode('utf-8-sig')
                 if kind == 'xml':
                     if re.search(r'<!\s*(?:DOCTYPE|ENTITY)', text, re.I):
-                        raise ValueError('DTD refusee')
+                        raise ValueError('DTD refusée')
                     root = ET.fromstring(text)
                     if root.tag != 'InventaireOrdinateur' or root.get('ordinateur', '').casefold() != hostname.casefold():
-                        raise ValueError('Nom XML different du poste')
+                        raise ValueError('Nom XML différent du poste')
                 elif kind=='csv':
                     reader = csv.DictReader(io.StringIO(text), delimiter=';')
                     if not {'Ordinateur', 'Categorie', 'Propriete', 'Valeur'} <= set(reader.fieldnames or []):
                         raise ValueError('Colonnes CSV absentes')
                     for item in reader:
                         if item.get('Ordinateur', '').casefold() != hostname.casefold():
-                            raise ValueError('Nom CSV different du poste')
+                            raise ValueError('Nom CSV différent du poste')
             except (ValueError, UnicodeError, ET.ParseError, csv.Error) as exc:
                 raise HTTPException(422, 'Inventaire invalide : ' + str(exc)[:150]) from exc
             folder = self.checked(self.folder(hostname, identifier))
@@ -196,22 +195,22 @@ class Inventories:
                 job=windows_agent(con,identifier,authorization)
                 report=con.execute('SELECT sha256 FROM report_receipts WHERE deployment_id=?',(identifier,)).fetchone()
                 if job['windows_status'] not in {'completed','needs_attention','failed'} or not report or report['sha256']!=proof['report']:
-                    raise HTTPException(409,'Rapport courant pas encore confirme')
+                    raise HTTPException(409,'Rapport courant pas encore confirmé')
                 record=con.execute('SELECT report_json FROM computer_reports WHERE deployment_id=?',(identifier,)).fetchone()
                 snapshot=json.loads(record['report_json']) if record else {}
                 selected=json.loads(job['selection_json'])
                 requires_hp=snapshot.get('inventory',{}).get('Revision preparation') in {'IQ-4.9','IQ-5.0'} and 'hpia' in selected.get('settings',{}).get('winget_packages',[])
-                if requires_hp and not proof.get('hp_reports'):raise HTTPException(409,'Rapports HP pas encore confirmes')
+                if requires_hp and not proof.get('hp_reports'):raise HTTPException(409,'Rapports HP pas encore confirmés')
                 for kind in ('xml','csv','diagnostics')+(('hp_reports',) if proof.get('hp_reports') else ()):
                     record=con.execute('SELECT * FROM inventory_files WHERE deployment_id=? AND kind=?',(identifier,kind)).fetchone()
-                    if not record or record['sha256']!=proof[kind]:raise HTTPException(409,'Transmission incomplete ou obsolete')
+                    if not record or record['sha256']!=proof[kind]:raise HTTPException(409,'Transmission incomplète ou obsolète')
                     path=self.checked(self.root/record['relative_path'])
-                    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=proof[kind]:raise HTTPException(409,'Archive serveur absente ou modifiee')
+                    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=proof[kind]:raise HTTPException(409,'Archive serveur absente ou modifiée')
                     if kind=='hp_reports':
                         summary=hp_installation_summary(path.read_bytes())
                         if summary is not None:
                             html=con.execute("SELECT * FROM inventory_files WHERE deployment_id=? AND kind='hp_summary'",(identifier,)).fetchone()
-                            if not html or html['sha256']!=hashlib.sha256(summary).hexdigest():raise HTTPException(409,'Rapport HTML HP pas encore confirme')
+                            if not html or html['sha256']!=hashlib.sha256(summary).hexdigest():raise HTTPException(409,'Rapport HTML HP pas encore confirmé')
                             html_path=self.checked(self.root/html['relative_path'])
                             if not html_path.is_file() or hashlib.sha256(html_path.read_bytes()).hexdigest()!=html['sha256']:raise HTTPException(409,'Rapport HTML HP absent ou modifie')
             return {'accepted':True,'cleanup_allowed':True,'deployment_id':identifier,'hashes':proof}
@@ -221,7 +220,7 @@ class Inventories:
             with self.db() as con:
                 job = con.execute('SELECT * FROM deployments WHERE id=?', (identifier,)).fetchone()
                 if not job:
-                    raise HTTPException(404, 'Deploiement inconnu')
+                    raise HTTPException(404, 'Déploiement inconnu')
                 selected = json.loads(job['selection_json'])
                 hostname = selected.get('hostname') or con.execute('SELECT hostname FROM machines WHERE id=?', (job['machine_id'],)).fetchone()[0]
                 return {**self.describe(con, identifier), 'hostname': hostname, 'server_directory': str(self.folder(hostname, identifier))}
@@ -231,7 +230,7 @@ class Inventories:
             with self.db() as con:
                 record = con.execute('SELECT * FROM inventory_files WHERE deployment_id=? AND kind=?', (identifier, kind)).fetchone()
                 if not record:
-                    raise HTTPException(404, 'Inventaire pas encore recu')
+                    raise HTTPException(404, 'Inventaire pas encore reçu')
                 path = self.checked(self.root / record['relative_path'])
                 if not path.is_file() or path.stat().st_size != record['size'] or hashlib.sha256(path.read_bytes()).hexdigest()!=record['sha256']:
                     raise HTTPException(409, 'Fichier inventaire absent ou modifie')

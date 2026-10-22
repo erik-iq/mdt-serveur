@@ -44,7 +44,7 @@ def run():
                 browser=p.chromium.launch(executable_path=chromium,headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1000});errors=[]
                 page.on('pageerror',lambda error:errors.append(str(error)))
-                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectee')
+                page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectée')
                 expect(page.get_by_role('button',name='+ Nouveau deploiement',exact=True)).to_be_hidden()
                 expect(page.locator('[data-page]')).to_have_count(3)
                 expect(page.locator('#page-software, #page-boot')).to_have_count(0)

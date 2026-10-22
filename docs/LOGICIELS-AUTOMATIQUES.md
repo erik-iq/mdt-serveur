@@ -1,4 +1,4 @@
-**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont ete retirees du site.
+**Documentation historique :** pour le parcours actuel, utiliser [IQ Atelier 4](ATELIER-4.md). Les pages Infrastructure PXE et Logiciels & bundles ont été retirées du site.
 
 # Actualiser les logiciels et exporter l’inventaire
 
@@ -68,7 +68,7 @@ Le message de la révision 2.2 « Échec avant la publication des résultats » 
 
 La révision 2.3 conserve les erreurs du processus, les affiche dans le bilan de la page et les écrit dans `data\software-sync\worker.log`. Les secrets de l’agent sont masqués. En cas d’échec WinGet, le message contient son code décimal/hexadécimal et les dernières lignes de sortie utiles. Les lignes écrites sur stderr sont traitées avec le code de sortie, pour éviter qu’un message informatif soit pris pour un échec sous Windows PowerShell 5.1.
 
-Les demandes du bouton utilisent l’API sur `127.0.0.1`, déjà employée par l’agent. Elles ne dépendent plus de la confiance du compte de l’agent dans le certificat HTTPS public de la console ni du chemin via IIS. HTTPS reste utilisé pour le site et pour les téléchargements des éditeurs ; aucun contrôle de certificat n’est désactivé.
+Les demandes du bouton utilisent l’API sur `127.0.0.1`, déjà employée par l’agent. Elles ne dépendent plus de la confiance du compte de l’agent dans le certificat HTTPS public de la console ni du chemin via IIS. HTTPS reste utilisé pour le site et pour les téléchargements des éditeurs ; aucun contrôlé de certificat n’est désactivé.
 
 Un échec avant la première étape conserve une progression de 0 %, au lieu d’afficher automatiquement 100 %. Mettre à jour la console avec `Update-Console.ps1`, puis relancer le bouton : le bilan précédent n’est pas réécrit rétroactivement. La mise à jour redémarre l’agent qui était actif et ne modifie pas WDS/WinPE. La capture de l’ancien message seule ne permet pas d’identifier la cause initiale ; si le nouvel essai échoue, transmettre le message précis du bilan.
 
@@ -80,7 +80,7 @@ Ce correctif ne demande que le remplacement de `scripts\Sync-Applications.ps1`. 
 
 ## Actualiser les quatre logiciels
 
-Terminer ou annuler les autorisations WinPE encore actives, puis lancer :
+Terminer ou annuler les autorisations WinPE encore activés, puis lancer :
 
 ```powershell
 & 'C:\AtelierPXE\console\scripts\Sync-Applications.ps1'
@@ -106,7 +106,7 @@ Les premières associations sont recherchées par les noms usuels et les référ
     -ApplicationBindings @{ vlc = 'identifiant-du-logiciel-dans-Atelier' }
 ```
 
-Les associations sont mémorisées dans `data\software-sync\bindings.json`. Le bilan est dans `data\software-sync\last-sync.json`. Un résultat `updated` indique un remplacement dans le catalogue, `created` une nouvelle entrée, `unchanged` une version déjà enregistrée et `failed` une opération refusée. Les autres logiciels peuvent réussir malgré l’échec d’un paquet ; le script signale alors une synchronisation partielle.
+Les associations sont mémorisées dans `data\software-sync\bindings.json`. Le bilan est dans `data\software-sync\last-sync.json`. Un résultat `updated` indiqué un remplacement dans le catalogue, `created` une nouvelle entrée, `unchanged` une version déjà enregistrée et `failed` une opération refusée. Les autres logiciels peuvent réussir malgré l’échec d’un paquet ; le script signale alors une synchronisation partielle.
 
 Créer ensuite de nouvelles autorisations. **Une mise à jour des seuls installateurs ne nécessite pas de reconstruire WinPE.** Aucune mise à jour automatique périodique n’est lancée : utiliser le bouton ou cette commande avant une série de déploiements. L’agent attend les demandes explicites du bouton.
 

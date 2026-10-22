@@ -62,7 +62,7 @@ function Get-ScheduledTask {param($TaskName,$ErrorAction)
  if($TaskName -eq 'AtelierPXE-HpiaTest'){return $global:TestTask}
  return $null
 }
-function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);return [pscustomobject]@{Execute=$Execute;Arguments=$Argument;WorkingDirectory=$WorkingDirectory}}
+function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);return [pscustomobject]@{Exécute=$Execute;Arguments=$Argument;WorkingDirectory=$WorkingDirectory}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel);return [pscustomobject]@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel}}
 function New-ScheduledTaskSettingsSet {param([switch]$StartWhenAvailable,$MultipleInstances,$ExecutionTimeLimit,[switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries);return [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit;MultipleInstances=$MultipleInstances}}
 function New-ScheduledTaskTrigger {param([switch]$AtStartup);return [pscustomobject]@{AtStartup=[bool]$AtStartup}}

@@ -1,8 +1,8 @@
-"""CMSL repository jobs and immutable, deployment-scoped offline snapshots.
+"""Tâches CMSL et archives hors ligne immuables, isolées par déploiement.
 
-Only the local Windows worker downloads HP packages. Clients submit platform/OS
-identifiers, never URLs, paths or commands. Published archives are read-only.
-"""
+Seul l’agent Windows local télécharge les paquets HP. Les postes transmettent
+des identifiants de plateforme et de système, jamais des URL, chemins ou commandes.
+Les archives publiées sont en lecture seule."""
 from datetime import datetime, timezone, timedelta
 import hashlib
 import hmac
@@ -65,7 +65,7 @@ class HpRepository:
                 with os.fdopen(os.open(key,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600),'w') as f:f.write(secrets.token_urlsafe(32))
             except FileExistsError:pass
         self.key=key.read_text().strip()
-        if len(self.key)<24:raise ValueError('Cle agent HP invalide')
+        if len(self.key)<24:raise ValueError('Clé agent HP invalide')
         with db(write=True) as con:
             con.executescript('''
                 CREATE TABLE IF NOT EXISTS hp_repository_jobs (
@@ -95,7 +95,7 @@ class HpRepository:
 
     def checked(self,path):
         if not path.resolve().is_relative_to(self.root.resolve()) or any(p.is_symlink() or getattr(p,'is_junction',lambda:False)() for p in [path,*path.parents]):
-            raise HTTPException(409,'Chemin depot HP non autorise')
+            raise HTTPException(409,'Chemin dépôt HP non autorisé')
         return path
 
     @staticmethod
@@ -114,12 +114,12 @@ class HpRepository:
         if con.execute("SELECT COUNT(*) FROM hp_repository_jobs WHERE status IN ('queued','running')").fetchone()[0]>=128:
             raise HTTPException(429,'File de synchronisation HP pleine')
         identifier=str(uuid.uuid4());time=timestamp()
-        con.execute('INSERT INTO hp_repository_jobs VALUES (?,?,?,?,?,?,NULL,?,?)',(identifier,*key,'queued','Preparation du depot HP demandee',time,time))
+        con.execute('INSERT INTO hp_repository_jobs VALUES (?,?,?,?,?,?,NULL,?,?)',(identifier,*key,'queued','Préparation du dépôt HP demandée',time,time))
         return dict(con.execute('SELECT * FROM hp_repository_jobs WHERE id=?',(identifier,)).fetchone())
 
     def state(self,con):
         worker=con.execute('SELECT state,message,last_seen FROM hp_repository_worker WHERE singleton=1').fetchone()
-        agent=dict(worker) if worker else {'state':'not_ready','message':'Agent CMSL non configure','last_seen':None}
+        agent=dict(worker) if worker else {'state':'not_ready','message':'Agent CMSL non configuré','last_seen':None}
         agent['available']=bool(worker and worker['state'] in {'ready','busy'} and worker['last_seen']>(datetime.now(timezone.utc)-timedelta(seconds=90)).isoformat())
         jobs=[dict(r) for r in con.execute('SELECT id,platform,os,os_version,status,message,created_at,updated_at FROM hp_repository_jobs ORDER BY created_at DESC LIMIT 100')]
         snapshots=[dict(r) for r in con.execute('SELECT id,platform,os,os_version,size,created_at FROM hp_repository_snapshots ORDER BY created_at DESC LIMIT 100')]
@@ -128,11 +128,11 @@ class HpRepository:
     @staticmethod
     def selected(job):
         selected=json.loads(job['selection_json'])
-        if 'hpia' not in selected.get('settings',{}).get('winget_packages',[]):raise HTTPException(403,'HP Image Assistant non selectionne')
+        if 'hpia' not in selected.get('settings',{}).get('winget_packages',[]):raise HTTPException(403,'HP Image Assistant non sélectionné')
 
     def routes(self,api,windows_agent,admin):
         def worker_auth(authorization:str=Header(default='')):
-            if not hmac.compare_digest(authorization.encode(),('Bearer '+self.key).encode()):raise HTTPException(401,'Agent HP non autorise')
+            if not hmac.compare_digest(authorization.encode(),('Bearer '+self.key).encode()):raise HTTPException(401,'Agent HP non autorisé')
 
         @api.get('/api/hp-repository',dependencies=[Depends(admin)])
         def status():
@@ -151,7 +151,7 @@ class HpRepository:
             with self.db(write=True) as con:
                 self.selected(windows_agent(con,identifier,authorization))
                 previous=con.execute('SELECT platform,os,os_version FROM hp_repository_requests WHERE deployment_id=?',(identifier,)).fetchone()
-                if previous and tuple(previous)!=key:raise HTTPException(409,'Identite HP deja fixee pour ce deploiement')
+                if previous and tuple(previous)!=key:raise HTTPException(409,'Identité HP déjà fixee pour ce déploiement')
                 con.execute('INSERT OR REPLACE INTO hp_repository_requests VALUES (?,?,?,?,?)',(identifier,*key,json.dumps(required)))
                 snapshot=con.execute('SELECT * FROM hp_repository_snapshots WHERE platform=? AND os=? AND os_version=? ORDER BY created_at DESC LIMIT 1',key).fetchone()
                 complete=bool(snapshot and set(required)<=set(json.loads(snapshot['softpaqs_json'])))
@@ -161,7 +161,7 @@ class HpRepository:
                     WHERE a.deployment_id=? AND a.request_hash=?''',(identifier,request_hash)).fetchone()
                 if complete and fresh:job=None
                 elif snapshot and fresh and attempted and attempted['status']=='completed':
-                    job={'status':'unavailable','message':'Les SoftPaq demandes restent absents de la reference CMSL ; utilisation directe de HP'}
+                    job={'status':'unavailable','message':'Les SoftPaq demandés restent absents de la référence CMSL ; utilisation directe de HP'}
                 else:
                     job=self.queue(con,key)
                     con.execute('INSERT OR REPLACE INTO hp_repository_attempts VALUES (?,?,?)',(identifier,request_hash,job['id']))
@@ -170,12 +170,12 @@ class HpRepository:
                 if packages_only and not body.package_cache:
                     available=False
                     job={'status':'unavailable','message':'Ce cache SoftPaq exige le nouveau client Atelier ; utilisation directe de HP'}
-                response={'status':'ready' if available else (job['status'] if job else 'unavailable'),'message':'Depot HP disponible' if available else (job['message'] if job else 'Depot HP indisponible'),'platform':key[0],'os':key[1],'os_version':key[2],'snapshot':None}
+                response={'status':'ready' if available else (job['status'] if job else 'unavailable'),'message':'Dépôt HP disponible' if available else (job['message'] if job else 'Dépôt HP indisponible'),'platform':key[0],'os':key[1],'os_version':key[2],'snapshot':None}
                 agent=con.execute('SELECT state,last_seen FROM hp_repository_worker WHERE singleton=1').fetchone()
                 response['worker_available']=bool(agent and agent['state'] in {'ready','busy'} and agent['last_seen']>(datetime.now(timezone.utc)-timedelta(seconds=90)).isoformat())
                 if available:
                     path=self.checked(self.root/'snapshots'/(snapshot['id']+'.zip'))
-                    if not path.is_file() or path.stat().st_size!=snapshot['size']:raise HTTPException(409,'Archive HP absente ou modifiee')
+                    if not path.is_file() or path.stat().st_size!=snapshot['size']:raise HTTPException(409,'Archive HP absente ou modifiée')
                     self.lease(con,identifier,snapshot['id'])
                     response['snapshot']={'id':snapshot['id'],'sha256':snapshot['sha256'],'size':snapshot['size'],'url':f'/api/windows/{identifier}/hp-repository/{snapshot["id"]}.zip'}
                 return response
@@ -186,10 +186,10 @@ class HpRepository:
                 self.selected(windows_agent(con,identifier,authorization))
                 requested=con.execute('SELECT * FROM hp_repository_requests WHERE deployment_id=?',(identifier,)).fetchone()
                 record=con.execute('SELECT * FROM hp_repository_snapshots WHERE id=?',(str(snapshot_id),)).fetchone()
-                if not requested or not record or tuple(requested[k] for k in ('platform','os','os_version'))!=tuple(record[k] for k in ('platform','os','os_version')):raise HTTPException(403,'Archive HP absente de ce deploiement')
-                if not set(json.loads(requested['required_json']))<=set(json.loads(record['softpaqs_json'])):raise HTTPException(409,'SoftPaq demandes absents de cette archive')
+                if not requested or not record or tuple(requested[k] for k in ('platform','os','os_version'))!=tuple(record[k] for k in ('platform','os','os_version')):raise HTTPException(403,'Archive HP absente de ce déploiement')
+                if not set(json.loads(requested['required_json']))<=set(json.loads(record['softpaqs_json'])):raise HTTPException(409,'SoftPaq demandés absents de cette archive')
                 path=self.checked(self.root/'snapshots'/(str(snapshot_id)+'.zip'))
-                if not path.is_file() or path.stat().st_size!=record['size']:raise HTTPException(409,'Archive HP modifiee')
+                if not path.is_file() or path.stat().st_size!=record['size']:raise HTTPException(409,'Archive HP modifiée')
                 self.lease(con,identifier,str(snapshot_id))
             return FileResponse(path,media_type='application/zip',filename='HP-'+record['platform']+'-'+record['os_version']+'.zip')
 
@@ -208,7 +208,7 @@ class HpRepository:
                 worker=con.execute('SELECT * FROM hp_repository_worker WHERE singleton=1').fetchone()
                 if not worker or worker['worker_id']!=str(body.worker_id) or body.state!='ready':raise HTTPException(409,'Agent HP indisponible')
                 if con.execute("SELECT 1 FROM hp_repository_jobs WHERE status='running'").fetchone():return {'job':None}
-                # Refresh known platforms daily, outside the client installation.
+                # Actualiser quotidiennement les plateformes connues, indépendamment du poste.
                 cutoff=(datetime.now(timezone.utc)-timedelta(hours=24)).isoformat()
                 for key in con.execute('SELECT DISTINCT platform,os,os_version FROM hp_repository_requests').fetchall():
                     last=con.execute('SELECT created_at FROM hp_repository_jobs WHERE platform=? AND os=? AND os_version=? ORDER BY created_at DESC LIMIT 1',tuple(key)).fetchone()
@@ -231,14 +231,14 @@ class HpRepository:
                     con.execute('INSERT INTO hp_repository_snapshots VALUES (?,?,?,?,?,?,?,?)',(str(identifier),job['platform'],job['os'],job['os_version'],snapshot['sha256'],snapshot['size'],json.dumps(snapshot['softpaqs']),timestamp()))
                     if snapshot['mode']=='packages_only':
                         con.execute('INSERT INTO hp_package_cache_snapshots VALUES (?)',(str(identifier),))
-                con.execute('UPDATE hp_repository_jobs SET status=?,message=?,updated_at=? WHERE id=?',('completed' if snapshot else 'failed',body.message or ('Depot HP publie' if snapshot else 'Synchronisation HP en echec'),timestamp(),str(identifier)))
+                con.execute('UPDATE hp_repository_jobs SET status=?,message=?,updated_at=? WHERE id=?',('completed' if snapshot else 'failed',body.message or ('Dépôt HP publie' if snapshot else 'Synchronisation HP en échec'),timestamp(),str(identifier)))
             self.prune()
             return {'accepted':True}
 
     @staticmethod
     def lease(con,deployment_id,snapshot_id):
-        # Longer than the bounded 15-minute client transfer. This protects a
-        # descriptor already delivered to a PC while a new version is published.
+        # Cette durée dépasse les quinze minutes bornant le transfert du poste. Elle protège
+        # un descripteur déjà transmis pendant la publication d’une nouvelle version.
         expires=(datetime.now(timezone.utc)+timedelta(hours=2)).isoformat()
         con.execute('INSERT OR REPLACE INTO hp_repository_leases VALUES (?,?,?)',(deployment_id,snapshot_id,expires))
 
@@ -264,15 +264,15 @@ class HpRepository:
 
     def validate_snapshot(self,identifier,platform,os_name=None,os_version=None):
         path=self.checked(self.root/'snapshots'/(identifier+'.zip'))
-        if not path.is_file() or not 0<path.stat().st_size<=MAX_REPOSITORY:raise HTTPException(422,'Taille du depot HP invalide')
+        if not path.is_file() or not 0<path.stat().st_size<=MAX_REPOSITORY:raise HTTPException(422,'Taille du dépôt HP invalide')
         softpaqs=set();names=set();reference=False;platforms=False;marker=None
         try:
             with zipfile.ZipFile(path) as archive:
                 entries=archive.infolist()
-                if not 1<=len(entries)<=5000 or sum(e.file_size for e in entries)>MAX_REPOSITORY:raise ValueError('Limite du depot')
+                if not 1<=len(entries)<=5000 or sum(e.file_size for e in entries)>MAX_REPOSITORY:raise ValueError('Limite du dépôt')
                 for entry in entries:
                     name=entry.filename
-                    if not public_path(name) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000:raise ValueError('Chemin du depot invalide')
+                    if not public_path(name) or name.casefold() in names or entry.flag_bits&1 or (entry.external_attr>>16)&0o170000==0o120000:raise ValueError('Chemin du dépôt invalide')
                     names.add(name.casefold())
                     if name.lower().endswith('.exe'):softpaqs.add(Path(name).stem.upper())
                     if name=='.repository/cache/atelier-softpaq-cache.json':
@@ -287,8 +287,8 @@ class HpRepository:
                     or marker.get('schema')!=1 or marker.get('mode')!='packages_only' or marker.get('platform')!=platform
                     or marker.get('os')!=os_name or marker.get('os_version')!=os_version or set(ids)!=softpaqs
                     or any(p.lower()+'.cva' not in names for p in ids)):
-                    raise ValueError('Identite ou contenu du cache SoftPaq incoherent')
-            elif not platforms or not reference:raise ValueError('References HP hors ligne absentes')
+                    raise ValueError('Identité ou contenu du cache SoftPaq incohérent')
+            elif not platforms or not reference:raise ValueError('Références HP hors ligne absentes')
         except (ValueError,zipfile.BadZipFile) as exc:raise HTTPException(422,str(exc)) from exc
         digest=hashlib.sha256()
         with path.open('rb') as f:

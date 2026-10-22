@@ -1,5 +1,13 @@
-# Run inside the separate WinPE boot image, after wpeinit.
+﻿# Exécuter dans l’image de démarrage WinPE distincte, après wpeinit.
 param([switch]$TextMode)
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 $bootLog = Join-Path $PSScriptRoot 'Logs\startup.log'
 . (Join-Path $PSScriptRoot 'WinPE-Session.ps1')
@@ -15,7 +23,7 @@ try {
         Set-AtelierOperatorKeyboard -Layout $layout
         Write-AtelierBootEvent -Path $bootLog -Stage KeyboardReady
     } catch {
-        # Keep diagnostics accessible if the fixed layout cannot be loaded.
+        # Conserver l’accès aux diagnostics si la disposition fixe ne peut pas être chargée.
         Write-AtelierBootEvent -Path $bootLog -Stage KeyboardFailed -Failure $_
         Write-Warning $_.Exception.Message
     }
@@ -33,9 +41,9 @@ try {
         Write-AtelierBootEvent -Path $bootLog -Stage Closed
         return
     }
-    Write-Host 'Atelier PXE - deploiement Windows autorise depuis la console' -ForegroundColor Cyan
-    $id = Read-Host 'Identifiant du deploiement'
-    $secret = Read-Host 'Jeton du deploiement' -AsSecureString
+    Write-Host 'Atelier PXE - déploiement Windows autorise depuis la console' -ForegroundColor Cyan
+    $id = Read-Host 'Identifiant du déploiement'
+    $secret = Read-Host 'Jeton du déploiement' -AsSecureString
     $credential = New-Object PSCredential('deployment', $secret)
     $image = Read-Host 'Chemin du WIM accessible (ex. \\SERVEUR\DeploymentShare$\Operating Systems\Windows11\install.wim)'
     Write-Host 'Si le partage exige une authentification, connectez-le auparavant avec net use, sans enregistrer de mot de passe dans WinPE.'
@@ -47,10 +55,10 @@ try {
     Write-AtelierBootEvent -Path $bootLog -Stage Closed
 } catch {
     Write-AtelierBootEvent -Path $bootLog -Stage Failed -Failure $_
-    Write-Host 'Echec du lancement de l assistant.' -ForegroundColor Red
+    Write-Host 'Échec du lancement de l''assistant.' -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host ('Emplacement : ' + [IO.Path]::GetFileName($_.InvocationInfo.ScriptName) + ':' + $_.InvocationInfo.ScriptLineNumber)
-    Write-Host ('Journal de demarrage : ' + $bootLog)
+    Write-Host ('Journal de démarrage : ' + $bootLog)
     Write-Host 'Le menu atelier permet de relancer dans un nouveau processus.'
     exit 1
 }

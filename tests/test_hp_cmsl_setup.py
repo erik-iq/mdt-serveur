@@ -78,7 +78,7 @@ $env:PSModulePath='MODULES'+[IO.Path]::PathSeparator+$env:PSModulePath
 $env:FixtureCalls='CALLS';$env:FixtureModuleRoot='MODULES';$env:FixtureHpSource='HP';$env:FixtureModernSource='MODERN';$env:FixtureCase='CASE'
 function Install-PackageProvider { [CmdletBinding()]param($Name,$MinimumVersion,$Scope,[switch]$Force,[switch]$Confirm);if($Name -ne 'NuGet'){throw 'Wrong provider'} }
 function Get-ScheduledTask { [CmdletBinding()]param($TaskName);if('CASE' -eq 'running_worker'){[pscustomobject]@{State='Running'}} }
-function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);[pscustomobject]@{Execute=$Execute;Argument=$Argument}}
+function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);[pscustomobject]@{Exécute=$Execute;Argument=$Argument}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel);if($UserId -ne 'SYSTEM'){throw 'Wrong worker account'};[pscustomobject]@{UserId=$UserId}}
 function New-ScheduledTaskSettingsSet {param($ExecutionTimeLimit,$RestartCount,$RestartInterval,$MultipleInstances,[switch]$StartWhenAvailable);[pscustomobject]@{}}
 function New-ScheduledTaskTrigger {param([switch]$AtStartup);if(-not $AtStartup){throw 'Missing startup trigger'};[pscustomobject]@{}}
@@ -93,11 +93,11 @@ Import-Module 'INSTALLER' -Force
     events=[json.loads(line) for line in calls.read_text().splitlines()]
     installs=[e for e in events if e['kind']=='install']
     success=case not in {'bootstrap_failure','child_failure','missing_command'}
-    assert ('CMSL charge et commandes verifiees.' in run.stdout)==success,run.stdout
+    assert ('CMSL charge et commandes vérifiées.' in run.stdout)==success,run.stdout
     if success:assert not (data/'hp-repository'/'setup.log').exists()
     else:
         log=(data/'hp-repository'/'setup.log').read_text(encoding='utf-8-sig')
-        assert ('mise a niveau de PowerShellGet' if case=='bootstrap_failure' else 'installation de HPCMSL' if case=='child_failure' else 'verification des commandes') in log
+        assert ('mise à niveau de PowerShellGet' if case=='bootstrap_failure' else 'installation de HPCMSL' if case=='child_failure' else 'vérification des commandes') in log
         assert 'Fixture' in log if case!='missing_command' else 'Commande CMSL absente' in log
         assert 'CMSL indisponible' in run.stdout
     if case in {'installed','missing_command'}:assert not installs

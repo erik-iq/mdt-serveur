@@ -1,7 +1,15 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
 param([string]$DataPath = 'C:\ProgramData\AtelierPXE', [string]$ToolsPath = 'C:\IQ_')
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference = 'Stop'
 . (Join-Path $DataPath 'Unattend.ps1')
 . (Join-Path $DataPath 'Updates.ps1')
@@ -41,7 +49,7 @@ function Finish-Maintenance {
     if (Test-Path $configuration) {
         try { $expired=[DateTime]::Parse((Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json).expires) -lt [DateTime]::UtcNow } catch { }
     }
-    # Keep only the bounded reporting retry alive while the server is offline.
+    # Si le serveur est indisponible, conserver seulement la reprise bornée de transmission.
     if (-not (Test-Path $configuration) -or ($sent -and -not $cleanupRequested) -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Progress' -Confirm:$false -ErrorAction SilentlyContinue
 }
@@ -59,18 +67,18 @@ try {
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
     if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
-    if ($customization.status -ne 'completed') { throw 'Les logiciels doivent etre termines avant la finalisation du poste.' }
+    if ($customization.status -ne 'completed') { throw 'Les logiciels doivent être terminés avant la finalisation du poste.' }
     $hpContinuation=$payload.deployment.allow_bios_restart -and $state.status -in @('reboot_pending','retry_pending')
     if (-not $hpContinuation) { $state.attempts++ }
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }
     $state | Add-Member NoteProperty reboot_required ([bool]$customization.restart_needed -or [bool]$state.reboot_required -or $state.status -eq 'reboot_pending') -Force
     $warnings=New-Object 'System.Collections.Generic.List[string]'
-    # These legacy settings are deliberately ignored, even in an old payload.
-    $state.windows=[pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update a lancer manuellement ; aucune recherche Atelier.'}
+    # Ces anciens paramètres sont ignorés, y compris dans un ancien dossier de travail.
+    $state.windows=[pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update à lancer manuellement ; aucune recherche Atelier.'}
     $state.store=[pscustomobject]@{status='manual';completion_verified=$false;message='Microsoft Store a actualiser manuellement ; aucune recherche Atelier.'}
-    $softwareMessage=if (-not $software.selected.Count) { 'Aucun logiciel selectionne : aucune installation demandee.' } elseif ($software.status -eq 'completed') { 'Logiciels verifies : '+$software.verified+'.' } else { 'Logiciels non installes ou non verifies : '+($software.missing -join ', ')+'.' }
+    $softwareMessage=if (-not $software.selected.Count) { 'Aucun logiciel sélectionne : aucune installation demandée.' } elseif ($software.status -eq 'completed') { 'Logiciels vérifiés : '+$software.verified+'.' } else { 'Logiciels non installés ou non vérifiés : '+($software.missing -join ', ')+'.' }
     Save-Maintenance 'running' 80 ($softwareMessage+' Windows Update et Microsoft Store restent manuels.')
-    $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coche : installation et SoftPaq non demandes.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
+    $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coché : installation et SoftPaq non demandés.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
     if ('hpia' -in @($payload.settings.winget_packages)) {
         $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
             param($Message)
@@ -81,7 +89,7 @@ try {
     $script:updateDetail=$null
     $state | Add-Member NoteProperty hpia $hp -Force
     if ($hp.resumed_after_reboot -and $state.hp_boot_id -ne $hp.boot_id) {
-        # The software and earlier HP restart requests were consumed by this real boot.
+        # Ce démarrage réel a consommé les demandes de redémarrage des logiciels et de HP.
         $state.reboot_required=$false;$state.reboots++
         $state | Add-Member NoteProperty hp_boot_id $hp.boot_id -Force
         $customization | Add-Member NoteProperty restart_needed $false -Force
@@ -94,7 +102,7 @@ try {
             try { Request-AtelierHpBiosRestart -DataPath $DataPath }
             catch { Save-Maintenance 'reboot_pending' 90 $_.Exception.Message }
         }
-        # Never finish, unregister the startup task or remove payloads during a BIOS cycle.
+        # Ne jamais terminer, retirer la tâche de démarrage ou nettoyer pendant un cycle BIOS.
         return
     }
     if ($hp.status -notin @('completed','skipped')) { $warnings.Add(('HP Image Assistant : '+$hp.message)) }
@@ -103,14 +111,14 @@ try {
     if (Test-Path $licenseScript) {
         try { & $licenseScript } catch { Add-Content -LiteralPath $logPath -Value 'Diagnostic de licence a relancer dans C:\IQ_.' -Encoding UTF8 }
     }
-    $message = 'Preparation terminee. '+$softwareMessage+' Windows Update et Microsoft Store a lancer manuellement.'
+    $message = 'Préparation terminée. '+$softwareMessage+' Windows Update et Microsoft Store à lancer manuellement.'
     if ($software.status -ne 'completed' -or $customization.software_status -eq 'needs_attention') { $warnings.Add(($softwareMessage+' Consulter C:\ProgramData\AtelierPXE\software-logs et le rapport.')) }
-    if ($state.reboot_required) { $warnings.Add('Redemarrage necessaire : le lancer depuis le menu Windows quand vous etes pret. Aucun redemarrage automatique demande par Atelier.') }
+    if ($state.reboot_required) { $warnings.Add('Redémarrage nécessaire : le lancer depuis le menu Windows quand vous êtes prêt. Aucun redémarrage automatique demande par Atelier.') }
     $finalStatus=if ($warnings.Count) { 'needs_attention' } else { 'completed' }
-    if ($warnings.Count) { $message='Preparation incomplete ou a verifier. ' + ($warnings -join ' ') }
+    if ($warnings.Count) { $message='Préparation incomplète ou à vérifier. ' + ($warnings -join ' ') }
     Save-Maintenance $finalStatus 100 $message
     Finish-Maintenance
 } catch {
-    Save-Maintenance 'needs_attention' 100 ('Preparation a verifier : ' + $_.Exception.Message)
+    Save-Maintenance 'needs_attention' 100 ('Préparation à vérifier : ' + $_.Exception.Message)
     Finish-Maintenance
 } finally { $mutex.ReleaseMutex(); $mutex.Dispose() }

@@ -54,11 +54,11 @@ if args[args.index('--id')+1]=='HP.ImageAssistant':
  p=pathlib.Path(args[args.index('--location')+1])/'HPImageAssistant.exe'
  p.write_bytes(b'Signed HP fixture, never executed')
 else:
- names={'VideoLAN.VLC':('VLC media player','VideoLAN','vlc.exe'),'Adobe.Acrobat.Reader.64-bit':('Adobe Acrobat (64-bit)','Adobe','Acrobat.exe'),'Google.Chrome':('Google Chrome','Google LLC','chrome.exe'),'AnyDesk.AnyDesk':('AnyDesk','AnyDesk Software GmbH','AnyDesk.exe'),'Lenovo.SystemUpdate':('Lenovo System Update','Lenovo','tvsu.exe')}
+ names={'VideoLAN.VLC':('VLC média player','VideoLAN','vlc.exe'),'Adobe.Acrobat.Reader.64-bit':('Adobe Acrobat (64-bit)','Adobe','Acrobat.exe'),'Google.Chrome':('Google Chrome','Google LLC','chrome.exe'),'AnyDesk.AnyDesk':('AnyDesk','AnyDesk Software GmbH','AnyDesk.exe'),'Lenovo.SystemUpdate':('Lenovo System Update','Lenovo','tvsu.exe')}
  name,publisher,file=names[args[args.index('--id')+1]]
  folder=pathlib.Path(__file__).parent/name
  folder.mkdir(exist_ok=True)
- (folder/file).write_bytes(b'Installed executable fixture')
+ (folder/file).write_bytes('Installed exécutable fixture'.encode("utf-8"))
  registry=pathlib.Path(__file__+'.registry.json')
  entries=json.loads(registry.read_text()) if registry.exists() else []
  entries.append(dict(DisplayName=name,Publisher=publisher,DisplayVersion='1.2.3',InstallLocation=str(folder),DisplayIcon=str(folder/file)))

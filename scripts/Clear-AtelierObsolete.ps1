@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -9,6 +9,14 @@ param(
     [ValidateRange(1,100)][int]$KeepBackups=3,
     [ValidateRange(0,8760)][int]$MinimumAgeHours=1
 )
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+
 $ErrorActionPreference='Stop'
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $separator=[IO.Path]::DirectorySeparatorChar
@@ -17,8 +25,8 @@ $protected=@($InstallPath,$config.data_dir,$PSScriptRoot,(Split-Path $PSScriptRo
 $protected=@($protected | Where-Object { $_ } | ForEach-Object { Full-Path $_ })
 $cutoff=[DateTime]::UtcNow.AddHours(-$MinimumAgeHours)
 $candidates=New-Object 'Collections.Generic.List[object]'
-# The retired HP extraction cache is independent of the signed HPIA/CMSL
-# repository used by Windows. Only recognize the exact old WinPE cache.
+# L’ancien cache d’extraction HP est indépendant du dépôt HPIA/CMSL signé
+# utilisé dans Windows. Reconnaître seulement le chemin exact de cet ancien cache WinPE.
 $intelBuild=$false
 $buildScript=Join-Path $InstallPath 'scripts\Build-WinPE.ps1'
 if ((Test-Path (Join-Path $InstallPath 'scripts\WinPE-IntelDrivers.ps1') -PathType Leaf) -and (Test-Path $buildScript -PathType Leaf)) {
@@ -41,7 +49,7 @@ foreach ($root in $SearchRoots | Where-Object { $_ } | Select-Object -Unique) {
                     $recognized=$old.softpaq -ceq 'sp173204'
                 }
                 if ($recognized) {
-                    # Leave a cache in use by an older construction alone.
+                    # Ne pas toucher un cache utilisé par une ancienne construction.
                     $lockPath=Join-Path $retired 'build.lock'
                     if (Test-Path $lockPath -PathType Leaf) {
                         $lock=[IO.File]::Open($lockPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
@@ -54,7 +62,7 @@ foreach ($root in $SearchRoots | Where-Object { $_ } | Select-Object -Unique) {
     }
     foreach ($item in @(Get-ChildItem -LiteralPath $root)) {
         if ($item.Name -match '^(?:Maj-Atelier[234]-[a-f0-9]{32}|Atelier-[234]-[a-f0-9]{32}|Atelier-Logiciels-[a-f0-9]{32})$' -and $item.PSIsContainer) {
-            # A source archive staging folder must actually contain our project.
+            # Un dossier temporaire d’archive source doit réellement contenir notre projet.
             foreach ($source in @($item.FullName,(Join-Path $item.FullName 'source'))) {
                 if (-not (Test-Path -LiteralPath $source -PathType Container)) { continue }
                 $projects=@(Get-ChildItem -LiteralPath $source -Directory | Where-Object { $_.Name -match '^mdt-serveur-[a-f0-9]{40}$' })
@@ -81,7 +89,7 @@ foreach ($item in $candidates | Sort-Object FullName -Unique) {
         $_.StartsWith($full + $separator,[StringComparison]::OrdinalIgnoreCase)
     }).Count -gt 0
     if ($blocked -or $item.LastWriteTimeUtc -gt $cutoff) { continue }
-    # Refuse a linked directory or any linked descendant, including junctions.
+    # Refuser les dossiers liés et leurs descendants liés, y compris les jonctions.
     $current=$item
     while ($current) {
         if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { $blocked=$true;break }
@@ -100,13 +108,13 @@ if ($intelBuild) {
         $item=Get-Item -LiteralPath $obsolete -Force
         $linked=$false;$parent=$item.Directory
         while ($parent) { if ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) { $linked=$true;break };$parent=$parent.Parent }
-        # Keep locally edited files. Accept the three published versions,
-        # normalizing Windows line endings before comparing their fingerprints.
+        # Garder les fichiers modifiés localement. Accepter les trois versions publiées,
+        # en normalisant les fins de ligne Windows avant de comparer les empreintes.
         $known=@('e580877959aea2535f524189e5300ce2bdf85a7737632462a5c646defe535e4f','a92cdb8a2cdc1953d173edce3349f28270db751dbcc72a009d164f94558ea29a','4f9e4798c2f9c770961bfbc3ff509bf4aec5614c6421c61801569ae2c4cf9fac')
         if (-not $linked -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             $algorithm=[Security.Cryptography.SHA256]::Create()
             try { $hash=([BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes(([IO.File]::ReadAllText($obsolete) -replace "`r`n","`n"))))).Replace('-','').ToLowerInvariant() } finally { $algorithm.Dispose() }
-            if ($hash -in $known -and $PSCmdlet.ShouldProcess($obsolete,'Supprimer l ancien extracteur WinPE HP remplace par Intel')) {
+            if ($hash -in $known -and $PSCmdlet.ShouldProcess($obsolete,'Supprimer l''ancien extracteur WinPE HP remplace par Intel')) {
                 Remove-Item -LiteralPath $obsolete -Force
                 $results.Add(@{path=$obsolete;status='removed';timestamp=[DateTime]::UtcNow.ToString('o')})
             }
@@ -118,4 +126,4 @@ if (-not $WhatIfPreference) {
     New-Item -ItemType Directory -Path $log -Force | Out-Null
     ConvertTo-Json -InputObject @($results.ToArray()) -Depth 4 | Set-Content (Join-Path $log ('nettoyage-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')) -Encoding UTF8
 }
-Write-Host ('Nettoyage termine : ' + $results.Count + ' element(s). Dernieres sauvegardes conservees : ' + $KeepBackups)
+Write-Host ('Nettoyage termine : ' + $results.Count + ' élément(s). Dernières sauvegardes conservées : ' + $KeepBackups)

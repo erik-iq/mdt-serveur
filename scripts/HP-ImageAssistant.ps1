@@ -1,40 +1,48 @@
-# Functions only. HPIA runs inside the SYSTEM preparation task, never in a desktop GUI.
+﻿
+# Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = $OutputEncoding } catch { }
+foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
+    $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
+}
+# Fonctions seules. HPIA tourne dans la tâche SYSTEM de préparation, sans interface de bureau.
 function Get-AtelierHpiaOutcome {
     param([int]$ExitCode)
     switch ($ExitCode) {
-        0 { return @{status='completed';reboot_required=$false;message='Traitement HP termine ; consulter le rapport HPIA pour les paquets appliques.'} }
-        256 { return @{status='completed';reboot_required=$false;message='Analyse HP terminee sans recommandation compatible.'} }
-        257 { return @{status='needs_attention';reboot_required=$false;message='Aucune recommandation HP selectionnee ; verifier le rapport HPIA.'} }
-        3010 { return @{status='completed';reboot_required=$true;message='Traitement HP termine ; redemarrage manuel necessaire.'} }
-        3011 { return @{status='needs_attention';reboot_required=$false;message='Un SoftPaq HP exige une installation manuelle et a ete ignore par HPIA.'} }
-        3020 { return @{status='needs_attention';reboot_required=$false;message='Au moins un paquet HP a echoue ; consulter les rapports HPIA.'} }
-        4096 { return @{status='needs_attention';reboot_required=$false;message='Ce modele ou cette version de Windows ne sont pas pris en charge par HPIA.'} }
-        4097 { return @{status='needs_attention';reboot_required=$false;message='Parametres HPIA invalides ; consulter le journal HP.'} }
-        4098 { return @{status='needs_attention';reboot_required=$false;message='HPIA ne peut pas acceder a Internet ; verifier le reseau et le proxy du compte SYSTEM.'} }
-        4102 { return @{status='needs_attention';reboot_required=$false;message='Connexion HP refusee : TLS 1.2 ou superieur est necessaire.'} }
-        4103 { return @{status='needs_attention';reboot_required=$false;message='Requete vers les serveurs HP incomplete ; verifier le reseau et le proxy.'} }
-        4104 { return @{status='needs_attention';reboot_required=$false;message='Version Windows sans reference HP dediee : HPIA utilise une reference generique. Verifier les resultats et le besoin de redemarrage.'} }
-        default { return @{status='needs_attention';reboot_required=$false;message=('Traitement HP non confirme (code '+$ExitCode+'). Consulter les rapports HPIA.')} }
+        0 { return @{status='completed';reboot_required=$false;message='Traitement HP terminé ; consulter le rapport HPIA pour les paquets appliqués.'} }
+        256 { return @{status='completed';reboot_required=$false;message='Analyse HP terminée sans recommandation compatible.'} }
+        257 { return @{status='needs_attention';reboot_required=$false;message='Aucune recommandation HP sélectionnée ; vérifier le rapport HPIA.'} }
+        3010 { return @{status='completed';reboot_required=$true;message='Traitement HP terminé ; redémarrage manuel nécessaire.'} }
+        3011 { return @{status='needs_attention';reboot_required=$false;message='Un SoftPaq HP exige une installation manuelle et a été ignoré par HPIA.'} }
+        3020 { return @{status='needs_attention';reboot_required=$false;message='Au moins un paquet HP a échoué ; consulter les rapports HPIA.'} }
+        4096 { return @{status='needs_attention';reboot_required=$false;message='Ce modèle ou cette version de Windows ne sont pas pris en charge par HPIA.'} }
+        4097 { return @{status='needs_attention';reboot_required=$false;message='Paramètres HPIA invalides ; consulter le journal HP.'} }
+        4098 { return @{status='needs_attention';reboot_required=$false;message='HPIA ne peut pas accéder à Internet ; vérifier le réseau et le proxy du compte SYSTEM.'} }
+        4102 { return @{status='needs_attention';reboot_required=$false;message='Connexion HP refusée : TLS 1.2 ou supérieur est nécessaire.'} }
+        4103 { return @{status='needs_attention';reboot_required=$false;message='Requête vers les serveurs HP incomplète ; vérifier le réseau et le proxy.'} }
+        4104 { return @{status='needs_attention';reboot_required=$false;message='Version Windows sans référence HP dédiée : HPIA utilise une référence générique. Vérifier les résultats et le besoin de redémarrage.'} }
+        default { return @{status='needs_attention';reboot_required=$false;message=('Traitement HP non confirmé (code '+$ExitCode+'). Consulter les rapports HPIA.')} }
     }
 }
 
 function Read-AtelierHpiaPackages {
     param([string]$Directory)
     $found=$false
-    # Recent HPIA writes installation/remediation outcomes in JSON; XML may
-    # contain only the recommendations from the analysis before installation.
+    # Les versions récentes de HPIA écrivent les résultats d’installation en JSON ; le XML peut
+    # contenir seulement les recommandations de l’analyse préalable.
     foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.json' -File -Recurse | Select-Object -First 50)) {
         if ($file.Length -gt 16MB) { continue }
         try {
             $report=Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
             foreach ($item in @($report.HPIA.Recommendations)) {
                 if (-not $item) { continue }
-                # The analysis report also contains Recommendations, but an empty
-                # Remediation is not an installation attempt or a package failure.
+                # Le rapport d’analyse contient aussi Recommendations, mais une Remédiation vide
+                # n’est ni une tentative d’installation ni un échec de paquet.
                 if (-not $item.Remediation -or -not @($item.Remediation.PSObject.Properties).Count) { continue }
                 $code=if ([string]$item.Remediation.ReturnCode -match '^-?\d+$') { [int]$item.Remediation.ReturnCode } else { $null }
                 $description=[string]$item.Remediation.ReturnDescription
-                if (-not $description) { $description='Etat HP : '+[string]$item.Remediation.Status }
+                if (-not $description) { $description='État HP : '+[string]$item.Remediation.Status }
                 $name=[string]$item.Name;$id=[string]$item.SoftPaqID
                 [pscustomobject]@{category=[string]$item.Category;code=$code;name=$name.Substring(0,[math]::Min(150,$name.Length));softpaq_id=$id.Substring(0,[math]::Min(40,$id.Length));description=$description.Substring(0,[math]::Min(1000,$description.Length))}
                 $found=$true
@@ -95,8 +103,8 @@ function Get-AtelierHpiaRecommendedSoftpaqs {
     $ids=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach ($file in @(Get-ChildItem -LiteralPath $Directory -File -Recurse | Where-Object { $_.Extension -in @('.json','.xml') } | Select-Object -First 50)) {
         if ($file.Length -gt 16MB) { continue }
-        # Only recommendation IDs, never installed/obsolete packages elsewhere
-        # in the inventory. Hints cannot become commands or download URLs.
+        # Retenir seulement les identifiants recommandés, sans les anciens paquets de l’inventaire.
+        # Une recommandation ne peut pas devenir une commande ou une URL de téléchargement.
         try {
             if ($file.Extension -eq '.json') {
                 $report=Get-Content $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json
@@ -118,15 +126,15 @@ function Get-AtelierHpiaRecommendedSoftpaqs {
     return @($ids | Select-Object -First 200)
 }
 function Get-AtelierHpBootIdentity {
-    # A running installer may be retried only after a real Windows boot change.
+    # Retenter une installation active uniquement après un vrai redémarrage de Windows.
     $boot=(Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 15).LastBootUpTime
-    if (-not $boot) { throw 'Date du demarrage Windows indisponible : reprise HP automatique refusee.' }
+    if (-not $boot) { throw 'Date du démarrage Windows indisponible : reprise HP automatique refusée.' }
     return ([datetime]$boot).ToUniversalTime().ToString('o')
 }
 function Save-AtelierHpCheckpoint {
     param([string]$Path,[hashtable]$State)
     if (-not (Get-Command Write-AtelierVerifiedUtf8File -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'Unattend.ps1') }
-    # Flush to disk, verify bytes, then replace atomically before launching HP.
+    # Vider les tampons, vérifier les octets et remplacer atomiquement avant de lancer HP.
     Write-AtelierVerifiedUtf8File -Path $Path -Content ($State | ConvertTo-Json -Depth 14) -NoBackup | Out-Null
 }
 function Request-AtelierHpBiosRestart {
@@ -138,11 +146,11 @@ function Request-AtelierHpBiosRestart {
     $boot=Get-AtelierHpBootIdentity
     if ($boot -ne ([datetime]$saved.boot_id).ToUniversalTime().ToString('o') -or ($saved.reboot_requested_boot -and ([datetime]$saved.reboot_requested_boot).ToUniversalTime().ToString('o') -eq $boot)) { return }
     $state=@{};foreach ($property in $saved.PSObject.Properties) { $state[$property.Name]=$property.Value }
-    # Persist before requesting a reboot; repeated task triggers cannot restart a countdown.
+    # Enregistrer avant de redémarrer ; des déclenchements répétés ne relancent pas le compte à rebours.
     $state.reboot_requested_boot=$boot;$state.reboot_requested_at=[DateTime]::UtcNow.ToString('o')
     Save-AtelierHpCheckpoint $path $state
-    & shutdown.exe /r /t 60 /d p:2:17 /c 'Atelier PXE : mise a jour BIOS. Reprise automatique de la preparation apres le redemarrage.' | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Redemarrage BIOS non accepte par Windows. Redemarrez le poste pour reprendre automatiquement la preparation.' }
+    & shutdown.exe /r /t 60 /d p:2:17 /c 'Atelier PXE : mise à jour BIOS. Reprise automatique de la préparation après le redémarrage.' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Redémarrage BIOS non accepté par Windows. Redémarrez le poste pour reprendre automatiquement la préparation.' }
 }
 function Invoke-AtelierHpiaProcess {
     param([string]$Executable,[string]$Arguments,[string]$Directory,[string]$ResultPath,[hashtable]$State,[scriptblock]$OnProgress,[int]$TimeoutSeconds)
@@ -155,7 +163,7 @@ function Invoke-AtelierHpiaProcess {
         Save-AtelierHpCheckpoint $ResultPath $State
         $clock=[Diagnostics.Stopwatch]::StartNew()
         while (-not $process.WaitForExit(5000)) {
-            if ($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw 'HPIA encore actif apres le delai : aucun processus interrompu. Verifier les rapports et les processus avant une reprise manuelle.' }
+            if ($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw 'HPIA encore actif après le délai : aucun processus interrompu. Vérifier les rapports et les processus avant une reprise manuelle.' }
             $activity=''
             $log=Get-ChildItem -LiteralPath $Directory -Filter '*.log' -File -Recurse | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
             if ($log -and $log.Length -le 16MB -and -not ($log.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -198,7 +206,7 @@ function Read-AtelierHpiaAutoReport {
             $manual=$fields['autoinstallable'] -match '^(?i)(false|no|0|faux|non)$'
             if (-not $manual -and $null -eq $codeText) { continue }
             $code=if ($codeText) { [int]$codeText } else { $null }
-            $description=if ($manual) { 'SoftPaq non automatisable : intervention manuelle necessaire.' } else { 'Resultat du CSV HP AutoReport.' }
+            $description=if ($manual) { 'SoftPaq non automatisable : intervention manuelle nécessaire.' } else { 'Résultat du CSV HP AutoReport.' }
             $name=if($fields['name']){$fields['name']}else{$fields['nom']}
             $category=if($fields['category']){$fields['category']}elseif($fields['categorie']){$fields['categorie']}else{$fields['catgorie']}
             [pscustomobject]@{category=([string]$category);softpaq_id=$id.ToUpperInvariant();name=([string]$name);code=$code;manual=$manual;description=$description}
@@ -215,7 +223,7 @@ function Export-AtelierHpiaInstallationReport {
         if ($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Dossier lie refuse pour le rapport HP.' }
         $cursor=$cursor.Parent
     }
-    # Keep the native installation summary, not the pre-install analysis HTML.
+    # Garder le bilan natif d’installation, distinct du HTML de l’analyse préalable.
     $source=Get-ChildItem -LiteralPath $root -Filter 'Readme*.html' -File -Recurse |
         Where-Object { $_.Name -match '^Readme(?: \([0-9]{8} [0-9]{6}\))?\.html$' } |
         Sort-Object LastWriteTimeUtc,FullName -Descending | Select-Object -First 1
@@ -227,12 +235,12 @@ function Export-AtelierHpiaInstallationReport {
     }
     if ($source.Length -gt 16MB) { throw 'Rapport HTML HP trop volumineux.' }
     $canonical=Join-Path $root 'Rapport-Installation-HP.html'
-    if ((Test-Path -LiteralPath $canonical) -and ((Get-Item -LiteralPath $canonical -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Copie du rapport HP liee refusee.' }
+    if ((Test-Path -LiteralPath $canonical) -and ((Get-Item -LiteralPath $canonical -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Copie du rapport HP liée refusée.' }
     Copy-Item -LiteralPath $source.FullName -Destination $canonical -Force
     if ($PublishLatest) {
         $latest=Join-Path (Join-Path $ToolsPath 'Rapports') 'Rapport-Installation-HP.html'
         New-Item -ItemType Directory -Path (Split-Path $latest -Parent) -Force | Out-Null
-        if ((Test-Path -LiteralPath $latest) -and ((Get-Item -LiteralPath $latest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Destination du rapport HP liee refusee.' }
+        if ((Test-Path -LiteralPath $latest) -and ((Get-Item -LiteralPath $latest -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Destination du rapport HP liée refusée.' }
         Copy-Item -LiteralPath $canonical -Destination $latest -Force
     }
     return $canonical
@@ -242,7 +250,7 @@ function Invoke-AtelierHpia {
     param([string]$DataPath,[string]$ToolsPath='C:\IQ_',[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,10800)][int]$TimeoutSeconds=2700,[string]$ReportRoot)
     $resultPath=Join-Path $DataPath 'hpia-result.json'
     $process=$null;$timing=''
-    $result=@{status='needs_attention';message='Traitement HP non execute.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null;script_revision='IQ-5.4.3'}
+    $result=@{status='needs_attention';message='Traitement HP non exécuté.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o');category='All';process_id=$null;script_revision='IQ-5.4.3'}
     try {
         $payload=$null;$allowResume=$false;$boot='';$resume=$false;$previous=$null
         $payloadPath=Join-Path $DataPath 'personalization.json'
@@ -260,7 +268,7 @@ function Invoke-AtelierHpia {
             $resume=$allowResume -and $resumable -and $previous.boot_id -and $boot -ne ([datetime]$previous.boot_id).ToUniversalTime().ToString('o')
             if ($resume) {
                 foreach ($property in $previous.PSObject.Properties) { $result[$property.Name]=$property.Value }
-                if ([int]$previous.resume_count -ge 3) { throw 'Limite de trois reprises HP apres redemarrage atteinte. Rapports conserves ; aucune nouvelle installation lancee.' }
+                if ([int]$previous.resume_count -ge 3) { throw 'Limite de trois reprises HP après redémarrage atteinte. Rapports conservés ; aucune nouvelle installation lancée.' }
                 $history=@($previous.history | Where-Object { $null -ne $_ })
                 $history+=@([pscustomobject]@{pass_number=[int]$previous.pass_number;status=[string]$previous.status;message=[string]$previous.message;timestamp=[string]$previous.timestamp;exit_code=$previous.exit_code;packages=@($previous.packages);boot_id=[string]$previous.boot_id})
                 $result.history=$history;$result.resume_count=[int]$previous.resume_count+1
@@ -269,10 +277,10 @@ function Invoke-AtelierHpia {
             } elseif ($previous.status -ne 'running') { return $previous }
         }
         if ($previous -and -not $resume) {
-            # Same boot: never start a second installer or invent a lost exit code.
+            # Dans le même démarrage, ne pas lancer un second installateur ni inventer un code perdu.
             foreach ($property in $previous.PSObject.Properties) { $result[$property.Name]=$property.Value }
             $result.status=if ($allowResume) { 'retry_pending' } else { 'needs_attention' }
-            $result.message='Execution HP precedente interrompue ou encore active. Aucun second traitement pendant ce demarrage. Reprise apres un redemarrage Windows.'
+            $result.message='Exécution HP précédente interrompue ou encore activé. Aucun second traitement pendant ce démarrage. Reprise après un redémarrage Windows.'
         } else {
             if ($allowResume) {
                 $result.boot_id=$boot;$result.timestamp=[DateTime]::UtcNow.ToString('o')
@@ -286,15 +294,15 @@ function Invoke-AtelierHpia {
                 $tools=@()
                 if (Test-Path $readyPath) { $tools=Get-Content $readyPath -Encoding UTF8 -Raw | ConvertFrom-Json }
                 $tool=@($tools | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ieq 'HPImageAssistant.exe' } | Select-Object -First 1)
-                if (-not $tool.Count) { throw 'HP Image Assistant non installe ou non verifie par WinGet. Consulter C:\ProgramData\AtelierPXE\software-logs\hpia.log et result.json.' }
-                if (@(Get-Process -Name 'HPImageAssistant' -ErrorAction SilentlyContinue).Count) { throw 'HP Image Assistant est deja actif ; aucun second traitement HP lance.' }
+                if (-not $tool.Count) { throw 'HP Image Assistant non installé ou non vérifié par WinGet. Consulter C:\ProgramData\AtelierPXE\software-logs\hpia.log et result.json.' }
+                if (@(Get-Process -Name 'HPImageAssistant' -ErrorAction SilentlyContinue).Count) { throw 'HP Image Assistant est déjà actif ; aucun second traitement HP lance.' }
                 $tool=$tool[0]
                 $root=[IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'AtelierPXE\Tools')).TrimEnd([char[]]'\/')+[IO.Path]::DirectorySeparatorChar
                 $exe=[IO.Path]::GetFullPath([string]$tool.path)
                 if (-not $exe.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path $exe -PathType Leaf)) { throw 'HP Image Assistant hors du dossier approuve.' }
                 if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $tool.sha256) { throw 'Empreinte de HP Image Assistant invalide.' }
                 $signature=Get-AuthenticodeSignature -LiteralPath $exe
-                if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature HP Image Assistant invalide ou editeur HP non reconnu.' }
+                if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?i)(HP Inc\.|Hewlett-Packard)') { throw 'Signature HP Image Assistant invalide ou éditeur HP non reconnu.' }
                 $reports=if ($ReportRoot) { $ReportRoot } else { Join-Path (Join-Path $ToolsPath 'Rapports') 'HPImageAssistant' }
                 $downloads=Join-Path $DataPath 'HP-SoftPaqs'
                 $payloadPath=Join-Path $DataPath 'personalization.json'
@@ -312,7 +320,7 @@ function Invoke-AtelierHpia {
                 if (Get-Command Start-AtelierTiming -ErrorAction SilentlyContinue) { $timing=Start-AtelierTiming $DataPath 'hp_updates' }
                 if ($useRepository) {
                     $analysis=Join-Path $reports 'Analyse';New-Item -ItemType Directory -Path $analysis -Force | Out-Null
-                    $result.phase='analyse des pilotes';$result.message='Recherche des SoftPaq HP necessaires avant utilisation du depot .250.'
+                    $result.phase='analyse des pilotes';$result.message='Recherche des SoftPaq HP nécessaires avant utilisation du dépôt .250.'
                     Save-AtelierHpCheckpoint $resultPath $result
                     & $OnProgress $result.message | Out-Null
                     $discovery='/Operation:Analyze /Category:All /Selection:All /Action:List /Silent /Debug /ReportFolder:"'+$analysis+'"'
@@ -326,18 +334,18 @@ function Invoke-AtelierHpia {
                 }
                 if ($useRepository -and $result.analysis_exit_code -eq 256) {
                     $result.exit_code=256;$result.status='completed';$result.phase='termine';$result.packages=@()
-                    $result.message='Analyse HP terminee : aucune mise a jour recommandee. Aucune copie du depot ni installation inutile.'
+                    $result.message='Analyse HP terminée : aucune mise à jour recommandée. Aucune copie du dépôt ni installation inutile.'
                 } else {
-                    # HP documents this switch to expose the actual installation
-                    # return code instead of letting generic-reference code 4104
-                    # hide e.g. 3010 (reboot) or 3020 (installation failure).
-                    # AutoReport is a separate reporting operation: the supplied
-                    # 5.3.6 logs ended as Analyze Action List even with Install.
-                    # Use the installation operation alone, with its own reports.
+                    # Selon HP, cette option expose le vrai code de retour d’installation,
+                    # au lieu de laisser le code de référence générique 4104 masquer
+                    # un code 3010 de redémarrage ou 3020 d’échec d’installation.
+                    # AutoReport est une opération de rapport distincte. Les journaux fournis de
+                    # la version 5.3.6 terminaient en Analyze Action List, même avec Install.
+                    # Utiliser seulement l’opération d’installation, avec ses propres rapports.
                     $arguments='/Operation:Analyze /Category:All /Selection:All /InstallType:AutoInstallable /Silent /IgnoreGenericOsError /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'" /Action:Install'
                     if ($repository -and $repository.status -eq 'offline') { $arguments+=' /OfflineMode:"'+$repository.path+'"' }
-                    # HPIA manages its supported packages. Never force unsupported firmware.
-                    $sourceText=if ($result.source -eq 'depot_250') { 'depot local .250' } else { 'serveurs HP par Internet' }
+                    # HPIA gère les paquets compatibles. Ne jamais forcer un firmware non pris en charge.
+                    $sourceText=if ($result.source -eq 'depot_250') { 'dépôt local .250' } else { 'serveurs HP par Internet' }
                     $result.status='running';$result.phase='analyse et installation';$result.message='Analyse et installation des SoftPaq HP en cours (pilotes, logiciels, BIOS et firmwares compatibles). Source : '+$sourceText+'.'
                     Save-AtelierHpCheckpoint $resultPath $result
                     & $OnProgress $result.message | Out-Null
@@ -346,16 +354,16 @@ function Invoke-AtelierHpia {
                     Copy-AtelierHpiaAutoReport -Directory $reports -Started $installStarted
                     $explicit=@(Get-AtelierHpiaInstallableSoftpaqs $reports)
                     if ($result.exit_code -in @(0,4104) -and $explicit.Count -and (Test-AtelierHpiaAnalysisOnly $reports) -and -not @(Read-AtelierHpiaPackages $reports).Count -and -not @(Read-AtelierHpiaAutoReport $reports | Where-Object { $null -ne $_.code }).Count) {
-                        # HP's documented SPList operation selects only IDs from
-                        # this PC's own fresh recommendations. Never use Force or
-                        # install a catalogue of optional/unrelated devices.
+                        # L’opération SPList documentée par HP retient uniquement les identifiants
+                        # de l’analyse récente de ce PC. Ne jamais utiliser Force ni installer
+                        # un catalogue de périphériques facultatifs ou sans rapport avec le poste.
                         $result.initial_install_exit_code=$result.exit_code
                         $result.exit_code=$null
                         $retry=Join-Path $reports 'Selection-Explicite';New-Item -ItemType Directory -Path $retry -Force | Out-Null
                         $list=Join-Path $retry 'SoftPaqs.txt'
                         [IO.File]::WriteAllLines($list,[string[]]@($explicit | ForEach-Object { $_.Substring(2) }),[Text.Encoding]::ASCII)
-                        $result.explicit_softpaqs=$explicit;$result.phase='installation des SoftPaq selectionnes'
-                        $result.message='HPIA n a confirme aucune installation : reprise unique avec la liste des '+$explicit.Count+' SoftPaq recommandes et automatisables.'
+                        $result.explicit_softpaqs=$explicit;$result.phase='installation des SoftPaq sélectionnés'
+                        $result.message='HPIA n''a confirmé aucune installation : reprise unique avec la liste des '+$explicit.Count+' SoftPaq recommandés et automatisables.'
                         Save-AtelierHpCheckpoint $resultPath $result
                         & $OnProgress $result.message | Out-Null
                         $retryArguments=$arguments.Replace(('/ReportFolder:"'+$reports+'"'),('/ReportFolder:"'+$retry+'"'))+' /SPList:"'+$list+'"'
@@ -371,30 +379,30 @@ function Invoke-AtelierHpia {
                     }
                     if (@($result.packages | Where-Object { $_.code -in @(3010,1641) }).Count) { $result.reboot_required=$true }
                     if (@($result.packages | Where-Object { $null -ne $_.code -and $_.code -notin @(0,3010,1641) }).Count) {
-                        $result.status='needs_attention';$result.message='Un ou plusieurs SoftPaq HP ont un resultat a verifier ; consulter les rapports HPIA.'
+                        $result.status='needs_attention';$result.message='Un ou plusieurs SoftPaq HP ont un résultat à vérifier ; consulter les rapports HPIA.'
                     } elseif ($result.status -eq 'completed' -and @($result.packages | Where-Object { $null -eq $_.code -or $_.manual }).Count) {
-                        $result.status='needs_attention';$result.message='Resultats d installation HP incomplets ou intervention manuelle requise ; aucun succes suppose pour un resultat absent.'
+                        $result.status='needs_attention';$result.message='Résultats d''installation HP incomplets ou intervention manuelle requise ; aucun succès suppose pour un résultat absent.'
                     } elseif ($result.status -eq 'completed' -and -not $result.packages.Count -and @(Get-AtelierHpiaRecommendedSoftpaqs $reports).Count) {
-                        $result.status='needs_attention';$result.message='Recommandations HP presentes, mais aucun resultat d installation confirme. Consulter le journal HPIA.'
+                        $result.status='needs_attention';$result.message='Recommandations HP présentes, mais aucun résultat d''installation confirme. Consulter le journal HPIA.'
                     }
                     $confirmed=@($result.packages | Where-Object { $null -ne $_.code } | ForEach-Object { $_.softpaq_id })
                     $missing=@(Get-AtelierHpiaRecommendedSoftpaqs $reports | Where-Object { $_ -notin $confirmed })
                     if ($result.exit_code -eq 4104 -and $result.packages.Count -and -not $missing.Count -and -not @($result.packages | Where-Object { $null -eq $_.code -or $_.manual -or $_.code -notin @(0,3010,1641) }).Count) {
-                        $result.status='completed';$result.message='Installation HP confirmee par les resultats SoftPaq.'
+                        $result.status='completed';$result.message='Installation HP confirmée par les résultats SoftPaq.'
                     }
                     if ($result.status -eq 'completed' -and $missing.Count) {
                         $result.status='needs_attention';$result.unconfirmed_softpaqs=$missing
-                        $result.message='Installation non confirmee pour '+$missing.Count+' SoftPaq recommandes : '+($missing -join ', ')+'. Consulter les rapports HP.'
+                        $result.message='Installation non confirmée pour '+$missing.Count+' SoftPaq recommandés : '+($missing -join ', ')+'. Consulter les rapports HP.'
                     }
                     $result.generic_os_reference=$result.analysis_exit_code -eq 4104 -or $result.initial_install_exit_code -eq 4104 -or $result.exit_code -eq 4104
                     if ($result.generic_os_reference) {
-                        $result.message+=' Reference HP generique : avertissement de version ignore pour poursuivre l installation ; les resultats des SoftPaq restent controles.'
+                        $result.message+=' Référence HP générique : avertissement de version ignorée pour poursuivre l''installation ; les résultats des SoftPaq restent contrôlés.'
                     }
                     $biosRestart=@($result.packages | Where-Object { $_.code -in @(3010,1641) -and ($_.category -match '^(?i)BIOS$' -or $_.name -match '(?i)\bBIOS\b') }).Count -gt 0
                     if ($allowResume -and $biosRestart) {
-                        $result.status='reboot_pending';$result.phase='redemarrage BIOS';$result.reboot_required=$true
-                        $result.message='Mise a jour BIOS : redemarrage necessaire. La preparation reprendra automatiquement apres le demarrage Windows.'
-                        if ([int]$result.resume_count -ge 3) { $result.status='needs_attention';$result.message='Limite de trois reprises HP atteinte. Redemarrage encore demande par le BIOS ; verifier les rapports avant toute intervention.' }
+                        $result.status='reboot_pending';$result.phase='redémarrage BIOS';$result.reboot_required=$true
+                        $result.message='Mise à jour BIOS : redémarrage nécessaire. La préparation reprendra automatiquement après le démarrage Windows.'
+                        if ([int]$result.resume_count -ge 3) { $result.status='needs_attention';$result.message='Limite de trois reprises HP atteinte. Redémarrage encore demandé par le BIOS ; vérifier les rapports avant toute intervention.' }
                     }
                 }
             }
@@ -412,12 +420,12 @@ function Invoke-AtelierHpia {
         }
     }
     $result.timestamp=[DateTime]::UtcNow.ToString('o')
-    # A timeout leaves HP running: never publish its partially written page.
+    # Un dépassement laisse HP actif : ne pas publier une page encore partiellement écrite.
     if ($result.report_directory -and $null -ne $result.exit_code) {
         try {
             $html=Export-AtelierHpiaInstallationReport -Directory $result.report_directory -ToolsPath $ToolsPath -PublishLatest:(-not $ReportRoot)
             if ($html) { $result.installation_report=$html }
-        } catch { $result.report_warning='Rapport HTML HP non prepare : '+$_.Exception.Message }
+        } catch { $result.report_warning='Rapport HTML HP non préparé : '+$_.Exception.Message }
     }
     Save-AtelierHpCheckpoint $resultPath $result
     return [pscustomobject]$result
