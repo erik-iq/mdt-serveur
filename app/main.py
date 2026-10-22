@@ -400,7 +400,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.8.2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.8.3"}
 
     @api.get('/api/session')
     def session_options():

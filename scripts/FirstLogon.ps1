@@ -40,7 +40,7 @@ function Start-Maintenance {
     # Cette copie IQ survit au nettoyage et affiche le bilan après reconnexion.
     $uiRoot=Join-Path $ToolsPath 'Rapports\Preparation'
     New-Item -ItemType Directory -Path $uiRoot -Force | Out-Null
-    foreach ($name in @('Progress.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item (Join-Path $DataPath $name) (Join-Path $uiRoot $name) -Force }
+    foreach ($name in @('Progress.ps1','Unattend.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item (Join-Path $DataPath $name) (Join-Path $uiRoot $name) -Force }
     $sid=[string](Get-ScheduledTask -TaskName 'AtelierPXE-Preparation' -ErrorAction SilentlyContinue).Principal.UserId
     if ($sid -notmatch '^S-1-5-') { $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
     $uiAction=New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+(Join-Path $uiRoot 'Progress.ps1')+'"')

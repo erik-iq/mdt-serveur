@@ -15,6 +15,7 @@ $mutex = New-Object Threading.Mutex($false,'Local\AtelierPXE-Progress')
 if (-not $mutex.WaitOne(0)) { $mutex.Dispose(); return }
 [Windows.Forms.Application]::EnableVisualStyles()
 . (Join-Path $PSScriptRoot 'Theme.ps1')
+. (Join-Path $PSScriptRoot 'Unattend.ps1')
 $form = New-Object Windows.Forms.Form
 $form.Text = 'IQ Atelier | Préparation en arrière-plan'
 $form.ClientSize = New-Object Drawing.Size(720,390)
@@ -61,7 +62,7 @@ $timer.Interval=1000
 $timer.Add_Tick({
     try {
         $path=Join-Path $DataPath 'progress.json'
-        if (Test-Path $path) { $state=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json }
+        if (Test-Path $path) { $state=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json }
         else {
             $report=Get-Content (Join-Path $ToolsPath 'Rapports\Rapport-Deploiement.json') -Encoding UTF8 -Raw | ConvertFrom-Json
             $state=[pscustomobject]@{status=$report.status;progress=100;detail=$null;message='Préparation archivee. Consulter le rapport et les journaux sur Atelier PXE.'}

@@ -121,6 +121,18 @@ function Assert-AtelierUnattendFile {
     Assert-AtelierUnattendContent -Content ($encoding.GetString($bytes))
 }
 
+function Read-AtelierSharedUtf8File {
+    param([Parameter(Mandatory)][string]$Path)
+    # Autoriser le remplacement atomique pendant la lecture de cette version du fichier.
+    $share=[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+    $stream=[IO.File]::Open([IO.Path]::GetFullPath($Path),[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)
+    $reader=$null
+    try {
+        $reader=New-Object IO.StreamReader($stream,[Text.UTF8Encoding]::new($false,$true),$true)
+        return $reader.ReadToEnd()
+    } finally { if ($reader) {$reader.Dispose()} else {$stream.Dispose()} }
+}
+
 function Write-AtelierVerifiedUtf8File {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -148,10 +160,22 @@ function Write-AtelierVerifiedUtf8File {
         $stream = New-Object IO.FileStream($temporary,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::WriteThrough)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
         if ((Get-AtelierBytesHash -Bytes ([IO.File]::ReadAllBytes($temporary))) -ne $expectedHash) { throw 'Vérification des octets écrits impossible.' }
-        if ([IO.File]::Exists($target)) {
-            $backup = $target + '.previous-' + [guid]::NewGuid().ToString('N')
-            [IO.File]::Replace($temporary,$target,$backup)
-        } else { [IO.File]::Move($temporary,$target) }
+        for ($attempt=0; $attempt -lt 40; $attempt++) {
+            try {
+                if ([IO.File]::Exists($target)) {
+                    $backup = $target + '.previous-' + [guid]::NewGuid().ToString('N')
+                    [IO.File]::Replace($temporary,$target,$backup)
+                } else { [IO.File]::Move($temporary,$target) }
+                break
+            } catch {
+                $cause=$_.Exception
+                while ($cause.InnerException) { $cause=$cause.InnerException }
+                $nativeCode=$cause.HResult -band 0xFFFF
+                # Ne retenter que les conflits de partage Windows, sans masquer les autres erreurs.
+                if ($nativeCode -notin @(32,33) -or $attempt -ge 39) { throw }
+                Start-Sleep -Milliseconds 100
+            }
+        }
         if ($Unattend) { Assert-AtelierUnattendFile -Path $target -ExpectedHash $expectedHash }
         elseif ((Get-AtelierBytesHash -Bytes ([IO.File]::ReadAllBytes($target))) -ne $expectedHash) { throw 'Le fichier a change après son écriture.' }
         if ($NoBackup -and $backup) { [IO.File]::Delete($backup); $backup=$null }

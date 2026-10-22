@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## IQ-5.8.3 : accès concurrent aux états Windows Update, 22 octobre 2026
+
+- Lecture UTF-8 des états avec partage du remplacement atomique, pour que l’attente interactive et la fenêtre de progression ne bloquent pas l’écriture SYSTEM.
+- Reprise bornée des écritures uniquement sur les codes Windows de partage 32 et 33, en conservant la vérification des octets et les autres erreurs.
+- Réparation directe du poste déployé : conservation des checkpoints Windows Update et HP, mise à jour des modules puis reprise de la préparation sans réinstallation de Windows.
+
 ## IQ-5.8.2 : Windows Update au début de la préparation, 22 octobre 2026
 
 - Recherche et installation Windows Update sous SYSTEM avant la personnalisation, les logiciels et HPIA.

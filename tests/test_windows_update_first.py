@@ -57,6 +57,7 @@ def test_system_worker_preserves_restarts_and_never_releases_unknown_results(tmp
     (tmp_path/'personalization.json').write_text(json.dumps({'settings': {'unattended': True}}))
     (tmp_path/'Unattend.ps1').write_text('''
 function Write-AtelierVerifiedUtf8File {param($Path,$Content,[switch]$NoBackup);[IO.File]::WriteAllText($Path,$Content,[Text.UTF8Encoding]::new($false))}
+function Read-AtelierSharedUtf8File {param($Path);Get-Content $Path -Raw -Encoding UTF8}
 ''')
     (tmp_path/'Reporting.ps1').write_text('function Initialize-AtelierReportTrust {};function Send-AtelierWindowsProgress {}')
     (tmp_path/'HP-ImageAssistant.ps1').write_text('function Get-AtelierHpBootIdentity {return $global:boot}')

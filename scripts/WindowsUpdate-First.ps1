@@ -8,7 +8,7 @@ function Wait-AtelierWindowsUpdateFirst {
     param([string]$DataPath)
     $path=Join-Path $DataPath 'windows-update-result.json'
     if (Test-Path $path) {
-        $saved=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json
+        $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
         if ($saved.source -eq 'windows_update' -and $saved.status -eq 'completed') { return $true }
     }
     $powerShell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -25,7 +25,7 @@ function Wait-AtelierWindowsUpdateFirst {
     $deadline=[DateTime]::UtcNow.AddHours(3)
     while ([DateTime]::UtcNow -lt $deadline) {
         if (Test-Path $path) {
-            $saved=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json
+            $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
             if ($saved.source -ne 'windows_update') { throw 'État Windows Update inattendu : logiciels bloqués.' }
             if ($saved.status -eq 'completed') { return $true }
             if ($saved.status -eq 'needs_attention') { throw ('Windows Update à vérifier avant les logiciels : '+$saved.message) }
@@ -73,7 +73,7 @@ function Invoke-AtelierWindowsUpdateFirstWorker {
             $boot=Get-AtelierHpBootIdentity
             $restartPath=Join-Path $DataPath 'windows-update-first-restart.json'
             if (Test-Path $restartPath) {
-                $restart=Get-Content $restartPath -Encoding UTF8 -Raw | ConvertFrom-Json
+                $restart=Read-AtelierSharedUtf8File -Path $restartPath | ConvertFrom-Json
                 if ($restart.boot_id -eq $boot) {
                     Publish-WindowsUpdateFirst 'reboot_pending' $wu.message $wu
                     return
@@ -106,7 +106,7 @@ function Invoke-AtelierWindowsUpdateFirstWorker {
         $message='Windows Update avant les logiciels : '+$_.Exception.Message
         # Un échec du pilotage doit aussi réveiller la préparation en attente.
         $path=Join-Path $DataPath 'windows-update-result.json'
-        $failure=if (Test-Path $path) {Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json} else {[pscustomobject]@{source='windows_update';status='needs_attention';message=$message;restarts=0}}
+        $failure=if (Test-Path $path) {Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json} else {[pscustomobject]@{source='windows_update';status='needs_attention';message=$message;restarts=0}}
         $failure.status='needs_attention';$failure.message=$message
         Write-AtelierVerifiedUtf8File -Path $path -Content ($failure | ConvertTo-Json -Depth 22) -NoBackup | Out-Null
         Publish-WindowsUpdateFirst 'needs_attention' $message $failure
