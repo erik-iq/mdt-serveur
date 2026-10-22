@@ -31,7 +31,7 @@ function Get-AtelierInstalledClientSoftware {
     }
     # Un lanceur réussi ou un ancien checkpoint ne prouve pas une installation.
     $rules=@{
-        vlc=@{name='^VLC( média player)?$';publisher='VideoLAN';files=@('vlc.exe')}
+        vlc=@{name='^VLC( media player)?$';publisher='VideoLAN';files=@('vlc.exe')}
         reader=@{name='^Adobe (Acrobat|Reader)';publisher='Adobe';files=@('AcroRd32.exe','Acrobat.exe','Reader\AcroRd32.exe','Acrobat\Acrobat.exe')}
         chrome=@{name='^Google Chrome$';publisher='Google';files=@('chrome.exe','Application\chrome.exe')}
         lenovo_system_update=@{name='^(Lenovo )?System Update';publisher='Lenovo';files=@('tvsu.exe')}

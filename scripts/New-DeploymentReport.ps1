@@ -77,7 +77,6 @@ try {
 } catch { $inventory['Demarrage rapide Windows']='Non vérifié'; $warnings.Add('Réglage du démarrage rapide non vérifié.') }
 $license=Read-ReportJson (Get-AtelierIQFile $toolsRoot 'Licence' 'Licence-Windows.json')
 $inventory['Activation Windows']=if ($license) { [string]$license.etat } else { 'INDETERMINE' }
-if (-not $license -or $license.etat -ne 'ACTIVE') { $warnings.Add('Activation Windows à vérifier ; aucune clé produit n''est collecté ici.') }
 if ($payload.deployment) { $inventory['Profil deploye']=[string]$payload.deployment.profile_name; $inventory['Image / index']=([string]$payload.deployment.image_filename + ' / ' + $payload.deployment.image_index) }
 $steps=New-Object 'Collections.Generic.List[object]'
 $apps=Read-ReportJson (Join-Path $DataPath 'result.json')
@@ -136,10 +135,8 @@ foreach ($test in @($hardware.tests)) {
     if ($test) {
         $steps.Add(@{name=('Test ' + $test.name);status=[string]$test.status;message=[string]$test.comment;timestamp=[string]$hardware.date})
         if ($test.status -eq 'failed') { $warnings.Add('Défaut constaté par l''opérateur : ' + $test.name) }
-        elseif ($test.status -eq 'not_tested') { $warnings.Add('Test matériel non effectué : ' + $test.name) }
     }
 }
-if (-not $hardware) { $warnings.Add('Tests son, webcam et clavier non effectués ou non enregistrés.') }
 $warranty=Read-ReportJson (Get-AtelierIQFile $toolsRoot 'Garantie' 'Garantie.json')
 if ($warranty) {
     $inventory['Garantie constructeur']=[string]$warranty.statut

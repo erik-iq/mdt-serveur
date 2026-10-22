@@ -53,7 +53,7 @@ def database(data, write=False):
 def sources(data, asset_id=None):
     with database(data) as con:
         records = con.execute("""SELECT DISTINCT a.* FROM assets a JOIN profiles p ON p.asset_id=a.id
-            WHERE a.kind='windows' AND p.edition IN ('Pro','Famille','')
+            WHERE a.kind='windows' AND p.archived=0 AND p.edition IN ('Pro','Famille','')
             AND p.id NOT IN (SELECT profile_id FROM windows_image_test_profiles)
             ORDER BY a.filename""").fetchall()
         result = []
@@ -119,7 +119,7 @@ def register_test(data, report_path):
             source = con.execute('SELECT * FROM assets WHERE id=? AND kind=\'windows\'', (report['source_asset_id'],)).fetchone()
             if not source or source['sha256'] != report['source_sha256']:
                 raise ValueError('Image source remplacée depuis la maintenance')
-            profiles = con.execute('SELECT * FROM profiles WHERE asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)', (source['id'],)).fetchall()
+            profiles = con.execute('SELECT * FROM profiles WHERE archived=0 AND asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)', (source['id'],)).fetchall()
             if restricted:
                 profiles = [p for p in profiles if p['edition'] in ('Pro', 'Famille') or (not p['edition'] and p['image_index'] in indexes)]
             if not profiles or not {p['image_index'] for p in profiles} <= indexes.keys():
@@ -177,7 +177,7 @@ def promote(data, run_id, deployment_ids):
         mappings = json.loads(current['mappings_json'])
         old_indexes = ','.join(str(int(m.get('source_index',m['index']))) for m in mappings)
         scope = " AND (edition IN ('Pro','Famille') OR (edition='' AND image_index IN ("+old_indexes+")))" if all(m.get('scope') == 'home_pro' for m in mappings) else ''
-        production = {p[0] for p in con.execute('SELECT id FROM profiles WHERE asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)' + scope, (current['source_asset_id'],))}
+        production = {p[0] for p in con.execute('SELECT id FROM profiles WHERE archived=0 AND asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)' + scope, (current['source_asset_id'],))}
         if production != {item['source_profile_id'] for item in mappings}:
             raise ValueError('La liste des profils source a change depuis le test ; publication annulée')
         allowed = {item['test_profile_id']: item['index'] for item in mappings}

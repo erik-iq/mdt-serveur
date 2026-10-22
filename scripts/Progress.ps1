@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
+param([string]$DataPath = 'C:\ProgramData\AtelierPXE', [string]$ToolsPath = 'C:\IQ_')
 # Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 $env:PYTHONIOENCODING = 'utf-8'
@@ -44,6 +44,15 @@ $title.BackColor=[Drawing.Color]::Transparent;$logo.BackColor=[Drawing.Color]::T
 $form.MinimizeBox=$true;$form.MaximizeBox=$false
 # Les styles visuels natifs imposent sinon le vert Windows à la progression.
 Set-AtelierProgressTheme $bar
+function Complete-AtelierProgressWindow {
+    # La tâche interactive est élevée et conserve uniquement la connexion de ce bilan.
+    $winlogon='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+    try {
+        Set-ItemProperty $winlogon AutoAdminLogon '0'
+        foreach ($name in @('DefaultPassword','AutoLogonCount')) { Remove-ItemProperty $winlogon $name -ErrorAction SilentlyContinue }
+    } catch { }
+    Unregister-ScheduledTask -TaskName 'AtelierPXE-Progress' -Confirm:$false -ErrorAction SilentlyContinue
+}
 $script:lastMessage=''
 $script:lastRead=[DateTime]::MinValue
 $started=Get-Date
@@ -54,7 +63,7 @@ $timer.Add_Tick({
         $path=Join-Path $DataPath 'progress.json'
         if (Test-Path $path) { $state=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json }
         else {
-            $report=Get-Content 'C:\IQ_\Rapports\Rapport-Deploiement.json' -Encoding UTF8 -Raw | ConvertFrom-Json
+            $report=Get-Content (Join-Path $ToolsPath 'Rapports\Rapport-Deploiement.json') -Encoding UTF8 -Raw | ConvertFrom-Json
             $state=[pscustomobject]@{status=$report.status;progress=100;detail=$null;message='Préparation archivee. Consulter le rapport et les journaux sur Atelier PXE.'}
         }
         $message.Text=$state.message
@@ -65,8 +74,8 @@ $timer.Add_Tick({
             else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.detail.percent));$note.Text += ' Avancement de cette étape : ' + $state.detail.percent + ' %.' }
         } else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.progress)) }
         if ($state.message -ne $script:lastMessage) { $details.AppendText((Get-Date -Format 'HH:mm:ss') + ' ' + $state.message + "`r`n");$script:lastMessage=$state.message }
-        if ($state.status -eq 'completed') { $title.Text='Préparation terminée';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. Windows Update et Microsoft Store : à lancer manuellement.'; $timer.Stop() }
-        elseif ($state.status -in @('failed','needs_attention')) { $title.Text='Préparation à vérifier'; $timer.Stop() }
+        if ($state.status -eq 'completed') { $title.Text='Préparation terminée';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. Windows Update et Microsoft Store : à lancer manuellement.'; $timer.Stop(); Complete-AtelierProgressWindow }
+        elseif ($state.status -in @('failed','needs_attention')) { $title.Text='Préparation à vérifier'; $timer.Stop(); Complete-AtelierProgressWindow }
     } catch { $message.Text='En attente de la prochaine étape...' }
 })
 $timer.Start()

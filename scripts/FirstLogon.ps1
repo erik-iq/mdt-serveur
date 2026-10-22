@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
-param([string]$DataPath = 'C:\ProgramData\AtelierPXE')
+param([string]$DataPath = 'C:\ProgramData\AtelierPXE', [string]$ToolsPath = 'C:\IQ_')
 # Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 $env:PYTHONIOENCODING = 'utf-8'
@@ -37,6 +37,15 @@ function Start-Maintenance {
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
     $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installés ou non vérifiés : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels vérifiés : '+$script:softwareSummary.verified+'.' }
     Set-Progress 'running' 75 ($detail+' Finalisation et rapport en arrière-plan ; mises à jour Windows / Store manuelles.')
+    # Cette copie IQ survit au nettoyage et affiche le bilan après reconnexion.
+    $uiRoot=Join-Path $ToolsPath 'Rapports\Preparation'
+    New-Item -ItemType Directory -Path $uiRoot -Force | Out-Null
+    foreach ($name in @('Progress.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item (Join-Path $DataPath $name) (Join-Path $uiRoot $name) -Force }
+    $sid=[string](Get-ScheduledTask -TaskName 'AtelierPXE-Preparation' -ErrorAction SilentlyContinue).Principal.UserId
+    if ($sid -notmatch '^S-1-5-') { $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
+    $uiAction=New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+(Join-Path $uiRoot 'Progress.ps1')+'"')
+    $uiPrincipal=New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName 'AtelierPXE-Progress' -Action $uiAction -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $sid) -Principal $uiPrincipal -Settings $taskSettings -Force | Out-Null
     Start-ScheduledTask -TaskName 'AtelierPXE-Maintenance'
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
 }

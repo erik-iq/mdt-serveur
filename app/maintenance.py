@@ -172,7 +172,7 @@ class Maintenance:
             model['required']=sorted(model['required']);model['packages'].sort(key=lambda p:p['id'])
             model['missing']=sorted(set(model['required'])-{p['id'] for p in model['packages']})
             model['latest_job']=next((j for j in status['jobs'] if (j['platform'],j['os'],j['os_version'])==key),None)
-        result = {**status,'models':list(models.values()),'storage':self.storage()}
+        result = {**status,'models':list(models.values())}
         self.cache['hp']=now,result
         return result
 
@@ -204,7 +204,7 @@ class Maintenance:
         except (OSError,ValueError): latest_check={'status':'not_checked','contexts':[]}
         if latest_check.get('status')=='running' and not self.check_lock.locked():
             latest_check={**latest_check,'status':'interrupted','message':'Vérification précédente interrompue ; vous pouvez la relancer.'}
-        return {'worker':worker,'images':images,'reports':reports,'catalog_check':latest_check,'storage':self.storage()}
+        return {'worker':worker,'images':images,'reports':reports,'catalog_check':latest_check}
 
     def check_catalog(self):
         try:
@@ -236,6 +236,10 @@ class Maintenance:
         checked(self.data,temporary).write_text(json.dumps(value),encoding='utf-8');os.replace(temporary,path)
 
     def routes(self,api,admin):
+        @api.get('/api/maintenance/storage',dependencies=[Depends(admin)])
+        def storage_status():
+            return self.storage()
+
         @api.get('/api/maintenance/hp',dependencies=[Depends(admin)])
         def hp_status(fresh:bool=False):
             if fresh: self.cache.pop('hp',None);self.cache.pop('storage',None)

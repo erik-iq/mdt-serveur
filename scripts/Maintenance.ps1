@@ -31,7 +31,9 @@ function Save-Maintenance([string]$Status,[int]$Percent,[string]$Message) {
     if (Get-Command Send-AtelierWindowsProgress -ErrorAction SilentlyContinue) { Send-AtelierWindowsProgress $DataPath $Status $Percent $Message }
 }
 function Finish-Maintenance {
-    Disable-AtelierAutoLogon
+    # Au démarrage SYSTEM peut finir avant Winlogon : laisser sa connexion unique
+    # présenter le bilan. La fenêtre retire ensuite les paramètres de connexion.
+    if (-not $state.final_restart.completed_at -or (Get-Process explorer -ErrorAction SilentlyContinue)) { Disable-AtelierAutoLogon }
     if (Get-Command Complete-AtelierReport -ErrorAction SilentlyContinue) { Complete-AtelierReport $DataPath $ToolsPath }
     $cleanupRequested=$false
     $payloadFile=Join-Path $DataPath 'personalization.json'
@@ -51,7 +53,34 @@ function Finish-Maintenance {
     }
     # Si le serveur est indisponible, conserver seulement la reprise bornée de transmission.
     if (-not (Test-Path $configuration) -or ($sent -and -not $cleanupRequested) -or $expired) { Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue }
-    Unregister-ScheduledTask -TaskName 'AtelierPXE-Progress' -Confirm:$false -ErrorAction SilentlyContinue
+    # La fenêtre conserve sa tâche jusqu’à l’affichage du bilan après reconnexion.
+}
+
+function Request-AtelierFinalRestart {
+    if ($state.final_restart.requested_at) { return }
+    if (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)^(winget|msiexec|HPImageAssistant|HpFirmwareUpdRec.*|HPBIOSUPDREC.*|HPBIOSUpdate.*)$' }).Count) {
+        Save-Maintenance 'retry_pending' 95 'Un installateur est encore actif. Redémarrage différé ; reprise automatique dès le prochain contrôle.'
+        return
+    }
+    # Le compte intégré a été préparé sans mot de passe par le déploiement.
+    # Une seule reconnexion permet de présenter le bilan ; Finish-Maintenance la désactive.
+    if ($payload.settings.unattended) {
+        $account=Get-LocalUser | Where-Object { $_.SID.Value -match '-500$' } | Select-Object -First 1
+        if (-not $account -or -not $account.Enabled) { throw 'Compte de reprise Windows indisponible.' }
+        $winlogon='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+        Set-ItemProperty $winlogon DefaultUserName $account.Name
+        Set-ItemProperty $winlogon DefaultDomainName $env:COMPUTERNAME
+        Set-ItemProperty $winlogon DefaultPassword ''
+        Set-ItemProperty $winlogon AutoAdminLogon '1'
+        New-ItemProperty $winlogon AutoLogonCount -Value 1 -PropertyType DWord -Force | Out-Null
+    }
+    $state.final_restart | Add-Member NoteProperty requested_at ([DateTime]::UtcNow.ToString('o')) -Force
+    Save-Maintenance 'reboot_pending' 95 'Installations terminées. Redémarrage automatique dans 60 secondes, puis contrôle et bilan de la préparation.'
+    & shutdown.exe /r /t 60 /d p:2:17 /c 'Atelier PXE : fin des installations. Reprise automatique du contrôle après redémarrage.' | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $state.final_restart.requested_at=$null
+        throw 'Windows a refusé le redémarrage de fin de préparation.'
+    }
 }
 
 try {
@@ -66,6 +95,44 @@ try {
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
+    if ($state.final_restart -and -not $state.final_restart.completed_at) {
+        $boot=Get-AtelierHpBootIdentity
+        if (([datetime]$boot).ToUniversalTime() -eq ([datetime]$state.final_restart.boot_id).ToUniversalTime()) {
+            Request-AtelierFinalRestart
+            return
+        }
+        # Vérifier les applications dans ce nouveau démarrage, sans les réinstaller.
+        foreach ($entry in @($customization.applications)) {
+            if ($entry.id -notin @($payload.settings.winget_packages)) { continue }
+            $installed=Get-AtelierInstalledClientSoftware -Key $entry.id
+            if ($installed) {
+                foreach ($key in @('verification','tool','version')) {
+                    if ($installed[$key]) { $entry | Add-Member NoteProperty $key $installed[$key] -Force }
+                }
+                $entry.status='completed'
+            } else { $entry.status='failed';$entry | Add-Member NoteProperty reason 'Installation non retrouvée après redémarrage.' -Force }
+        }
+        $customization.restart_needed=$false
+        $state.reboot_required=$false;$state.reboots++
+        $state.final_restart | Add-Member NoteProperty completed_at ([DateTime]::UtcNow.ToString('o')) -Force
+        $state.final_restart | Add-Member NoteProperty verified_boot_id $boot -Force
+        $state.status='running'
+        $hpPath=Join-Path $DataPath 'hpia-result.json'
+        if (Test-Path $hpPath) {
+            $savedHp=Get-Content $hpPath -Encoding UTF8 -Raw | ConvertFrom-Json
+            $savedHp.reboot_required=$false
+            if ($savedHp.status -eq 'completed') {
+                $savedHp | Add-Member NoteProperty message_before_restart $savedHp.message -Force
+                $savedHp.message='Installations HP terminées ; redémarrage effectué.'
+            }
+            $savedHp | Add-Member NoteProperty reboot_completed_boot $boot -Force
+            Write-AtelierVerifiedUtf8File -Path $hpPath -Content ($savedHp | ConvertTo-Json -Depth 14) -NoBackup | Out-Null
+        }
+        $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
+        $customization | Add-Member NoteProperty software_status $software.status -Force
+        $customization | Add-Member NoteProperty software_summary $software -Force
+        Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'result.json') -Content ($customization | ConvertTo-Json -Depth 12) -NoBackup | Out-Null
+    }
     if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent être terminés avant la finalisation du poste.' }
     $hpContinuation=$payload.deployment.allow_bios_restart -and $state.status -in @('reboot_pending','retry_pending')
@@ -109,10 +176,18 @@ try {
     if ($hp.reboot_required) { $state.reboot_required=$true }
     $licenseScript = Get-AtelierIQFile $ToolsPath 'Licence' 'Verifier-Licence.ps1'
     if (Test-Path $licenseScript) {
-        try { & $licenseScript } catch { Add-Content -LiteralPath $logPath -Value 'Diagnostic de licence a relancer dans C:\IQ_.' -Encoding UTF8 }
+        try { & $licenseScript } catch { Add-Content -LiteralPath $logPath -Value 'Relevé de licence indisponible ; aucun blocage de la préparation.' -Encoding UTF8 }
     }
-    $message = 'Préparation terminée. '+$softwareMessage+' Windows Update et Microsoft Store à lancer manuellement.'
+    $message = 'Préparation terminée avec succès. '+$softwareMessage+$(if ($state.final_restart.completed_at) { ' Contrôle après redémarrage terminé.' } else { '' })
     if ($software.status -ne 'completed' -or $customization.software_status -eq 'needs_attention') { $warnings.Add(($softwareMessage+' Consulter C:\ProgramData\AtelierPXE\software-logs et le rapport.')) }
+    if ($payload.deployment.final_restart -and -not $state.final_restart.completed_at -and -not $warnings.Count) {
+        if (-not $state.final_restart) {
+            $state | Add-Member NoteProperty final_restart ([pscustomobject]@{boot_id=(Get-AtelierHpBootIdentity);requested_at=$null;completed_at=$null}) -Force
+        }
+        $state.reboot_required=$true
+        Request-AtelierFinalRestart
+        return
+    }
     if ($state.reboot_required) { $warnings.Add('Redémarrage nécessaire : le lancer depuis le menu Windows quand vous êtes prêt. Aucun redémarrage automatique demande par Atelier.') }
     $finalStatus=if ($warnings.Count) { 'needs_attention' } else { 'completed' }
     if ($warnings.Count) { $message='Préparation incomplète ou à vérifier. ' + ($warnings -join ' ') }

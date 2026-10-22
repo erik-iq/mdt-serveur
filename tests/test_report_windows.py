@@ -53,6 +53,7 @@ function Get-ItemProperty { param($Path,$Name) [pscustomobject]@{HiberbootEnable
     assert result.returncode == 0, result.stderr
     report=json.loads((out/'Rapports'/'Rapport-Deploiement.json').read_text(encoding='utf-8-sig'))
     assert report['status']==('needs_attention' if unverified else 'completed') and report['inventory']['Numero de serie']=='TEST123456'
+    assert not any('Activation Windows à vérifier' in w or 'non effectués' in w for w in report['warnings'])
     if unverified:
         assert any('Logiciels non installés ou non vérifiés : vlc' in warning for warning in report['warnings'])
     assert any(step['name']=='Durée - Application de Windows' and '125' in step['message'] for step in report['steps'])

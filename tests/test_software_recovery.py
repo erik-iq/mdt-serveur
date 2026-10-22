@@ -15,7 +15,7 @@ pytestmark=pytest.mark.skipif(not PWSH or os.name=='nt',reason='PowerShell and L
 def setup_client(tmp_path,mode='success'):
     data=tmp_path/'data';data.mkdir()
     for file in (ROOT/'scripts').glob('*'):
-        if file.is_file() and file.suffix in {'.ps1','.json'}:
+        if file.is_file() and file.suffix in {'.ps1','.json','.png'}:
             shutil.copy(file,data/file.name)
     exe=tmp_path/'winget.exe'
     exe.write_text('''#!/usr/bin/env python3
@@ -47,7 +47,7 @@ function Get-ItemProperty {
 function Get-CimInstance {param($ClassName,$OperationTimeoutSec);[pscustomobject]@{Manufacturer='Lenovo';Model='Test';SerialNumber='TEST1234';TotalPhysicalMemory=16GB;Size=256GB}}
 function Get-Process {param($Name);if($Name -eq 'explorer'){[pscustomobject]@{Id=123}}}
 function Start-Process {}
-function Get-ScheduledTask {param($TaskName)}
+function Get-ScheduledTask {param($TaskName);[pscustomobject]@{Principal=[pscustomobject]@{UserId='S-1-5-21-1000'}}}
 function New-ScheduledTaskAction {@{}}
 function New-ScheduledTaskTrigger {@{}}
 function New-ScheduledTaskPrincipal {@{}}
@@ -82,7 +82,7 @@ def test_native_success_requires_current_registration_and_executable(tmp_path,ca
     if case=='damaged_checkpoint':
         (data/'winget-client-state.json').write_text('corrupted checkpoint from old payload')
     if case=='registry_only':
-        Path(str(exe)+'.registry.json').write_text(json.dumps([{'DisplayName':'VLC média player','Publisher':'VideoLAN','InstallLocation':str(tmp_path/'VLC'),'DisplayVersion':'old'}]))
+        Path(str(exe)+'.registry.json').write_text(json.dumps([{'DisplayName':'VLC media player','Publisher':'VideoLAN','InstallLocation':str(tmp_path/'VLC'),'DisplayVersion':'old'}]))
     if case=='executable_only':
         (tmp_path/'VLC').mkdir();(tmp_path/'VLC'/'vlc.exe').write_bytes(b'not registered')
     script+="""
@@ -126,7 +126,7 @@ def test_first_logon_rechecks_captured_completion_instead_of_skipping_software(t
     # Replace the updater library after setup so its native opérations are inert.
     (data/'result.json').write_text('{"status":"completed","deployment_id":"reference-image","applications":[]}')
     (data/'Timings.ps1').write_text('function Start-AtelierTiming {return ""};function Stop-AtelierTiming {};function Sync-AtelierTimings {}')
-    script+="\n& 'DATA/FirstLogon.ps1' -DataPath 'DATA'\n".replace('DATA',str(data))
+    script+="\n& 'DATA/FirstLogon.ps1' -DataPath 'DATA' -ToolsPath 'DATA/IQ_'\n".replace('DATA',str(data))
     run_ps(tmp_path,script)
     result=json.loads((data/'result.json').read_text(encoding='utf-8-sig'))
     assert result['deployment_id']=='new-deployment'

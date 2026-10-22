@@ -62,6 +62,10 @@ def run():
                 page=browser.new_page(viewport={'width':1440,'height':1050});errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectée')
+                expect(page.locator('#overview-maintenance-storage')).to_contain_text('Volume')
+                assert page.locator('#hp-maintenance-storage, #windows-maintenance-storage, .bottom-grid').count()==0
+                page.locator('#overview-maintenance-storage').locator('..').locator('summary').first.click()
+                page.screenshot(path='/tmp/atelier-overview-iq56.png',full_page=True)
                 page.get_by_role('button',name='HPIA et pilotes',exact=True).click()
                 expect(page.locator('#hp-maintenance-models')).to_contain_text('EliteBook <fixture>')
                 page.locator('#hp-maintenance-models summary').click()

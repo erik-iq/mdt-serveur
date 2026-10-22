@@ -30,10 +30,10 @@ foreach ($asset in @($state.assets | Where-Object { $_.kind -eq 'windows' })) {
     if (-not $template.Count) { Write-Warning ('Créer d''abord un profil avec la langue et les paramètres corrects : ' + $asset.filename);continue }
     foreach ($summary in @(Get-WindowsImage -ImagePath $path)) {
         $image=Get-WindowsImage -ImagePath $path -Index $summary.ImageIndex
-        if ($image.EditionId -notin @('Professional','Core','CoreSingleLanguage')) { continue }
+        if ($image.EditionId -notin @('Professional','Core')) { continue }
         if (@($state.profiles | Where-Object { $_.asset_id -eq $asset.id -and $_.image_index -eq $image.ImageIndex }).Count) { continue }
         if ($template[0].locale -notin @($image.Languages)) { Write-Warning 'Édition ignorée : langue différente du profil modèle.';continue }
-        $edition=switch ($image.EditionId) { 'Professional' { 'Pro' }; 'Core' { 'Famille' }; 'CoreSingleLanguage' { 'Famille unilingue' } }
+        $edition=switch ($image.EditionId) { 'Professional' { 'Pro' }; 'Core' { 'Famille' } }
         $name=('Windows ' + $edition + ' - ' + $asset.filename)
         if ($name.Length -gt 80) { $name=$name.Substring(0,68) + '-' + $asset.id.Substring(0,8) }
         $body=@{name=$name;asset_id=$asset.id;image_index=[int]$image.ImageIndex;locale=$template[0].locale;windows_version=$template[0].windows_version;edition=$edition;settings=$template[0].settings} | ConvertTo-Json -Depth 10

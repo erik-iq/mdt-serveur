@@ -1,5 +1,15 @@
 # Journal des modifications
 
+## IQ-5.6, 22 octobre 2026
+
+- Redémarrage automatique de fin, point de reprise durable et contrôle des logiciels au nouveau démarrage, sans réinstallation.
+- Fenêtre de bilan réouverte à la connexion, même après nettoyage du dossier privé. Une seule reconnexion automatique du compte de préparation.
+- Succès en vert dans l’activité et archivage confirmé avant suppression des fichiers temporaires du poste. Les contrôles manuels absents ne créent plus d’avertissement.
+- Retrait des profils Famille unilingue du catalogue, sans supprimer leurs historiques ni modifier le WIM de production. La synchronisation ne les recrée plus.
+- Suppression du suffixe Test des profils ordinaires de production. Les véritables candidats de maintenance restent identifiés pour leurs tests.
+- Stockage serveur affiché uniquement dans la vue globale, retrait des panneaux explicatifs inutiles.
+- Correction du contrôle VLC : le nom de désinstallation natif « VLC media player » est conservé.
+
 ## IQ-5.5.1, 22 octobre 2026
 
 - Français accentué dans le site, les messages WinPE, la progression Windows, les outils IQ et les guides.

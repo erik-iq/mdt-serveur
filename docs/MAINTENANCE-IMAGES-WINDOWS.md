@@ -1,5 +1,19 @@
 # Maintenance mensuelle des images Windows - IQ-5.5
 
+## Lancer la préparation Famille et Pro
+
+Sur DEPLOY-01, PowerShell administrateur :
+
+```powershell
+& 'C:\AtelierPXE\console\scripts\Enable-WindowsImageMaintenance.ps1' `
+    -InstallPath 'C:\AtelierPXE\console' -RunNow
+```
+
+Cette commande prépare une copie contenant uniquement Famille et Pro, avec compression rapide. Elle refuse de remplacer une tâche déjà en cours. Les correctifs Microsoft et les prérequis sont mis en cache. Un candidat intact est réutilisé si le contenu et les correctifs n’ont pas changé. La première intégration dépend de la vitesse du stockage et de DISM ; aucune durée fixe n’est garantie.
+
+Suivre ensuite **Images et correctifs**. Le bouton de recherche des KB ne fait qu’interroger les métadonnées. La tâche de préparation effectue le téléchargement et l’intégration. Lorsque la candidate est prête, copier la commande de mise en test depuis cette page, déployer les éditions utilisées, puis publier avec leurs identifiants de déploiement réussis. L’image de production reste inchangée pendant la préparation.
+
+
 Cette fonction prépare les mises à jour une seule fois sur DEPLOY-01 (.250), dans une copie de chaque WIM utilisé par les profils de production. Les postes suivants reçoivent cette image après sa validation. Aucun correctif n’est installé dans Windows Server et aucun WIM actif n’est écrasé. Windows Update et Microsoft Store restent manuels sur les postes. HPIA garde son fonctionnement actuel ; cette maintenance ne corrige pas ses erreurs et ne fournit pas les pilotes propres au modèle.
 
 ## Installer et lancer la première préparation

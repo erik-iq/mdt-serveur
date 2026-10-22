@@ -7,6 +7,7 @@ const maintenanceDuration=value=>Number.isFinite(value)?`${Math.floor(value/60)}
 let maintenanceLoading=false;
 
 function maintenanceStorage(value){
+  if(!value)return '<p>Mesure du stockage en attente.</p>';
   return `<div class="metrics">${value.volumes.map(v=>`<article><span>Volume ${esc(v.root)}</span><strong>${maintenanceBytes(v.free)}</strong><small>libres sur ${maintenanceBytes(v.total)}</small><progress class="maintenance-capacity" max="100" value="${Math.round(100*v.used/v.total)}" aria-label="Occupation du volume ${esc(v.root)}"></progress><small>${maintenanceBytes(v.used)} utilisés</small></article>`).join('')}</div><details class="panel padding"><summary>Répartition du stockage Atelier</summary><p>${esc(value.note)} Mesure : ${maintenanceDate(value.generated_at)}.</p><div class="table-wrap"><table><thead><tr><th>CATÉGORIE</th><th>TAILLE</th><th>FICHIERS</th><th>MESURE</th></tr></thead><tbody>${value.categories.map(c=>`<tr><td>${esc(c.name)}</td><td>${maintenanceBytes(c.bytes)}${c.complete?'':' (partiel)'}</td><td>${esc(c.files)}</td><td>${maintenanceDate(c.measured_at||value.generated_at)}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
 
@@ -22,7 +23,7 @@ function filterHpMaintenance(){
 }
 
 function renderHpMaintenance(value){
-  $('hp-maintenance-storage').innerHTML=maintenanceStorage(value.storage);
+
   $('hp-maintenance-message').textContent=`Agent : ${maintenanceLabel(value.worker.state)}. ${value.worker.message} Dernier contact : ${maintenanceDate(value.worker.last_seen)}.`;
   maintenanceReplace('hp-maintenance-models',value.models.map(m=>{
     const search=[...m.names,m.platform,...m.packages.flatMap(p=>[p.id,p.title||'',p.version||''])].join(' ').toLowerCase();
@@ -38,7 +39,7 @@ function servicingStage(value){
 }
 
 function renderWindowsMaintenance(value){
-  $('windows-maintenance-storage').innerHTML=maintenanceStorage(value.storage);
+
   const worker=value.worker;
   $('windows-maintenance-source').innerHTML=`<h3>Tâche serveur : ${esc(maintenanceLabel(worker.task_state))}</h3><p>Dernière mesure : ${maintenanceDate(worker.generated_at)} | Dernier lancement : ${maintenanceDate(worker.last_run)} | Résultat : ${esc(worker.last_result??'Non transmis')}</p><p>La planification configurée par Atelier est mensuelle, le 15 à 02:00 (heure du serveur). Une tâche en pause reste en pause. Les données sont publiées par l’agent serveur ; une ancienne mesure ne prouve pas une activité actuelle.</p>${value.images.map(i=>`<p><strong>${esc(i.filename)}</strong> - ${maintenanceBytes(i.size)}<br><span class="hash">SHA-256 ${esc(i.sha256)}</span></p>`).join('')||'<p>Aucun WIM utilisé par un profil Famille ou Pro.</p>'}`;
   const check=value.catalog_check;
@@ -50,17 +51,18 @@ function renderWindowsMaintenance(value){
 async function loadMaintenance(page,fresh=false){
   if(maintenanceLoading||(!sessionReady))return;
   maintenanceLoading=true;
-  const hp=page==='hp-maintenance';const message=$(hp?'hp-maintenance-message':'windows-maintenance-message');
+  const overview=page==='overview';
+  const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
   try{
-    const value=await api('/maintenance/'+(hp?'hp':'windows')+(fresh?'?fresh=true':''));
-    if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);message.textContent='Suivi actualisé. Les données privées de montage ne sont pas exposées par le site.';}
+    const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
+    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);message.textContent='Suivi actualisé. Les données privées de montage ne sont pas exposées par le site.';}
   }catch(error){message.textContent=error.message;}
   finally{maintenanceLoading=false;}
 }
 
 document.addEventListener('click',async event=>{
   const nav=event.target.closest('[data-page]');
-  if(nav&&['hp-maintenance','windows-maintenance'].includes(nav.dataset.page))await loadMaintenance(nav.dataset.page);
+  if(nav&&['overview','hp-maintenance','windows-maintenance'].includes(nav.dataset.page))await loadMaintenance(nav.dataset.page);
   const test=event.target.closest('[data-maint-command]');
   if(test){
     const text=test.dataset.maintCommand;
@@ -83,5 +85,5 @@ $('windows-maintenance-check').addEventListener('click',async()=>{
 });
 setInterval(()=>{
   if(document.hidden)return;
-  for(const page of ['hp-maintenance','windows-maintenance'])if(!$('page-'+page).hidden)loadMaintenance(page);
+  for(const page of ['overview','hp-maintenance','windows-maintenance'])if(!$('page-'+page).hidden)loadMaintenance(page);
 },15000);

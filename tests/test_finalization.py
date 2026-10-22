@@ -190,7 +190,7 @@ if($held){$held.Dispose()}
     if expected:
         if hp_case:assert (tmp_path/'hp-sent.zip').exists()
         assert not previous.exists()
-        assert set((tmp_path/'tasks').read_text().splitlines())=={'AtelierPXE-Preparation','AtelierPXE-Progress','AtelierPXE-Tools','AtelierPXE-Maintenance'}
+        assert set((tmp_path/'tasks').read_text().splitlines())=={'AtelierPXE-Preparation','AtelierPXE-Tools','AtelierPXE-Maintenance'}
         with zipfile.ZipFile(tmp_path/'sent.zip') as z:
             assert 'Unattend.generated.xml' not in z.namelist() and 'reporting.json' not in z.namelist()
             assert b'fixture-private-report-token' not in b''.join(z.read(n) for n in z.namelist())

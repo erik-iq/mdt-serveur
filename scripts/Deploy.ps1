@@ -164,7 +164,7 @@ exit
     if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'reporting.json') -Content $reporting | Out-Null
-    $personalization = @{tools=$plan.tools;settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{id=$plan.id;serial_number=$plan.serial_number;cleanup_after_reporting=$true;hp_repository=$true;allow_bios_restart=$true;previous_payload_name=$(if($previousPayload){Split-Path $previousPayload -Leaf}else{''});profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
+    $personalization = @{tools=$plan.tools;settings=$plan.settings; applications=$selectedApplications; wallpaper=$plan.wallpaper;deployment=@{id=$plan.id;serial_number=$plan.serial_number;cleanup_after_reporting=$true;hp_repository=$true;allow_bios_restart=$true;final_restart=$true;previous_payload_name=$(if($previousPayload){Split-Path $previousPayload -Leaf}else{''});profile_name=$plan.profile_name;image_filename=$plan.image_filename;image_index=$plan.image_index;winpe_staged_utc=[DateTime]::UtcNow.ToString('o')}} | ConvertTo-Json -Depth 12
     Write-AtelierVerifiedUtf8File -Path (Join-Path $payloadPath 'personalization.json') -Content $personalization | Out-Null
     foreach ($extra in $extraFiles) {
         Assert-Active

@@ -36,14 +36,17 @@ def test_windows_dashboard_is_read_only_authenticated_and_redacts_unpublished_fi
     private=data/'windows-servicing/runs'/RUN
     private.mkdir(parents=True);(private/'report.json').write_text('PRIVATE ORIGINAL REPORT')
     monkeypatch.setattr(maintenance,'select_plan',lambda *args:pytest.fail('GET must not contact Microsoft'))
+    assert client.get('/api/maintenance/storage').status_code==401
     assert client.get('/api/maintenance/windows').status_code==401
     response=client.get('/api/maintenance/windows',headers=auth())
     assert response.status_code==200,response.text
     value=response.json();assert value['worker']['task_state']=='Disabled'
     assert value['reports'][0]['indexes'][0]['source_index']==6
     assert value['reports'][0]['indexes'][0]['index']==2
-    assert value['storage']['volumes'][0]['free']>=0
-    assert any(c['name']=='Sauvegardes WIM' for c in value['storage']['categories'])
+    storage=client.get('/api/maintenance/storage',headers=auth()).json()
+    assert storage['volumes'][0]['free']>=0
+    assert any(c['name']=='Sauvegardes WIM' for c in storage['categories'])
+    assert 'storage' not in value
     assert 'PRIVATE' not in response.text
     url=value['reports'][0]['download_url']
     assert client.get(url).status_code==401

@@ -199,7 +199,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         # Les migrations additives préservent la console installée sur DEPLOY-01.
         additions = {
             'profiles': {'windows_version': "TEXT NOT NULL DEFAULT ''", 'edition': "TEXT NOT NULL DEFAULT ''",
-                         'settings_json': "TEXT NOT NULL DEFAULT '{}'"},
+                         'settings_json': "TEXT NOT NULL DEFAULT '{}'", 'archived': 'INTEGER NOT NULL DEFAULT 0'},
             'deployments': {'wizard_enabled': 'INTEGER NOT NULL DEFAULT 0',
                             'catalog_json': "TEXT NOT NULL DEFAULT '{}'", 'selection_json': "TEXT NOT NULL DEFAULT '{}'",
                             'boot_code_hash': 'TEXT', 'boot_code_expires': 'TEXT',
@@ -213,6 +213,15 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 if name not in present:
                     con.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
         migrate_identity(con)
+        # Retirer les profils unilingues du catalogue sans perdre leurs historiques.
+        con.execute("UPDATE profiles SET archived=1 WHERE edition IN ('Famille unilingue','CoreSingleLanguage')")
+        tests = {r['profile_id'] for r in con.execute('SELECT profile_id FROM windows_image_test_profiles')}
+        for profile in con.execute('SELECT id,name FROM profiles WHERE archived=0').fetchall():
+            if profile['id'] in tests:
+                continue
+            name = re.sub(r'\s*[-\u2013\u2014|:]\s*Test\s*$', '', profile['name'], flags=re.I).strip()
+            if name != profile['name'] and name and not con.execute('SELECT 1 FROM profiles WHERE name=?', (name,)).fetchone():
+                con.execute('UPDATE profiles SET name=? WHERE id=?', (name, profile['id']))
         con.execute('CREATE UNIQUE INDEX IF NOT EXISTS boot_code_unique ON deployments(boot_code_hash) WHERE boot_code_hash IS NOT NULL')
 
     api = FastAPI(title="Atelier PXE", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
@@ -332,7 +341,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
         return []
 
     def catalogue(con, profile_id, interactive):
-        profile_rows = con.execute('SELECT * FROM profiles ORDER BY name').fetchall() if interactive else [row(con, 'profiles', profile_id)]
+        profile_rows = con.execute('SELECT * FROM profiles WHERE archived=0 ORDER BY name').fetchall() if interactive else [row(con, 'profiles', profile_id)]
         profiles = []
         for record in profile_rows:
             profile = profile_public(record, con)
@@ -389,7 +398,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.5.1"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.6"}
 
     @api.get('/api/session')
     def session_options():
@@ -404,7 +413,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             validations = {r['asset_id']: r['status'] for r in con.execute('SELECT asset_id,status FROM windows_image_candidates')}
             for asset in result['assets']:
                 asset['image_validation'] = validations.get(asset['id'])
-            result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles ORDER BY created_at DESC')]
+            result['profiles'] = [profile_public(r, con) for r in con.execute('SELECT * FROM profiles WHERE archived=0 ORDER BY created_at DESC')]
             image_tests = {r['profile_id'] for r in con.execute('SELECT profile_id FROM windows_image_test_profiles')}
             for profile in result['profiles']:
                 profile['image_test'] = profile['id'] in image_tests
@@ -640,7 +649,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                     identifier=str(uuid.uuid4())
                     hostname=('PC-'+uuid.uuid4().hex[:12].upper()) if body.serial_number else ('PC-'+macs[0].replace(':',''))
                     machine={'id':identifier,'hostname':hostname,'mac':macs[0] if macs else '', 'serial_number':body.serial_number or None}
-                profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles WHERE id NOT IN (SELECT profile_id FROM windows_image_test_profiles) ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
+                profiles = [profile_public(r, con) for r in con.execute("SELECT * FROM profiles WHERE archived=0 AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles) ORDER BY CASE WHEN edition IN ('Pro','Professional') THEN 0 ELSE 1 END,name")]
                 if not profiles:
                     raise HTTPException(409, 'Aucun profil Windows disponible ; synchroniser les éditions sur le serveur')
                 profile = profiles[0]

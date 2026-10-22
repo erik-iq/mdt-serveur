@@ -2,6 +2,16 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a été adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise à jour.
 
+## IQ-5.6 : fin automatique et bilan après redémarrage
+
+Après les installations réussies, Atelier enregistre le démarrage courant et redémarre Windows après un délai de 60 secondes. La tâche SYSTEM reprend au démarrage suivant, contrôle à nouveau les logiciels sélectionnés dans Windows et consomme les demandes de redémarrage des pilotes. Les résultats HP natifs et leurs codes restent conservés. Aucun logiciel n’est réinstallé pour ce contrôle. Une erreur reste visible et ne devient jamais un succès par simple redémarrage.
+
+Le compte intégré de préparation bénéficie d’une seule reconnexion automatique lorsqu’il est configuré sans mot de passe par le déploiement. La fenêtre de préparation se rouvre et affiche le succès ou l’échec. Elle reste dans `C:\IQ_\Rapports\Preparation`, pour fonctionner même lorsque le dossier privé a déjà été supprimé. La tâche de notification se retire après affichage du bilan. Les paramètres de connexion automatique sont ensuite supprimés.
+
+Les tests matériels manuels et l’état de licence indisponible restent des informations d’inventaire ; leur absence ne sollicite pas le technicien et ne bloque pas le succès. Les vrais échecs d’installation restent signalés. Après confirmation des rapports, des inventaires et des archives HP par .250, le dossier `C:\ProgramData\AtelierPXE` et ses secrets temporaires sont supprimés. Si le serveur est indisponible, la transmission et le nettoyage sont différés.
+
+Les profils unilingues sont retirés des choix, leurs références historiques sont conservées. Les profils ordinaires perdent leur suffixe Test ; les véritables candidats de maintenance conservent leur distinction jusqu’à la publication validée.
+
 ## IQ-5.4.1 : reprise HPIA et cache pour Windows non reconnu par CMSL
 
 Les rapports du HP physique confirment l’installation des cinq logiciels cochés, mais HPIA 5.3.6 reste sur Analyze Action List avec onze recommandations et aucune installation confirmée, même avec un code final zéro. Le journal CMSL refuse explicitement OsVer=26H2. IQ-5.4.1 ajoute une seule reprise SPList sur les recommandations automatisables lorsque le rapport prouve qu’aucune installation n’a eu lieu, sans Forcé. Pour les versions absentes du ValidateSet CMSL, le serveur met en cache les seuls numéros SoftPaq recommandés, sans les exécuter ni substituer une autre version Windows. L’analyse HP reste en ligne dans ce mode. Les signatures, erreurs, reprises BIOS et avertissements de compatibilité sont conservés.
