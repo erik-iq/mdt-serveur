@@ -13,3 +13,7 @@ Le rapport contient la version Windows, les états des services, quelques indica
 Le ZIP est conservé dans `C:\IQ_\Rapports\WindowsUpdate`, puis copié dans le sous-dossier `Rapports` du kit si celui-ci est accessible en écriture. Il contient `result.json`, `progress.json` et `Lisez-moi.txt`, ainsi qu’un diagnostic de lancement si nécessaire. Le nom du ZIP contient la date et un identifiant pour distinguer les essais. Transmettre ce ZIP pour décider des corrections avant d’activer l’installation Windows Update dans la préparation de production.
 
 La tâche temporaire est retirée après le test. Le kit ne modifie ni les tâches de déploiement, ni le statut de la fiche du poste, ni les rapports HPIA, ni le cache KB de .250.
+
+## Révision WU-DIAG-2
+
+Le premier essai sur le HP a échoué immédiatement avec `0x80004003`, sans résultat de recherche. L’appel asynchrone utilisait un rappel nul. La nouvelle révision fournit un objet de rappel COM avec une méthode DISPID 0, conformément à la documentation Microsoft de `IUpdateSearcher::BeginSearch`. Ce rappel compilé ne lance aucun code PowerShell depuis le thread COM. Le diagnostic conserve l’étape, le type d’exception et la ligne fautive si une autre erreur survient. Une validation du nouvel appel sur le poste physique reste nécessaire.

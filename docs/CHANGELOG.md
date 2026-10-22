@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## Correction du rappel COM du diagnostic Windows Update, 22 octobre 2026
+
+- Rappel de fin de recherche non nul, exposé en COM avec DISPID 0 et indépendant des runspaces PowerShell.
+- Ajout de la révision du diagnostic, de l’étape fautive, du type d’exception et du numéro de ligne dans les rapports d’erreur.
+- Conservation de la recherche seule et des limites de durée. Aucun changement du moteur de préparation en production.
+
 ## Diagnostic Windows Update sur poste existant, 22 octobre 2026
 
 - Kit USB lancé par double-clic, sans nouveau déploiement ni PowerShell à saisir sur le poste.

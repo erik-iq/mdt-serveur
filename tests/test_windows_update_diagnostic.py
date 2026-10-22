@@ -16,7 +16,7 @@ def test_scan_is_read_only_and_distinguishes_empty_failure_and_old_filter(tmp_pa
     script=tmp_path/'test.ps1'
     script.write_text("$ErrorActionPreference='Stop'\n. '"+str(ROOT/'scripts/WindowsUpdate-Diagnostic.ps1')+"'\n"+r'''
 $case='CASE'
-$script:aborted=$false;$script:cleaned=$false;$script:queries=@()
+$script:aborted=$false;$script:cleaned=$false;$script:queries=@();$script:callbackChecked=$false
 $updates=@(
  [pscustomobject]@{Title='Security KB';Type=1;BrowseOnly=$false;IsDownloaded=$false;KBArticleIDs=@('1234567');Identity=@{UpdateID='security'};Categories=@(@{Name='Security Updates'})},
  [pscustomobject]@{Title='Driver';Type=2;BrowseOnly=$false;IsDownloaded=$false;KBArticleIDs=@();Identity=@{UpdateID='driver'};Categories=@(@{Name='Drivers'})},
@@ -28,6 +28,12 @@ $job | Add-Member ScriptMethod CleanUp {$script:cleaned=$true}
 $searcher=[pscustomobject]@{Online=$false;ServerSelection=0;Job=$job;Items=$updates}
 $searcher | Add-Member ScriptMethod BeginSearch {param($criteria,$callback,$state)
  $script:queries+=@($criteria)
+ if($null -eq $callback){throw [NullReferenceException]::new('Native WUA rejects a null callback')}
+ $method=$callback.GetType().GetMethod('Invoke')
+ $dispatch=@($method.GetCustomAttributes([Runtime.InteropServices.DispIdAttribute],$true))[0]
+ if($dispatch.Value -ne 0){throw 'Callback must expose DISPID 0'}
+ $callback.Invoke($null,$null)
+ $script:callbackChecked=$true
  if($case -eq 'failure'){throw [Runtime.InteropServices.COMException]::new('Service disabled',-2147023838)}
  return $this.Job
 }
@@ -40,17 +46,20 @@ $session | Add-Member ScriptMethod CreateUpdateSearcher {$this.Searcher}
 $session | Add-Member ScriptMethod CreateUpdateDownloader {throw 'Diagnostic must never download'}
 $session | Add-Member ScriptMethod CreateUpdateInstaller {throw 'Diagnostic must never install'}
 $result=Invoke-AtelierUpdateScan -Source $(if($case -eq 'configured'){'configured'}else{'windows_update'}) -TimeoutSeconds 1 -PollMilliseconds 10 -SessionFactory {$session}
-@{result=$result;server=$searcher.ServerSelection;online=$searcher.Online;aborted=$script:aborted;cleaned=$script:cleaned;queries=$script:queries}|ConvertTo-Json -Depth 10 -Compress
+@{result=$result;server=$searcher.ServerSelection;online=$searcher.Online;aborted=$script:aborted;cleaned=$script:cleaned;queries=$script:queries;callback_checked=$script:callbackChecked}|ConvertTo-Json -Depth 10 -Compress
 '''.replace('CASE',case),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(script)],capture_output=True,text=True,timeout=10)
     assert run.returncode==0,run.stderr
     value=json.loads(run.stdout);result=value['result']
+    assert value['callback_checked'] and result['script_revision']=='WU-DIAG-2'
     assert value['online'] and value['server']==(0 if case=='configured' else 2)
     assert value['queries']==['IsInstalled=0 and IsHidden=0']
     assert result['status']=={'found':'updates_found','empty':'no_updates','partial':'incomplete','failure':'failed','timeout':'timeout','configured':'updates_found'}[case]
     if case in ('found','configured','partial'):
         assert result['count']==3 and result['previous_filter_count']==1
         assert result['updates'][1]['type']==2 and result['updates'][2]['browse_only']
-    if case=='failure':assert result['hresult']=='0x80070422'
-    if case=='timeout':assert value['aborted'] and not value['cleaned']
+    if case=='failure':
+        assert result['hresult']=='0x80070422' and result['error_stage']=='begin_search'
+        assert result['error_type']=='System.Runtime.InteropServices.COMException'
+    if case=='timeout':assert value['aborted'] and not value['cleaned'] and result['error_stage']=='wait_search'
     if case not in ('timeout','failure'):assert value['cleaned']
