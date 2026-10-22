@@ -228,11 +228,12 @@ def select_plan(family, release, arch, dotnet, opener=None, timeout_seconds=180)
             'created_at': datetime.now(timezone.utc).isoformat(), 'groups': groups}
 
 
-def prepare(family, release, arch, dotnet, cache, opener=None):
+def prepare(family, release, arch, dotnet, cache, opener=None, on_progress=None):
     opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()), MicrosoftRedirect())
     plan = select_plan(family, release, arch, dotnet, opener)
     groups = []
     for selected in plan['groups']:
+        if on_progress: on_progress('Téléchargement ou vérification du cache : ' + selected['kb'] + ' : ' + selected['title'])
         fields = {'updateIDs': json.dumps([{'size': 0, 'updateID': selected['id'], 'uidInfo': selected['id']}])}
         links = download_links(fetch_page(opener, CATALOG + '/DownloadDialog.aspx', fields))
         if any(not re.search(r'[-_]' + arch + r'[-_]', item['filename'], re.I) for item in links):

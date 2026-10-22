@@ -1,5 +1,14 @@
 # Journal des modifications
 
+## IQ-5.7, 22 octobre 2026
+
+- Dépôt KB sur .250 avec recherche Microsoft, téléchargement, cache et accès HTTPS limité au déploiement demandeur.
+- Nouvelle page Correctifs Windows : actualisation en ligne, contextes exacts, fichiers disponibles, tailles, empreintes et erreurs.
+- Installation Windows et .NET après les logiciels et HPIA, sans recherche Windows Update sur le poste ni intégration préalable au WIM.
+- Checkpoints avant chaque installation, contrôle après redémarrage, détection des correctifs déjà présents et conservation des vrais échecs.
+- Actualisation quotidienne à 02:00 sur .250. Désactivation de la planification WIM lors du changement de méthode.
+- Inclusion des résultats et journaux KB dans les diagnostics archivés avant nettoyage.
+
 ## IQ-5.6, 22 octobre 2026
 
 - Redémarrage automatique de fin, point de reprise durable et contrôle des logiciels au nouveau démarrage, sans réinstallation.

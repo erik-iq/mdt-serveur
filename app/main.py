@@ -27,6 +27,7 @@ from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
 from app.hp_repository import HpRepository
 from app.maintenance import Maintenance
+from app.windows_kb import WindowsKbRepository
 from app.identity import normalize_serial, migrate_identity, public_machine, insert_machine, match_machine
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -398,7 +399,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.6"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.7"}
 
     @api.get('/api/session')
     def session_options():
@@ -812,6 +813,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     inventories.routes(api, windows_agent, admin, now)
     hp_repository.routes(api, windows_agent, admin)
     Maintenance(data, db, hp_repository).routes(api, admin)
+    WindowsKbRepository(data, db).routes(api, windows_agent, admin)
     computer_routes(api, db, admin, windows_agent, now)
 
     @api.post('/api/windows/{identifier}/progress')

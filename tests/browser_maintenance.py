@@ -57,6 +57,11 @@ def run():
                 con.execute('INSERT INTO hp_repository_snapshots VALUES (?,?,?,?,?,?,?,?)',
                     (snapshot_id,'83B2','win11','26H2','a'*64,archive.stat().st_size,'["SP12345"]','2026-10-21T10:00:00Z'))
             public=seed_report(data,image['id'])
+            kb_context={'family':'11','release':'26H2','architecture':'x64','dotnet':'4.8.1','build':26300}
+            kb_manifest={'groups':[{'kind':'os','kb':'KB5127648','title':'Correctif <fixture>','target_build':'26300.9711','files':[{'filename':'fixture.msu','size':1234,'sha256':'a'*64}]}]}
+            kb_job=str(uuid.uuid4())
+            with sqlite3.connect(data/'deployment.sqlite3') as con:
+                con.execute('INSERT INTO windows_kb_jobs VALUES (?,?,?,?,?,?,?,?)',(kb_job,json.dumps(kb_context),json.dumps(kb_context,sort_keys=True),'ready','Correctifs disponibles sur .250.',json.dumps(kb_manifest),'2026-10-22T10:00:00Z','2026-10-22T10:01:00Z'))
             with sync_playwright() as p:
                 browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1050});errors=[]
@@ -78,7 +83,11 @@ def run():
                 expect(page.locator('[data-hp-search]')).to_be_hidden()
                 page.locator('#hp-maintenance-search').fill('')
                 page.screenshot(path='/tmp/atelier-maintenance-hp.png',full_page=True)
-                page.get_by_role('button',name='Images et correctifs',exact=True).click()
+                page.get_by_role('button',name='Correctifs Windows',exact=True).click()
+                expect(page.locator('#windows-kb-jobs')).to_contain_text('KB5127648')
+                expect(page.locator('#windows-kb-jobs')).to_contain_text('Correctif <fixture>')
+                assert page.locator('#windows-kb-jobs fixture').count()==0
+                page.get_by_text('Historique des anciennes préparations WIM',exact=True).click()
                 expect(page.locator('#windows-maintenance-runs')).to_contain_text('Candidate à tester')
                 page.locator('#windows-maintenance-runs summary').click()
                 expect(page.locator('#windows-maintenance-runs')).to_contain_text('KB5127648')
@@ -88,14 +97,14 @@ def run():
                 assert json.loads(Path(download.value.path()).read_text())['run_id']==RUN
                 assert 'PRIVATE' not in Path(download.value.path()).read_text()
                 def catalog(route):
-                    (public/'catalog-check.json').write_text(json.dumps({'status':'completed','checked_at':'2026-10-21T12:00:00Z',
-                        'contexts':[{'family':'11','release':'26H2','architecture':'x64','dotnet':'4.8.1','compared_run':RUN,
-                            'groups':[{'kb':'KB5128000','title':'Fixture new cumulative','published':'2026-10-21','new':True}]}]}))
-                    route.fulfill(status=202,content_type='application/json',body='{"accepted":true}')
-                page.route('**/api/maintenance/windows/check',catalog)
-                page.get_by_role('button',name='Vérifier les nouveaux correctifs',exact=True).click()
-                expect(page.locator('#windows-maintenance-catalog')).to_contain_text('KB5128000')
-                expect(page.locator('#windows-maintenance-catalog')).to_contain_text('Nouveau correctif')
+                    kb_manifest['groups'][0]['kb']='KB5128000'
+                    with sqlite3.connect(data/'deployment.sqlite3') as con:
+                        con.execute('UPDATE windows_kb_jobs SET manifest_json=? WHERE id=?',(json.dumps(kb_manifest),kb_job))
+                    route.fulfill(status=200,content_type='application/json',body='{"jobs":[]}')
+                page.route('**/api/maintenance/windows/kb/refresh',catalog)
+                page.get_by_role('button',name='Rechercher et télécharger les KB',exact=True).click()
+                expect(page.locator('#windows-kb-jobs')).to_contain_text('KB5128000')
+                page.get_by_text('Historique des anciennes préparations WIM',exact=True).click()
                 page.screenshot(path='/tmp/atelier-maintenance-windows.png',full_page=True)
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth'),page.evaluate("[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+1).slice(0,15).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right}))")

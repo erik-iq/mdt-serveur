@@ -102,7 +102,7 @@ class Maintenance:
                 volumes.append({'root':root,'total':usage.total,'used':usage.used,'free':usage.free})
             except OSError: pass
         categories = []
-        for name, folder in [('Pilotes HP','hp-repository'),('Images et fichiers','artifacts'),('Inventaires','inventaires')]:
+        for name, folder in [('Pilotes HP','hp-repository'),('Images et fichiers','artifacts'),('Inventaires','inventaires'),('Correctifs Windows des postes','windows-kb')]:
             categories.append({'name':name, **footprint(self.data, self.data / folder)})
         try:
             private = read_json(self.data, self.public / 'status.json')

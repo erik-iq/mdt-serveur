@@ -10,7 +10,7 @@
     <button class="nav" data-page="machines"><span>02</span> Parc machines</button>
     <button class="nav" data-page="profiles"><span>03</span> Profils Windows</button>
     <button class="nav" data-page="hp-maintenance"><span aria-hidden="true">04</span> HPIA et pilotes</button>
-    <button class="nav" data-page="windows-maintenance"><span aria-hidden="true">05</span> Images et correctifs</button>
+    <button class="nav" data-page="windows-maintenance"><span aria-hidden="true">05</span> Correctifs Windows</button>
   </nav>
   <div class="sidebar-note"><span class="dot"></span> Préparation en arrière-plan<p>UEFI | WinPE x64 | WDS</p></div>
   <div class="sidebar-footer"><span>IQ ATELIER / 4</span><button id="logout">Déconnexion </button></div>
@@ -50,11 +50,15 @@
       <div class="section-title"><h2>Historique des synchronisations</h2></div><div id="hp-maintenance-history"></div>
     </section>
     <section id="page-windows-maintenance" class="page" hidden>
-      <div class="heading"><div><div class="eyebrow">MAINTENANCE DES IMAGES</div><h1>Images et correctifs Windows</h1><p>Suivez les KB, l’export Famille/Pro, les étapes DISM et les candidats à tester. La consultation et la recherche du catalogue ne modifient aucune image.</p></div><div class="actions"><button id="windows-maintenance-reload" class="button secondary">Actualiser la page</button><button id="windows-maintenance-check" class="button primary">Vérifier les nouveaux correctifs</button></div></div>
+      <div class="heading"><div><div class="eyebrow">MISES À JOUR DES POSTES</div><h1>Correctifs Windows</h1><p>Téléchargez les correctifs Microsoft sur .250. Les postes les installent silencieusement pendant leur préparation Windows, avec reprise après redémarrage.</p></div><div class="actions"><button id="windows-maintenance-reload" class="button secondary">Actualiser la page</button><button id="windows-maintenance-check" class="button primary">Rechercher et télécharger les KB</button></div></div>
       <p id="windows-maintenance-message" role="status"></p>
+      <div class="panel padding"><h2>Dépôt de correctifs sur .250</h2><p><a href="/static/windows-kb.html" target="_blank" rel="noopener">Mode d’emploi des correctifs</a></p><p>Correctifs cumulatifs Windows, .NET et prérequis renvoyés par Microsoft. Aucune analyse Windows Update sur le poste. Les mises à jour facultatives, les changements de version et le Microsoft Store sont exclus.</p><p>Le cache est actualisé chaque jour à 02:00. Une nouvelle version rencontrée pendant un déploiement prépare automatiquement ses paquets.</p></div>
+      <div id="windows-kb-jobs" class="maintenance-list"></div>
+      <details class="panel padding"><summary>Préparer une version exacte de Windows</summary><form id="windows-kb-context"><label>Famille<select name="family"><option value="11">Windows 11</option><option value="10">Windows 10</option></select></label><label>Version<input name="release" placeholder="26H2" pattern="[0-9]{2}H[12]" required></label><label>Build principal<input name="build" type="number" min="19041" max="99999" placeholder="26300" required></label><label>Architecture<select name="architecture"><option value="x64">x64</option><option value="arm64">ARM64</option></select></label><label>.NET<select name="dotnet"><option value="4.8.1">4.8.1</option><option value="4.8">4.8</option><option value="none">Absent</option></select></label><button type="submit" class="button secondary">Préparer les KB de cette version</button></form></details>
+      <details class="panel padding"><summary>Historique des anciennes préparations WIM</summary><p>Ce parcours reste consultable. La préparation des nouveaux postes utilise le cache KB et ne dépend pas d’un WIM corrigé.</p>
       <div class="section-title"><h2>Planification et images utilisées</h2></div><div id="windows-maintenance-source" class="panel padding"></div>
       <div class="section-title"><h2>Dernière recherche des correctifs Microsoft</h2></div><div id="windows-maintenance-catalog" class="panel padding"></div>
-      <div class="section-title"><h2>Préparations, progression et validation</h2><a href="/static/windows-image-maintenance.html" target="_blank" rel="noopener">Mode d’emploi</a></div><div id="windows-maintenance-runs" class="maintenance-list"></div>
+      <div class="section-title"><h2>Préparations, progression et validation</h2><a href="/static/windows-image-maintenance.html" target="_blank" rel="noopener">Mode d’emploi</a></div><div id="windows-maintenance-runs" class="maintenance-list"></div></details>
     </section>
   </main><footer>Atelier PXE <span>Infrastructure locale | Déploiements supervisés</span></footer>
 </div>

@@ -2,6 +2,12 @@
 
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a été adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise à jour.
 
+## IQ-5.7 : correctifs Windows depuis .250
+
+La préparation utilise désormais le cache KB du serveur : téléchargement Microsoft sur .250, copie HTTPS sur le poste, installation silencieuse dans Windows et reprise après redémarrage. La recherche Windows Update qui restait bloquée n’est pas réactivée. La nouvelle page Correctifs Windows permet de préparer les nouvelles KB et d’en suivre la disponibilité. La planification de maintenance WIM est remplacée par une actualisation quotidienne du cache à 02:00. Reconstruire WinPE pour les prochains déploiements.
+
+Consulter [le guide des correctifs Windows](CORRECTIFS-WINDOWS.md) pour les fichiers, les contrôles et les limites. Les résultats HPIA, les logiciels sélectionnés et l’archivage confirmé avant nettoyage restent intégrés au même parcours.
+
 ## IQ-5.6 : fin automatique et bilan après redémarrage
 
 Après les installations réussies, Atelier enregistre le démarrage courant et redémarre Windows après un délai de 60 secondes. La tâche SYSTEM reprend au démarrage suivant, contrôle à nouveau les logiciels sélectionnés dans Windows et consomme les demandes de redémarrage des pilotes. Les résultats HP natifs et leurs codes restent conservés. Aucun logiciel n’est réinstallé pour ce contrôle. Une erreur reste visible et ne devient jamais un succès par simple redémarrage.

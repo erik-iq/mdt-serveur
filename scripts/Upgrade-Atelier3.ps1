@@ -20,6 +20,7 @@ $backup=Join-Path $env:ProgramData ('AtelierPXE\backups\atelier4-' + [guid]::New
 & (Join-Path $PSScriptRoot 'Update-Console.ps1') -SourcePath $source -InstallPath $InstallPath -BackupPath $backup
 & (Join-Path $InstallPath 'scripts\Enable-Atelier3.ps1') -InstallPath $InstallPath
 & (Join-Path $InstallPath 'scripts\Enable-HPRepository.ps1') -InstallPath $InstallPath
+& (Join-Path $InstallPath 'scripts\Windows-KBRepository.ps1') -InstallPath $InstallPath -RunNow
 & (Join-Path $InstallPath 'scripts\Set-AtelierDefaults.ps1') -InstallPath $InstallPath
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json

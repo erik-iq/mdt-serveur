@@ -106,6 +106,12 @@ if ($maintenance.store.status -eq 'requested') { $warnings.Add('Microsoft Store 
 foreach ($manualUpdate in @(@{name='Windows Update';value=$maintenance.windows},@{name='Microsoft Store';value=$maintenance.store})) {
     if ($manualUpdate.value.status -eq 'manual') { $steps.Add(@{name=$manualUpdate.name;status='manual';message=[string]$manualUpdate.value.message;timestamp=[string]$maintenance.timestamp}) }
 }
+if ($maintenance.windows.source -eq 'server_250') {
+    foreach ($entry in @($maintenance.windows.entries)) {
+        if ($entry) { $steps.Add(@{name=('Correctif Windows '+$entry.kb);status=[string]$entry.status;message=([string]$entry.title+' / Code '+[string]$entry.exit_code);timestamp=[string]$maintenance.windows.timestamp}) }
+    }
+    if ($maintenance.windows.status -ne 'completed') { $warnings.Add(('Correctifs Windows : '+[string]$maintenance.windows.message)) }
+}
 $hp=if ($maintenance.hpia) { $maintenance.hpia } else { Read-ReportJson (Join-Path $DataPath 'hpia-result.json') }
 if ($hp) {
     foreach ($pass in @($hp.history)) {
@@ -147,7 +153,7 @@ if ($warranty) {
     } else { $warnings.Add('Garantie constructeur non vérifiée.') }
 }
 if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en échec ; consulter software-logs et les étapes du rapport.') }
-$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($software -and $software.status -ne 'completed') { 'needs_attention' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
+$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($software -and $software.status -ne 'completed') { 'needs_attention' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.windows.source -eq 'server_250' -and $maintenance.windows.status -ne 'completed') { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 $timingDirectory=Join-Path $DataPath 'timings'
 if (Test-Path $timingDirectory) {

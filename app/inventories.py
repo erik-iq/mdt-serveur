@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MAX_INVENTORY = 32 * 1024 * 1024
 MAX_DIAGNOSTICS = 8 * 1024 * 1024
-DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
+DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','windows-kb-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
 HP_SUMMARY = 'Rapport-Installation-HP.html'
 INVENTORY_FILENAMES = {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip','hp_summary':HP_SUMMARY}
 
@@ -75,7 +75,7 @@ def validate_diagnostics(payload):
             names=set()
             for entry in entries:
                 name=entry.filename
-                allowed=name in DIAGNOSTIC_NAMES or re.fullmatch(r'software-logs/(?:vlc|reader|chrome|anydesk|hpia|lenovo_system_update|winget-preparation)\.log',name) or re.fullmatch(r'timings/[a-z0-9_-]{1,80}\.json',name)
+                allowed=name in DIAGNOSTIC_NAMES or re.fullmatch(r'kb-KB[0-9]{6,9}\.log',name) or re.fullmatch(r'software-logs/(?:vlc|reader|chrome|anydesk|hpia|lenovo_system_update|winget-preparation)\.log',name) or re.fullmatch(r'timings/[a-z0-9_-]{1,80}\.json',name)
                 if not allowed or name in names or entry.flag_bits & 1 or (entry.external_attr>>16)&0o170000==0o120000 or entry.file_size>4*1024*1024:
                     raise ValueError('Entrée archive non autorisée')
                 names.add(name)

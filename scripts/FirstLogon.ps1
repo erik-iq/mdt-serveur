@@ -26,7 +26,7 @@ function Set-Progress([string]$Status,[int]$Percent,[string]$Message) {
 function Start-Maintenance {
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $action = New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Maintenance.ps1') + '"')
-    $triggers = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(30) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 14)))
+    $triggers = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(30) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 14)))
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Action $action -Trigger $triggers -Principal $principal -Settings $taskSettings -Force | Out-Null
@@ -36,7 +36,7 @@ function Start-Maintenance {
     # Les anciens postes utilisaient une tâche interactive pour ouvrir HPIA après maintenance.
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
     $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installés ou non vérifiés : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels vérifiés : '+$script:softwareSummary.verified+'.' }
-    Set-Progress 'running' 75 ($detail+' Finalisation et rapport en arrière-plan ; mises à jour Windows / Store manuelles.')
+    Set-Progress 'running' 75 ($detail+' Finalisation et correctifs Windows en arrière-plan.')
     # Cette copie IQ survit au nettoyage et affiche le bilan après reconnexion.
     $uiRoot=Join-Path $ToolsPath 'Rapports\Preparation'
     New-Item -ItemType Directory -Path $uiRoot -Force | Out-Null

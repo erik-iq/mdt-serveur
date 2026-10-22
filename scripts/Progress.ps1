@@ -74,7 +74,7 @@ $timer.Add_Tick({
             else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.detail.percent));$note.Text += ' Avancement de cette étape : ' + $state.detail.percent + ' %.' }
         } else { $bar.Style='Continuous';$bar.Value=[math]::Max(0,[math]::Min(100,[int]$state.progress)) }
         if ($state.message -ne $script:lastMessage) { $details.AppendText((Get-Date -Format 'HH:mm:ss') + ' ' + $state.message + "`r`n");$script:lastMessage=$state.message }
-        if ($state.status -eq 'completed') { $title.Text='Préparation terminée';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. Windows Update et Microsoft Store : à lancer manuellement.'; $timer.Stop(); Complete-AtelierProgressWindow }
+        if ($state.status -eq 'completed') { $title.Text='Préparation terminée';$note.Text='Rapport : C:\IQ_\Rapports\Rapport-Deploiement.pdf. Consultez le bilan des installations.'; $timer.Stop(); Complete-AtelierProgressWindow }
         elseif ($state.status -in @('failed','needs_attention')) { $title.Text='Préparation à vérifier'; $timer.Stop(); Complete-AtelierProgressWindow }
     } catch { $message.Text='En attente de la prochaine étape...' }
 })

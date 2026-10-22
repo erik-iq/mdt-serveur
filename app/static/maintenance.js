@@ -43,7 +43,7 @@ function renderWindowsMaintenance(value){
   const worker=value.worker;
   $('windows-maintenance-source').innerHTML=`<h3>Tâche serveur : ${esc(maintenanceLabel(worker.task_state))}</h3><p>Dernière mesure : ${maintenanceDate(worker.generated_at)} | Dernier lancement : ${maintenanceDate(worker.last_run)} | Résultat : ${esc(worker.last_result??'Non transmis')}</p><p>La planification configurée par Atelier est mensuelle, le 15 à 02:00 (heure du serveur). Une tâche en pause reste en pause. Les données sont publiées par l’agent serveur ; une ancienne mesure ne prouve pas une activité actuelle.</p>${value.images.map(i=>`<p><strong>${esc(i.filename)}</strong> - ${maintenanceBytes(i.size)}<br><span class="hash">SHA-256 ${esc(i.sha256)}</span></p>`).join('')||'<p>Aucun WIM utilisé par un profil Famille ou Pro.</p>'}`;
   const check=value.catalog_check;
-  $('windows-maintenance-check').disabled=check.status==='running';
+  // Le bouton principal prépare désormais le cache KB.
   $('windows-maintenance-catalog').innerHTML=`<p>${esc(maintenanceLabel(check.status))} | ${maintenanceDate(check.checked_at)}</p>${check.message?`<p class="form-error">${esc(check.message)}</p>`:''}${check.contexts.map(c=>`<h3>Windows ${esc(c.family)} ${esc(c.release)} ${esc(c.architecture)}${c.dotnet?' - .NET '+esc(c.dotnet):''}</h3><p>Comparé au passage ${esc(c.compared_run)}. Ce contrôle ne certifie pas que la KB est publiée en production.</p>${c.groups.map(g=>`<p><b>${esc(g.kb)}</b> ${g.new?'<span class="badge queued">Nouveau correctif</span>':'<span class="badge">Déjà observé</span>'} ${esc(g.title)}<br>Publication Microsoft : ${esc(g.published)}${g.target_build?' | Build '+esc(g.target_build):''}</p>`).join('')}`).join('')}${!check.contexts.length?'<p>Les versions détectées dans une préparation WIM sont nécessaires pour rechercher les correctifs compatibles. Aucun téléchargement MSU ni DISM n’est lancé par ce bouton.</p>':''}`;
   maintenanceReplace('windows-maintenance-runs',value.reports.map(r=>`<article class="panel padding maintenance-card"><div class="section-title"><div><h3>${esc(r.source_path?.split(/[\\/]/).pop()||r.run_id)}</h3><p>Exécution ${esc(r.run_id)} | ${maintenanceDate(r.started_at)}</p></div><span class="badge ${esc(r.status)}">${esc(maintenanceLabel(r.status))}</span></div><h3>${esc(servicingStage(r.active_stage))}${r.active_index?' - index '+esc(r.active_index):''}</h3><p>Dernière information : ${maintenanceDate(r.updated_at||r.finished_at||r.started_at)}. ${esc(r.progress_text||'')}</p>${r.error?`<p class="form-error">${esc(r.error)}</p>`:''}<p>${r.layout==='home_pro_fast_v1'?'WIM réduit Famille/Pro | compression fast':'Ancienne préparation - image non réduite'} | Validation : ${esc(r.validation?maintenanceLabel(r.validation.status):'Non enregistrée pour test')}</p><div class="actions"><button class="button secondary" data-inventory-file="${esc(r.download_url)}" data-filename="maintenance-${esc(r.run_id)}.json">Télécharger le rapport JSON</button>${r.status==='ready_for_test'&&!r.validation&&r.candidate_file?.present!==false?`<button class="button secondary" data-maint-command="${esc(r.register_test_command)}">Copier la commande de mise en test</button>`:''}</div><details data-maint-key="wim-${esc(r.run_id)}"><summary>Éditions, correctifs et durées détaillées</summary><div class="table-wrap"><table><thead><tr><th>ÉDITION</th><th>INDEX SOURCE &rarr; CANDIDAT</th><th>CORRECTIFS INTÉGRÉS</th></tr></thead><tbody>${r.indexes.map(i=>`<tr><td>${esc(i.name||i.edition)}</td><td>${esc(i.source_index??i.index)} &rarr; ${esc(i.index)}</td><td>${i.updates.map(g=>`${esc(g.kb)} (${esc(g.exit_code)})<small>${esc(g.title)}</small>`).join('')}</td></tr>`).join('')}</tbody></table></div><h3>Durées mesurées par étape</h3>${r.timings.length?`<div class="table-wrap"><table><thead><tr><th>ÉTAPE</th><th>INDEX</th><th>DURÉE</th><th>ÉTAT</th></tr></thead><tbody>${r.timings.map(t=>`<tr><td>${esc(servicingStage(t.stage))}</td><td>${esc(t.index||'-')}</td><td>${maintenanceDuration(t.duration_seconds)}</td><td>${badge(t.status)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Cette ancienne exécution ne mesure pas les étapes.</p>'}<p>Candidate : ${esc(r.candidate_path)}${r.candidate_file?' | '+(r.candidate_file.present?maintenanceBytes(r.candidate_file.size):'Fichier absent'):''}<br>Sauvegarde : ${esc(r.backup_path)}</p><p>La production est conservée tant que les déploiements de test requis ne sont pas terminés avec succès.</p></details></article>`).join('')||'<div class="panel padding"><p>Aucune préparation publiée dans le suivi. Le prochain passage de l’agent transmettra les rapports existants.</p></div>');
 }
@@ -55,7 +55,7 @@ async function loadMaintenance(page,fresh=false){
   const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
   try{
     const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
-    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);message.textContent='Suivi actualisé. Les données privées de montage ne sont pas exposées par le site.';}
+    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();message.textContent='Dépôt KB actualisé. Les correctifs prêts seront utilisés pendant la préparation Windows.';}
   }catch(error){message.textContent=error.message;}
   finally{maintenanceLoading=false;}
 }
@@ -80,10 +80,20 @@ $('hp-maintenance-sync').addEventListener('click',async()=>{
 });
 $('windows-maintenance-check').addEventListener('click',async()=>{
   const button=$('windows-maintenance-check');button.disabled=true;
-  try{await api('/maintenance/windows/check','POST',{});await loadMaintenance('windows-maintenance');}
-  catch(error){$('windows-maintenance-message').textContent=error.message;button.disabled=false;}
+  try{await api('/maintenance/windows/kb/refresh','POST',{});await loadWindowsKb();}
+  catch(error){$('windows-maintenance-message').textContent=error.message;}finally{button.disabled=false;}
 });
 setInterval(()=>{
   if(document.hidden)return;
   for(const page of ['overview','hp-maintenance','windows-maintenance'])if(!$('page-'+page).hidden)loadMaintenance(page);
 },15000);
+
+async function loadWindowsKb(){
+  const value=await api('/maintenance/windows/kb');
+  maintenanceReplace('windows-kb-jobs',value.jobs.map(job=>`<article class="panel padding maintenance-card"><div class="section-title"><h3>Windows ${esc(job.context.family)} ${esc(job.context.release)} ${esc(job.context.architecture)} | .NET ${esc(job.context.dotnet)}</h3>${badge(job.status==='ready'?'completed':job.status)}</div><p>${esc(job.message)}</p><p>Actualisé : ${maintenanceDate(job.updated_at)}</p>${job.groups.map(group=>`<h3>${esc(group.kb)} : ${esc(group.title)}</h3><p>${group.target_build?'Build cible : '+esc(group.target_build):''}</p><div class="table-wrap"><table><thead><tr><th>FICHIER STOCKÉ SUR .250</th><th>TAILLE</th><th>SHA-256</th></tr></thead><tbody>${group.files.map(file=>`<tr><td>${esc(file.filename)}</td><td>${maintenanceBytes(file.size)}</td><td class="hash">${esc(file.sha256)}</td></tr>`).join('')}</tbody></table></div>`).join('')}</article>`).join('')||'<div class="panel padding"><p>Aucun cache préparé. Lancez la recherche des versions connues ; le premier poste peut aussi transmettre automatiquement sa version exacte.</p></div>');
+}
+$('windows-kb-context').addEventListener('submit',async event=>{
+  event.preventDefault();const body=Object.fromEntries(new FormData(event.target));body.build=Number(body.build);
+  try{await api('/maintenance/windows/kb/prepare','POST',body);await loadWindowsKb();$('windows-maintenance-message').textContent='Préparation des KB demandée sur .250.';}
+  catch(error){$('windows-maintenance-message').textContent=error.message;}
+});
