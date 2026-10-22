@@ -105,4 +105,4 @@ try {
 Start-ScheduledTask -TaskName 'AtelierPXE-Preparation'
 Write-Host 'Préparation relancée : Windows Update en premier, puis logiciels et HPIA. Les redémarrages nécessaires sont automatiques.' -ForegroundColor Green
 Write-Host 'Le bilan est affiché dans la fenêtre Préparation du poste et conservé dans C:\IQ_\Rapports.'
-Write-Host 'Le site peut conserver l’ancien échec : son état final ne sera pas réinitialisé par cette réparation locale.'
+Write-Host "Le site peut conserver l’ancien échec : son état final ne sera pas réinitialisé par cette réparation locale."
