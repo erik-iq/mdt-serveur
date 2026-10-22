@@ -26,6 +26,7 @@ from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
 from app.hp_repository import HpRepository
+from app.maintenance import Maintenance
 from app.identity import normalize_serial, migrate_identity, public_machine, insert_machine, match_machine
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -220,7 +221,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     static_root = ROOT / 'app' / 'static'
     index_html = (static_root / 'index.html').read_text(encoding='utf-8')
     ui_assets = {}
-    for filename in ('style.css', 'app.js', 'brand-logo.png'):
+    for filename in ('style.css', 'app.js', 'maintenance.js', 'brand-logo.png'):
         version = file_hash(static_root / filename)[:16]
         original = '/static/' + filename
         ui_assets[filename] = original + '?v=' + version
@@ -388,7 +389,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.4.3"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-5.5"}
 
     @api.get('/api/session')
     def session_options():
@@ -801,6 +802,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
 
     inventories.routes(api, windows_agent, admin, now)
     hp_repository.routes(api, windows_agent, admin)
+    Maintenance(data, db, hp_repository).routes(api, admin)
     computer_routes(api, db, admin, windows_agent, now)
 
     @api.post('/api/windows/{identifier}/progress')

@@ -12,7 +12,7 @@ PWSH = os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark = pytest.mark.skipif(not PWSH, reason='PowerShell required')
 
 
-@pytest.mark.parametrize('case', ['success', 'single_cim', 'unquoted_cim', 'already_stopped', 'discard_failure', 'foreign_mount',
+@pytest.mark.parametrize('case', ['success', 'single_cim', 'unquoted_cim', 'export_cim', 'auto', 'auto_idle', 'already_stopped', 'discard_failure', 'foreign_mount',
     'foreign_task', 'wrong_candidate', 'wrong_run', 'no_matching_dism', 'ready_candidate', 'pid_reused', 'lock_busy'])
 def test_cancel_protects_production_and_targets_only_candidate(tmp_path, case):
     scripts = tmp_path / 'scripts'
@@ -45,13 +45,13 @@ def test_cancel_protects_production_and_targets_only_candidate(tmp_path, case):
 $ErrorActionPreference='Stop'
 $global:cancelStopped=$false;$global:cancelDisabled=$false;$global:cancelUnmounted=$false
 $global:cancelKilled=New-Object Collections.Generic.List[int]
-$global:cancelActive='CASE' -notin @('already_stopped','no_matching_dism')
-$global:cancelMounted=$true
+$global:cancelActive='CASE' -notin @('already_stopped','no_matching_dism','auto_idle')
+$global:cancelMounted='CASE' -notin @('export_cim','auto_idle')
 function Get-ScheduledTask {
  [CmdletBinding()]param($TaskName)
  $script=Join-Path 'CONSOLE' 'scripts\Update-WindowsImage.ps1'
  if ('CASE' -eq 'foreign_task') { $script='unrelated.ps1' }
- [pscustomobject]@{State=$(if ('CASE' -eq 'already_stopped' -or $global:cancelStopped){'Ready'}else{'Running'});Actions=@([pscustomobject]@{Arguments=('-File "'+$script+'"')})}
+ [pscustomobject]@{State=$(if ('CASE' -in @('already_stopped','auto_idle') -or $global:cancelStopped){'Ready'}else{'Running'});Actions=@([pscustomobject]@{Arguments=('-File "'+$script+'"')})}
 }
 function Disable-ScheduledTask { [CmdletBinding()]param($TaskName);$global:cancelDisabled=$true }
 function Stop-ScheduledTask { [CmdletBinding()]param($TaskName);$global:cancelStopped=$true }
@@ -61,6 +61,7 @@ function Get-CimInstance {
  # PS 5.1 CIM adapters do not expose the scalar .Count used by PSCustomObject.
  if ('CASE' -in @('single_cim','unquoted_cim')) { $process | Add-Member NoteProperty Count $null }
  if ('CASE' -eq 'unquoted_cim') { $process.CommandLine=$process.CommandLine.Replace('"MOUNT"','MOUNT') }
+ if ('CASE' -eq 'export_cim') { $process.CommandLine='dism.exe /Export-Image /SourceImageFile:"SOURCE" /DestinationImageFile:"CANDIDATE" /Compress:fast' }
  if ($Filter -like 'ProcessId=*') {
   if ('CASE' -eq 'pid_reused') { $process.CreationDate='new owner';$process.CommandLine='unrelated command' }
   return $process
@@ -84,7 +85,10 @@ function Start-Sleep { param($Milliseconds);if ('CASE' -eq 'pid_reused') { throw
 $lock=$null
 if ('CASE' -eq 'lock_busy') { $lock=[IO.File]::Open('LOCK',[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None) }
 $failed=$false;$message=''
-try { & 'SCRIPTS/Stop-WindowsImageMaintenance.ps1' -InstallPath 'CONSOLE' -RunId '20261021-103851-f52d8739' }
+try {
+ if ('CASE' -in @('auto','auto_idle')) { & 'SCRIPTS/Stop-WindowsImageMaintenance.ps1' -InstallPath 'CONSOLE' -IfActive }
+ else { & 'SCRIPTS/Stop-WindowsImageMaintenance.ps1' -InstallPath 'CONSOLE' -RunId '20261021-103851-f52d8739' }
+}
 catch { $failed=$true;$message=$_.Exception.Message }
 finally { if ($lock) { $lock.Dispose() } }
 @{failed=$failed;message=$message;disabled=$global:cancelDisabled;stopped=$global:cancelStopped;unmounted=$global:cancelUnmounted;killed=@($global:cancelKilled.ToArray())} | ConvertTo-Json -Compress
@@ -94,16 +98,17 @@ finally { if ($lock) { $lock.Dispose() } }
     result = subprocess.run([PWSH, '-NoProfile', '-File', str(wrapper)], capture_output=True, text=True, timeout=45)
     assert result.returncode == 0, result.stdout + result.stderr
     state = json.loads(result.stdout.splitlines()[-1])
-    assert state['failed'] == (case not in {'success', 'single_cim', 'unquoted_cim', 'already_stopped'}), state
+    successes = {'success', 'single_cim', 'unquoted_cim', 'export_cim', 'already_stopped', 'auto', 'auto_idle'}
+    assert state['failed'] == (case not in successes), state
     assert source.read_bytes() == backup.read_bytes() == b'production unchanged'
     assert candidate.read_bytes() == b'disposable candidate'
     assert 702 not in state['killed']
-    if case in {'foreign_mount', 'foreign_task', 'wrong_candidate', 'wrong_run', 'no_matching_dism', 'ready_candidate'}:
+    if case in {'foreign_mount', 'foreign_task', 'wrong_candidate', 'wrong_run', 'no_matching_dism', 'ready_candidate', 'auto_idle'}:
         assert not state['disabled'] and not state['stopped'] and not state['killed'] and not state['unmounted']
-    if case in {'success', 'single_cim', 'unquoted_cim', 'discard_failure'}:
+    if case in {'success', 'single_cim', 'unquoted_cim', 'export_cim', 'discard_failure', 'auto'}:
         assert state['disabled'] and state['stopped'] and state['killed'] == [701]
-    if case in {'success', 'single_cim', 'unquoted_cim', 'already_stopped'}:
-        assert state['unmounted']
+    if case in successes - {'auto_idle'}:
+        assert state['unmounted'] == (case != 'export_cim')
         assert json.loads((run / 'report.json').read_text())['status'] == 'cancelled'
     elif case in {'discard_failure', 'pid_reused'}:
         assert json.loads((run / 'report.json').read_text())['status'] == 'cancelled_cleanup_required'

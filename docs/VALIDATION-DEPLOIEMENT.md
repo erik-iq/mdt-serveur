@@ -2,6 +2,14 @@
 
 Le suivi Image appliquee confirme seulement la preparation du disque. Un resultat WinGet confirme la presence des applications, pas la mise a jour des pilotes par HPIA. Un code HPIA zero avec seulement Analyze Action List ne prouve aucune installation de SoftPaq. La validation combine les rapports, une analyse recente apres redemarrage et les essais du technicien.
 
+## Livraison IQ-5.5 - suivi serveur et maintenance reduite
+
+Les pages HPIA et pilotes et Images et correctifs sont testees dans un navigateur de bureau et a 390 pixels : recherche, metadonnees CVA, stockage, erreurs, nouveaux correctifs et telechargement JSON. Les textes issus des postes et des CVA sont echappes. Les endpoints demandent l autorisation administrateur et n exposent pas les cles des agents ou les fichiers de configuration. La recherche du catalogue est bornee a un budget reseau de 90 secondes sur le site et reste distincte d une installation.
+
+Les tests de maintenance simulent un WIM multi-edition puis verifient les exports fast de Core/Professional, le changement d index, la conservation de l original, le refus des erreurs DISM et des paquets modifies. Un candidat intact avec les memes KB est reutilise ; une source deja preparee ne relance pas DISM ; une nouvelle selection, une candidate modifiee ou un rapport annule provoquent une nouvelle preparation. Une candidate annulee ne peut jamais etre mise en test ni publiee. La publication transactionnelle modifie l asset et l index Famille/Pro apres les tests requis ; les profils des autres editions sont conserves.
+
+Le suivi web est une copie de metadonnees hors des dossiers de montage. Un echec de ce miroir ne fait pas echouer le rapport prive ni le traitement WIM. La liberation apres annulation et les chronometrages reels restent a confirmer sur Windows/.250 : aucun DISM Windows ni deploiement physique n a ete execute depuis l environnement de developpement. La revision ne promet pas de transformer le disque de la VM en SSD ni de garantir une premiere integration en quelques minutes.
+
 ## Fichiers a reunir sur .250
 
 Depuis Activite de deploiement, ouvrir la fiche du poste puis Dossier inventaire. Sur le serveur, les fichiers sont dans `D:\AtelierPXE\data\inventaires\NOM-DU-PC\ID-DEPLOIEMENT` (adapter le data_dir si different). Compresser ce dossier permet de reunir :

@@ -8,6 +8,10 @@ Après activation explicite du [mode interne](MODE-INTERNE.md), les routes admin
 |---|---|
 | GET `/health` | Disponibilité de l’API et de SQLite, sans readiness PXE |
 | GET `/api/session` | Mode de connexion de la console et préparation automatique, sans secret |
+| GET `/api/maintenance/hp` | Modeles, plateformes, SoftPaq des dernieres archives, versions CVA, demandes manquantes, historique et stockage ; `?fresh=true` invalide le cache de la vue |
+| GET `/api/maintenance/windows` | Miroir des rapports WIM, etapes, durees, candidats et stockage ; aucun acces aux montages prives |
+| POST `/api/maintenance/windows/check` | Recherche du catalogue en arriere-plan, versions detectees uniquement ; aucun MSU telecharge ni DISM execute ; 202 ou 409 si deja en cours |
+| GET `/api/maintenance/windows/runs/{run_id}/report` | Rapport JSON filtre en piece jointe, autorisation administrateur ; aucun fichier arbitraire |
 | GET `/api/state` | Machines, fichiers, profils/settings, applications, bundles, options de personnalisation et 100 derniers déploiements, sans secrets |
 | POST `/api/machines` | `{hostname, serial_number, mac?, description} ; MAC seule encore acceptee pour les anciens clients` |
 | POST `/api/assets` | `{filename, kind}` pour un fichier local déjà présent ; calcule SHA-256 |

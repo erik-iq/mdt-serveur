@@ -63,6 +63,28 @@ def test_latest_stable_and_matching_net_framework_only():
         catalog.select_update([row(), row(id='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', title=TITLE.replace('KB5127648', 'KB5111111'))], '11', '26H2', 'x64', 'os', today=TODAY)
 
 
+def test_selection_only_never_downloads_payload_or_creates_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(catalog, 'search', lambda *args: [row()])
+    class NoDownload:
+        def open(self, *args, **kwargs):
+            raise AssertionError('Selection must not request a download dialog or a payload')
+    plan = catalog.select_plan('11', '26H2', 'x64', '', NoDownload())
+    assert plan['groups'][0]['id'] == ID
+    assert 'files' not in plan['groups'][0] and not list(tmp_path.iterdir())
+
+
+def test_metadata_deadline_stops_new_requests_and_clamps_socket_timeout(monkeypatch):
+    clock=[10.0];monkeypatch.setattr(catalog.time,'monotonic',lambda:clock[0])
+    seen=[]
+    class Opener:
+        def open(self,request,timeout): seen.append(timeout);return 'fixture response'
+    opener=catalog.DeadlineOpener(Opener(),3)
+    assert opener.open('fixture',90)=='fixture response' and seen==[3]
+    clock[0]=14
+    with pytest.raises(TimeoutError,match='Delai maximal'):
+        opener.open('fixture',90)
+
+
 @pytest.mark.parametrize('url', ['https://evil.test/a.msu', 'https://download.windowsupdate.com.evil.test/a.msu',
     'https://user:pass@download.windowsupdate.com/a.msu', 'https://download.windowsupdate.com:8443/a.msu',
     'https://download.windowsupdate.com/no-hash.msu', 'https://download.windowsupdate.com/a_'+'a'*40+'.exe'])

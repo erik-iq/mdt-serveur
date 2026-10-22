@@ -45,7 +45,13 @@ try {
         try {
             Write-Host ('Preparation de '+$source.filename)
             $report=New-AtelierServicedWindowsImage -ImagePath $source.path -ExpectedHash $source.sha256 -WorkRoot $root -PythonPath $runtime -SourceAssetId $source.id
-            Write-Host ('Image candidate prete. Rapport : '+(Join-Path (Split-Path $report.candidate_path -Parent) 'report.json')) -ForegroundColor Green
+            if ($report.status -eq 'up_to_date') {
+                Write-Host ('Aucune nouvelle KB : image deja a jour. Aucun export, montage ou telechargement MSU. Controle : '+$report.check_seconds+' s') -ForegroundColor Green
+            } elseif ($report.reused) {
+                Write-Host ('Candidate existante verifiee et reutilisee : '+$report.report_path+'. Aucun export, montage ou telechargement MSU. Controle : '+$report.check_seconds+' s') -ForegroundColor Green
+            } else {
+                Write-Host ('Image candidate Famille/Pro prete. Rapport : '+(Join-Path (Split-Path $report.candidate_path -Parent) 'report.json')) -ForegroundColor Green
+            }
         } catch { $failures++;Write-Warning ($source.filename+' : '+$_.Exception.Message) }
     }
     if ($failures) { throw ($failures.ToString()+' image(s) non preparee(s). Consulter '+$log) }

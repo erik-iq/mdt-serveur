@@ -8,6 +8,8 @@ $secret=(Get-Content (Join-Path $root 'worker-key') -Raw -Encoding UTF8).Trim()
 $headers=@{Authorization=('Bearer '+$secret)}
 $worker=[guid]::NewGuid().ToString()
 . (Join-Path $PSScriptRoot 'HP-Repository.ps1')
+. (Join-Path $PSScriptRoot 'Windows-ImageServicing.ps1')
+$lastServicingStatus=[DateTime]::MinValue
 $base='http://127.0.0.1:'+ $config.port +'/api/hp-repository'
 function Invoke-HpWorkerApi([string]$Path,$Body) {
     Invoke-RestMethod -Uri ($base+$Path) -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($Body|ConvertTo-Json -Depth 8))) -TimeoutSec 300
@@ -26,6 +28,10 @@ try {
     while ($true) {
         $child=$null;$job=$null
         try {
+            if (([DateTime]::UtcNow-$lastServicingStatus).TotalSeconds -ge 30) {
+                try { Publish-AtelierServicingStatus -DataRoot $config.data_dir } catch { Write-HpWorkerLog ('Lecture du suivi WIM : '+$_.Exception.Message) }
+                $lastServicingStatus=[DateTime]::UtcNow
+            }
             Import-Module HPCMSL -MinimumVersion '1.9.0' -ErrorAction Stop
             Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='ready';message='Agent CMSL pret'} | Out-Null
             $job=(Invoke-HpWorkerApi '/worker/claim' @{worker_id=$worker;state='ready'}).job
@@ -39,6 +45,10 @@ try {
                 } -ArgumentList (Join-Path $PSScriptRoot 'HP-Repository.ps1'),$config.data_dir,$job
                 $clock=[Diagnostics.Stopwatch]::StartNew()
                 while ($child.State -in @('Running','NotStarted')) {
+                    if (([DateTime]::UtcNow-$lastServicingStatus).TotalSeconds -ge 30) {
+                        try { Publish-AtelierServicingStatus -DataRoot $config.data_dir } catch { Write-HpWorkerLog ('Lecture du suivi WIM : '+$_.Exception.Message) }
+                        $lastServicingStatus=[DateTime]::UtcNow
+                    }
                     if ((Get-AtelierHpFreeSpace $root) -lt 2GB) { throw 'Synchronisation CMSL arretee : moins de 2 Go libres sur le serveur.' }
                     Invoke-HpWorkerApi '/worker/heartbeat' @{worker_id=$worker;state='busy';message=('Preparation des pilotes HP '+$job.platform+' / '+$job.os_version)} | Out-Null
                     if ($clock.Elapsed.TotalHours -ge 4) { throw 'Synchronisation CMSL interrompue apres quatre heures ; aucune archive publiee.' }

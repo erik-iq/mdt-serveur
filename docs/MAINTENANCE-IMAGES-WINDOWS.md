@@ -1,10 +1,10 @@
-# Maintenance mensuelle des images Windows - IQ-5.4
+# Maintenance mensuelle des images Windows - IQ-5.5
 
 Cette fonction prepare les mises a jour une seule fois sur DEPLOY-01 (.250), dans une copie de chaque WIM utilise par les profils de production. Les postes suivants recoivent cette image apres sa validation. Aucun correctif n est installe dans Windows Server et aucun WIM actif n est ecrase. Windows Update et Microsoft Store restent manuels sur les postes. HPIA garde son fonctionnement actuel ; cette maintenance ne corrige pas ses erreurs et ne fournit pas les pilotes propres au modele.
 
 ## Installer et lancer la premiere preparation
 
-Mettre la console a jour avec les sources IQ-5.4 et `Update-Console.ps1`. Cette fonction est uniquement serveur : aucun nouveau WinPE n est necessaire si le WinPE actuel fonctionne. Ouvrir Windows PowerShell administrateur sur .250 :
+Mettre la console a jour avec les sources IQ-5.5 et `Update-Console.ps1`. Cette fonction est uniquement serveur : aucun nouveau WinPE n est necessaire si le WinPE actuel fonctionne. Ouvrir Windows PowerShell administrateur sur .250 :
 
 ```powershell
 & 'C:\AtelierPXE\console\scripts\Enable-WindowsImageMaintenance.ps1' -RunNow
@@ -20,9 +20,25 @@ Pour preparer manuellement, sans nouvelle planification :
 & 'C:\AtelierPXE\console\scripts\Update-WindowsImage.ps1'
 ```
 
-Par defaut tous les WIM references par les profils de production sont prepares. `-AssetId 'identifiant-du-fichier'` limite une execution manuelle a une image. **Seuls Windows Famille (EditionId Core) et Windows Pro (EditionId Professional) sont maintenus.** Les numeros d index sont detectes dans le WIM : ils ne sont pas supposes etre 1 et 6. Les editions N, Single Language, Education et Pro for Workstations sont ignorees. Elles restent dans le fichier, avec leur numerotation initiale, sans integration de correctifs. Le rapport indique selected_indexes, skipped_indexes et les index effectivement termines. Un WIM sans Famille ni Pro est refuse. La sauvegarde et la copie restent celles du WIM complet ; seuls deux index au maximum dans un WIM standard sont montes et mis a jour, ce qui evite les integrations inutiles. Ce travail ne se repete pas sur chaque poste deploye.
+Les WIM utilises par les profils de production Famille/Pro sont prepares. Les anciens profils sans edition explicite restent compatibles lorsqu ils utilisent un index prepare. `-AssetId 'identifiant-du-fichier'` limite une execution manuelle a une image. **Seuls Windows Famille (EditionId Core) et Windows Pro (EditionId Professional) sont exportes dans une nouvelle candidate en compression fast.** Le WIM original complet reste conserve et sauvegarde. Les editions N, Single Language, Education et Workstations ne sont pas exportees. Un WIM sans Famille ni Pro est refuse. Fast privilegie la vitesse de compression mais peut produire un fichier plus volumineux que max.
 
-Cette restriction s applique aux nouvelles executions. Une tache deja lancee a charge l ancien code et continue son traitement ; remplacer le fichier sur disque ne change pas cette execution. La derniere transcription maintenance-*.log indique l index et la KB en cours ; le journal dism-index-N.log.console.log du meme dossier runs contient sa sortie DISM une fois la commande terminee. Les profils utilisant une edition ignoree ne peuvent pas etre publies comme mis a jour : la verification des index prepares reste obligatoire.
+Les index de la candidate sont renumerotes : par exemple Famille source 1 devient candidat 1 et Pro source 6 devient candidat 2. Le rapport schema 2 indique source_index et index dans selected_indexes et indexes, ainsi que skipped_indexes, layout=home_pro_fast_v1 et scope=home_pro. Le workflow de test/publication effectue lui-meme cette correspondance. Les profils des autres editions restent sur leur image originale.
+
+Ces changements concernent les nouvelles executions ; une tache deja lancee a charge l ancien code. La sortie DISM est maintenant transmise au journal .console.log au fil des lignes recues. Le rapport contient active_stage, active_index, updated_at, progress_text et timings : sauvegarde, export, montage, catalogue/telechargement, integration par KB, enregistrement et SHA-256. Les sorties disponibles actualisent le suivi au plus toutes les dix secondes ; une commande silencieuse ne donne pas de pourcentage invente.
+
+## Eviter un travail identique
+
+Avant de sauvegarder, exporter ou monter, le script recherche une candidate terminee au nouveau format et associee au SHA-256 exact du WIM source. Il consulte les metadonnees du catalogue Microsoft avec select-only, sans telecharger de MSU, et compare les identifiants Microsoft, KB et builds Windows/.NET.
+
+Si les correctifs sont identiques et si la candidate existe avec le SHA-256 attendu, le meme report.json est reutilise sans export, montage, telechargement ou commit. Si le WIM source correspond deja a la candidate preparee et que le catalogue n a pas change, le resultat est up_to_date. Une nouvelle KB, un candidat absent ou modifie, ou un rapport incomplet/annule ne donne pas de faux resultat a jour. Un catalogue inaccessible reste un echec explicite. Le controle lit encore le WIM source pour verifier son SHA-256.
+
+La premiere preparation d une source inconnue reste necessaire et sa duree n est pas garantie en quelques minutes. La vitesse du disque physique de la VM compte : placer les donnees sur un SSD adapte exige une configuration de l hyperviseur, pas un changement PowerShell qui transformerait le stockage.
+
+## Suivi dans le site
+
+La page **Images et correctifs** affiche l etat mesure de la tache, les WIM, les passages, les etapes et durees, les index source/candidat, les KB et la validation. **Verifier les nouveaux correctifs** recherche seulement les metadonnees Microsoft en arriere-plan : aucun MSU telecharge et aucun DISM lance. Les versions viennent des rapports transmis ; une version deja detectee est necessaire. Nouveau signifie different du passage compare, pas deja installe ou publie dans l image de production.
+
+Les dossiers prives windows-servicing, sauvegardes et montages restent reserves a SYSTEM et aux administrateurs. Les metadonnees sont copiees dans `<data_dir>\maintenance-overview` ; l agent serveur les actualise environ toutes les trente secondes. La console lit ce miroir. Les pages et les telechargements demandent l autorisation administrateur habituelle. Les dates des mesures restent visibles ; les tailles logiques de stockage excluent les arborescences montees.
 
 ## Annuler une preparation trop longue
 
@@ -36,6 +52,8 @@ Si une fenetre PowerShell attend la fin de la maintenance pour lancer une mise a
 ```
 
 Le script verifie le rapport, la tache et l appartenance du montage au candidate.wim prive. Il desactive les prochains declenchements, arrete la tache puis uniquement les DISM dont les arguments correspondent exactement a cette copie. Il ne tue pas les WimServ ou les DISM etrangers. Il demande ensuite le demontage avec abandon des changements, verifie la disparition du montage et la liberation du candidat, et marque le rapport cancelled. Le temps de liberation du montage depend de Windows ; il ne peut pas etre garanti instantane. Aucun fichier WIM ni dossier de montage n est supprime par cet outil.
+
+Avec IQ-5.5, omettre RunId et ajouter `-IfActive` identifie automatiquement l execution a partir des arguments exacts de DISM ou du candidat monte. Si aucune maintenance ne tourne, cette option ne fait rien. Plusieurs executions possibles ou une tache active sans candidat identifiable provoquent un refus avant tout arret ; utiliser alors le RunId du journal courant.
 
 Un echec de recuperation laisse le rapport cancelled_cleanup_required et tous les fichiers conserves. Ne pas lancer une nouvelle preparation ou mise a jour de console avant resolution. Si la tache active ne correspond plus au RunId indique, le script refuse l arret : relire la transcription plutot que reutiliser un ancien PID.
 
@@ -77,7 +95,7 @@ $atelierRapport = 'D:\AtelierPXE\data\windows-servicing\runs\DATE-IDENTIFIANT\re
 & 'C:\AtelierPXE\console\scripts\Update-WindowsImage.ps1' -Mode RegisterTest -ReportPath $atelierRapport
 ```
 
-Le WIM candidat est copie dans artifacts sous un nouveau nom. Des profils **TEST DATE-IDENTIFIANT** sont crees pour les profils actuels, avec les memes index, langue et reglages. Ils apparaissent dans le choix Windows de WinPE, mais ne sont jamais choisis automatiquement. Les profils de production continuent d utiliser l ancien WIM. La synchronisation des editions ignore un candidat encore en validation.
+Le WIM candidat est copie dans artifacts sous un nouveau nom. Des profils **TEST DATE-IDENTIFIANT** sont crees pour les profils Famille/Pro concernes, avec les index exportes, la meme langue et les memes reglages. Les anciennes preparations non reduites restent compatibles. Les profils TEST apparaissent dans WinPE sans etre choisis automatiquement ; la production garde son ancien WIM. La synchronisation des editions ignore un candidat encore en validation. La page Images et correctifs permet de copier la commande de mise en test.
 
 Demarrer un PC de test en PXE, choisir explicitement le profil TEST de la bonne edition et confirmer son disque comme pour un deploiement normal. **Le disque du PC de test est efface.** Attendre le premier demarrage et la fin de la preparation Windows, puis verifier les applications, le materiel et le rapport. Faire un test pour chaque index utilise : Pro et Famille si les deux sont disponibles. Les tests de versions d image sont distincts des essais HPIA sur le HP physique.
 
@@ -99,7 +117,7 @@ Apres verification visuelle du poste, remplacer les exemples ci-dessous par les 
 
 Si un seul index est utilise, fournir un seul identifiant. Le controle exige `status=staged` et `windows_status=completed` pour chaque index des profils concernes. Image appliquee seule, une preparation encore active, un avertissement HPIA non resolu ou un deploiement d une autre image ne suffisent pas. Les deploiements en attente ou en cours doivent etre termines avant publication. Un WIM modifie ou une liste de profils source changee annulent aussi la publication.
 
-La publication change en une transaction la reference des profils de production vers le WIM teste. Elle conserve leur nom, leur index, leur langue et leurs reglages. L ancien WIM et les deploiements TEST restent disponibles ; aucune image active n est ecrasee. La preparation mensuelle ne publie jamais de sa propre initiative.
+La publication change en une transaction le WIM et l index correspondant des profils Famille/Pro. Elle conserve leur nom, leur langue et leurs reglages. Les profils des autres editions restent sur l ancien WIM. L ancien WIM et les tests restent disponibles ; aucune image active n est ecrasee. La maintenance mensuelle ne publie jamais automatiquement.
 
 ## Limites et verification
 

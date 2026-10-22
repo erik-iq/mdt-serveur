@@ -53,7 +53,8 @@ def database(data, write=False):
 def sources(data, asset_id=None):
     with database(data) as con:
         records = con.execute("""SELECT DISTINCT a.* FROM assets a JOIN profiles p ON p.asset_id=a.id
-            WHERE a.kind='windows' AND p.id NOT IN (SELECT profile_id FROM windows_image_test_profiles)
+            WHERE a.kind='windows' AND p.edition IN ('Pro','Famille','')
+            AND p.id NOT IN (SELECT profile_id FROM windows_image_test_profiles)
             ORDER BY a.filename""").fetchall()
         result = []
         for record in records:
@@ -87,6 +88,14 @@ def read_report(data, report_path):
 
 def register_test(data, report_path):
     report = read_report(data, report_path)
+    restricted = report.get('scope') == 'home_pro'
+    indexes = {}
+    for item in report['indexes']:
+        original, target = item.get('source_index', item['index']), item['index']
+        if (type(original) is not int or type(target) is not int or not 1 <= original <= 100
+                or not 1 <= target <= 100 or original in indexes or target in indexes.values()):
+            raise ValueError('Correspondance des index invalide')
+        indexes[original] = target
     artifacts = regular_path(Path(data) / 'artifacts')
     asset_id = str(uuid.uuid4())
     filename = 'windows-test-' + report['run_id'] + '.wim'
@@ -111,7 +120,9 @@ def register_test(data, report_path):
             if not source or source['sha256'] != report['source_sha256']:
                 raise ValueError('Image source remplacee depuis la maintenance')
             profiles = con.execute('SELECT * FROM profiles WHERE asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)', (source['id'],)).fetchall()
-            if not profiles or not {p['image_index'] for p in profiles} <= {i['index'] for i in report['indexes']}:
+            if restricted:
+                profiles = [p for p in profiles if p['edition'] in ('Pro', 'Famille') or (not p['edition'] and p['image_index'] in indexes)]
+            if not profiles or not {p['image_index'] for p in profiles} <= indexes.keys():
                 raise ValueError('Index des profils non prepares')
             if destination.exists():
                 raise ValueError('Le fichier de test existe deja sans enregistrement correspondant')
@@ -126,12 +137,14 @@ def register_test(data, report_path):
             for profile in profiles:
                 test_id = str(uuid.uuid4())
                 name = f"TEST {report['run_id']} {test_id[:8]} - {profile['name']}"[:80]
-                values = dict(profile, id=test_id, name=name, asset_id=asset_id, created_at=utcnow())
+                values = dict(profile, id=test_id, name=name, asset_id=asset_id,
+                              image_index=indexes[profile['image_index']], created_at=utcnow())
                 columns = list(values)
                 con.execute('INSERT INTO profiles (' + ','.join(columns) + ') VALUES (' + ','.join('?' for _ in columns) + ')', [values[k] for k in columns])
                 con.execute('INSERT INTO windows_image_test_profiles VALUES (?,?)', (test_id, report['run_id']))
                 mappings.append({'source_profile_id': profile['id'], 'test_profile_id': test_id,
-                                 'index': profile['image_index'], 'name': name})
+                                 'index': indexes[profile['image_index']], 'source_index': profile['image_index'],
+                                 'scope': 'home_pro' if restricted else 'all', 'name': name})
             con.execute('INSERT INTO windows_image_candidates VALUES (?,?,?,?,?,?,?,?)',
                 (report['run_id'], source['id'], asset_id, source['sha256'], 'testing', json.dumps(mappings), utcnow(), None))
         return {'run_id': report['run_id'], 'asset_id': asset_id, 'status': 'testing', 'test_profiles': mappings}
@@ -162,7 +175,9 @@ def promote(data, run_id, deployment_ids):
         if con.execute("SELECT 1 FROM deployments WHERE status IN ('queued','running') LIMIT 1").fetchone():
             raise ValueError('Terminer les deploiements actifs avant la publication')
         mappings = json.loads(current['mappings_json'])
-        production = {p[0] for p in con.execute('SELECT id FROM profiles WHERE asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)', (current['source_asset_id'],))}
+        old_indexes = ','.join(str(int(m.get('source_index',m['index']))) for m in mappings)
+        scope = " AND (edition IN ('Pro','Famille') OR (edition='' AND image_index IN ("+old_indexes+")))" if all(m.get('scope') == 'home_pro' for m in mappings) else ''
+        production = {p[0] for p in con.execute('SELECT id FROM profiles WHERE asset_id=? AND id NOT IN (SELECT profile_id FROM windows_image_test_profiles)' + scope, (current['source_asset_id'],))}
         if production != {item['source_profile_id'] for item in mappings}:
             raise ValueError('La liste des profils source a change depuis le test ; publication annulee')
         allowed = {item['test_profile_id']: item['index'] for item in mappings}
@@ -181,8 +196,8 @@ def promote(data, run_id, deployment_ids):
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise ValueError('Le WIM de test est en cours de modification')
         for item in mappings:
-            changed = con.execute('UPDATE profiles SET asset_id=? WHERE id=? AND asset_id=? AND image_index=?',
-                (current['asset_id'], item['source_profile_id'], current['source_asset_id'], item['index'])).rowcount
+            changed = con.execute('UPDATE profiles SET asset_id=?,image_index=? WHERE id=? AND asset_id=? AND image_index=?',
+                (current['asset_id'], item['index'], item['source_profile_id'], current['source_asset_id'], item.get('source_index', item['index']))).rowcount
             if changed != 1:
                 raise ValueError('Un profil source a change depuis le test ; publication annulee')
         con.execute("UPDATE windows_image_candidates SET status='published',published_at=? WHERE run_id=?", (utcnow(), run_id))

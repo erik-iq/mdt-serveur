@@ -9,6 +9,8 @@
     <button class="nav active" data-page="overview"><span>01</span> Vue d ensemble</button>
     <button class="nav" data-page="machines"><span>02</span> Parc machines</button>
     <button class="nav" data-page="profiles"><span>03</span> Profils Windows</button>
+    <button class="nav" data-page="hp-maintenance"><span aria-hidden="true">04</span> HPIA et pilotes</button>
+    <button class="nav" data-page="windows-maintenance"><span aria-hidden="true">05</span> Images et correctifs</button>
   </nav>
   <div class="sidebar-note"><span class="dot"></span> Preparation en arriere-plan<p>UEFI | WinPE x64 | WDS</p></div>
   <div class="sidebar-footer"><span>IQ ATELIER / 4</span><button id="logout">Deconnexion </button></div>
@@ -39,6 +41,21 @@
       <div class="section-title"><h2>Rapport, tests et garantie</h2></div><div id="computer-report" class="panel padding"></div>
       <div class="section-title"><h2>Observations du technicien</h2></div><div class="panel padding"><form id="computer-note-form"><label>Technicien (facultatif)<input name="author" maxlength="80" autocomplete="name"></label><label>Observation<textarea name="text" maxlength="4000" rows="3" required></textarea></label><button class="button primary" type="submit">Ajouter l observation</button><p id="computer-note-error" class="form-error" role="alert"></p></form><div id="computer-notes"></div></div>
     </section>
+    <section id="page-hp-maintenance" class="page" hidden>
+      <div class="heading"><div><div class="eyebrow">DEPOT CONSTRUCTEUR</div><h1>HPIA et pilotes HP</h1><p>Modeles connus, SoftPaq disponibles sur .250, synchronisations et espace de stockage. Chaque poste reste analyse avant installation.</p></div><div class="actions"><button id="hp-maintenance-reload" class="button secondary">Actualiser la page</button><button id="hp-maintenance-sync" class="button primary">Synchroniser les modeles connus</button></div></div>
+      <p id="hp-maintenance-message" role="status"></p><div id="hp-maintenance-storage"></div>
+      <div class="section-title"><div><h2>Modeles et pilotes conserves</h2><p>La plateforme HP identifie le modele technique. Les versions sont lues dans les metadonnees CVA disponibles.</p></div></div>
+      <label for="hp-maintenance-search">Rechercher un modele, une plateforme ou un SoftPaq</label><input id="hp-maintenance-search" type="search" placeholder="EliteBook, 83B2, SP12345...">
+      <div id="hp-maintenance-models" class="maintenance-list"></div>
+      <div class="section-title"><h2>Historique des synchronisations</h2></div><div id="hp-maintenance-history"></div>
+    </section>
+    <section id="page-windows-maintenance" class="page" hidden>
+      <div class="heading"><div><div class="eyebrow">MAINTENANCE DES IMAGES</div><h1>Images et correctifs Windows</h1><p>Suivez les KB, l export Famille/Pro, les etapes DISM et les candidats a tester. La consultation et la recherche du catalogue ne modifient aucune image.</p></div><div class="actions"><button id="windows-maintenance-reload" class="button secondary">Actualiser la page</button><button id="windows-maintenance-check" class="button primary">Verifier les nouveaux correctifs</button></div></div>
+      <p id="windows-maintenance-message" role="status"></p><div id="windows-maintenance-storage"></div>
+      <div class="section-title"><h2>Planification et images utilisees</h2></div><div id="windows-maintenance-source" class="panel padding"></div>
+      <div class="section-title"><h2>Derniere recherche des correctifs Microsoft</h2></div><div id="windows-maintenance-catalog" class="panel padding"></div>
+      <div class="section-title"><h2>Preparations, progression et validation</h2><a href="/static/windows-image-maintenance.html" target="_blank" rel="noopener">Mode d emploi</a></div><div id="windows-maintenance-runs" class="maintenance-list"></div>
+    </section>
   </main><footer>Atelier PXE <span>Infrastructure locale | Deploiements supervises</span></footer>
 </div>
 <dialog id="login-dialog"><form id="login-form"><div class="eyebrow">ACCES ADMINISTRATEUR</div><h2>Bienvenue dans l atelier.</h2><p>Le jeton est stocke dans data/admin-token sur votre serveur, ou fourni par MDT_ADMIN_TOKEN.</p><label>Jeton administrateur<input name="token" type="password" required autocomplete="off" minlength="24"></label><p id="login-error" class="form-error" role="alert"></p><button class="button primary full">Ouvrir la console -></button><small>Le jeton reste uniquement en memoire dans cet onglet.</small></form></dialog>
@@ -46,4 +63,4 @@
 <dialog id="token-dialog"><div class="modal-heading"><h2>Autorisation WinPE</h2><button class="icon-button" data-close="token-dialog" aria-label="Fermer">x</button></div><p>Saisissez le code d installation dans l assistant PXE du poste. Le code est reserve au poste autorise, valable deux heures et desactive au debut de l installation.</p><label>Code d installation<input id="boot-code" readonly autocomplete="off"></label><button id="copy-boot-code" class="button primary">Copier le code PXE</button><details><summary>Acces au lanceur texte</summary><label>Identifiant<input id="job-id" readonly></label><label>Jeton confidentiel<input id="job-token" readonly type="password"></label><button id="copy-token" class="button secondary">Copier le jeton</button></details><p class="warning-text">Munissez-vous du chemin WIM sur un partage SMB accessible depuis WinPE. Une confirmation d effacement sera demandee sur le poste.</p></dialog>
 <dialog id="inventory-dialog" class="wide-dialog"><div class="modal-heading"><h2 id="inventory-title">Dossier inventaire</h2><button class="icon-button" data-close="inventory-dialog" aria-label="Fermer">x</button></div><p>Fichiers enregistres sur le serveur de deploiement.</p><label>Dossier Windows sur .250<input id="inventory-directory" readonly></label><button id="copy-inventory-directory" class="button secondary">Copier le chemin</button><div id="inventory-files"></div></dialog>
 <dialog id="events-dialog" class="wide-dialog"><div class="modal-heading"><h2>Journal du deploiement</h2><button class="icon-button" data-close="events-dialog" aria-label="Fermer">x</button></div><div id="events"></div></dialog>
-</body></html>
+<script src="/static/maintenance.js" defer></script></body></html>

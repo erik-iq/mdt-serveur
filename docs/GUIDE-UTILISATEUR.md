@@ -4,6 +4,12 @@ IQ Atelier installe Windows sur les ordinateurs de l atelier depuis le reseau. L
 
 ## Avant de commencer
 
+Depuis IQ-5.5, deux pages de suivi completent le site. **HPIA et pilotes** regroupe les plateformes/modeles connus, les SoftPaq presents dans la derniere archive serveur, leurs descriptions et versions CVA, les demandes encore absentes et les synchronisations. Le bouton de synchronisation alimente le cache serveur ; il n installe aucun pilote sur .250. Une recherche filtre les modeles, plateformes et SoftPaq. Chaque poste garde son analyse HPIA avant installation.
+
+**Images et correctifs** montre les WIM utilises, l etat mesure de la tache, les KB et les durees des preparations, les erreurs et les candidats a tester. Le bouton de recherche consulte uniquement le catalogue Microsoft, sans telecharger ni installer de correctif. Nouveau est compare au passage indique ; ce n est pas une confirmation de mise a jour de la production. Les rapports JSON sont telechargeables et une candidate prete propose la commande de mise en test sur .250.
+
+Les deux pages affichent l espace libre des volumes et une repartition des fichiers Atelier. Ce sont des tailles logiques, avec la date de mesure ; le stockage des montages Windows est exclu du calcul detaille. Les metadonnees HPIA sont mises en cache pour eviter de relire toutes les archives a chaque actualisation. Consulter [la maintenance des images](MAINTENANCE-IMAGES-WINDOWS.md) pour les etapes de validation, la pause et l annulation.
+
 Sauvegarder les donnees du poste : le deploiement efface toutes les partitions du disque choisi. Brancher l alimentation et un cable reseau. Le poste doit demarrer en UEFI. Verifier qu une image Windows et ses profils Pro/Famille sont disponibles dans Atelier.
 
 ## Identifier le PC, meme sur un dock

@@ -145,3 +145,41 @@ def test_cancelled_preparations_never_create_test_profiles_or_replace_production
 
 # Helper name must not be collected as a test.
 test_job.__test__ = False
+
+
+def test_reduced_wim_remaps_indexes_and_keeps_other_editions_on_original_image(automatic):
+    client, data, pro, home = automatic
+    with workflow.database(data, write=True) as con:
+        con.execute('UPDATE profiles SET image_index=6 WHERE id=?', (pro['id'],))
+        con.execute('UPDATE profiles SET image_index=1 WHERE id=?', (home['id'],))
+    other = client.post('/api/profiles', json={'name':'Education conservee', 'asset_id':pro['asset_id'],
+        'image_index':3, 'edition':'Education'}).json()
+    path = candidate(data, pro['asset_id'])
+    report = json.loads(path.read_text())
+    report.update(schema=2, scope='home_pro', indexes=[{'source_index':1,'index':1}, {'source_index':6,'index':2}])
+    path.write_text(json.dumps(report))
+    result = workflow.register_test(data, path)
+    profiles = {p['id']:p for p in client.get('/api/state').json()['profiles']}
+    tests = [profiles[m['test_profile_id']] for m in result['test_profiles']]
+    assert {(p['edition'],p['image_index']) for p in tests} == {('Pro',2),('Famille',1)}
+    ids = [test_job(client, p, 'REMAP-'+str(1000+i)) for i,p in enumerate(tests)]
+    workflow.promote(data, result['run_id'], ids)
+    profiles = {p['id']:p for p in client.get('/api/state').json()['profiles']}
+    assert profiles[pro['id']]['image_index'] == 2
+    assert profiles[home['id']]['image_index'] == 1
+    assert profiles[other['id']]['asset_id'] == pro['asset_id']
+    assert profiles[other['id']]['image_index'] == 3
+    assert workflow.sources(data)[0]['id'] == result['asset_id']
+    for original in (pro,home):
+        assert profiles[original['id']]['settings'] == original['settings']
+
+
+@pytest.mark.parametrize('indexes', [[{'source_index':1,'index':1},{'source_index':2,'index':1}],
+    [{'source_index':1,'index':1},{'source_index':1,'index':2}], [{'source_index':2,'index':0}]])
+def test_invalid_reduced_index_mapping_cannot_register(automatic, indexes):
+    _, data, pro, _ = automatic
+    path = candidate(data, pro['asset_id'])
+    report = json.loads(path.read_text());report.update(scope='home_pro',indexes=indexes)
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError,match='Correspondance'):
+        workflow.register_test(data,path)

@@ -15,6 +15,8 @@ $backup=Join-Path $env:ProgramData ('AtelierPXE\backups\atelier4-' + [guid]::New
 & (Join-Path $InstallPath 'scripts\Set-AtelierDefaults.ps1') -InstallPath $InstallPath
 & (Join-Path $InstallPath 'scripts\Sync-WindowsEditions.ps1') -InstallPath $InstallPath
 $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+. (Join-Path $InstallPath 'scripts\Windows-ImageServicing.ps1')
+Publish-AtelierServicingStatus -DataRoot $config.data_dir
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $output=Join-Path $OutputRoot ('WinPE-Atelier4-' + $stamp)
 $imageName='Atelier PXE - ATELIER-4 - ' + $stamp

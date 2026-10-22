@@ -15,6 +15,7 @@ import http.cookiejar
 import json
 from pathlib import Path
 import re
+import time
 from urllib.parse import urlencode, urlsplit, unquote
 from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 import uuid
@@ -202,15 +203,37 @@ def download(opener, item, directory):
     return dict(item, path=str(path.resolve()), sha256=checksum(path), size=path.stat().st_size)
 
 
-def prepare(family, release, arch, dotnet, cache, opener=None):
+class DeadlineOpener:
+    """Bound metadata lookup time without changing download or redirect checks."""
+    def __init__(self, opener, seconds):
+        self.opener, self.deadline = opener, time.monotonic() + seconds
+
+    def open(self, request, timeout):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Delai maximal de recherche du catalogue Microsoft atteint')
+        return self.opener.open(request, timeout=min(timeout, remaining))
+
+
+def select_plan(family, release, arch, dotnet, opener=None, timeout_seconds=180):
     opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()), MicrosoftRedirect())
+    opener = DeadlineOpener(opener, timeout_seconds)
     groups = []
     # Finish with the OS cumulative update, after the .NET component update.
     for kind in ('net', 'os') if dotnet else ('os',):
         query = f'Windows {family} {release} {arch} Cumulative Update'
         if kind == 'net':
             query += ' .NET Framework ' + dotnet
-        selected = select_update(search(opener, query), family, release, arch, kind, dotnet=dotnet)
+        groups.append(select_update(search(opener, query), family, release, arch, kind, dotnet=dotnet))
+    return {'family': family, 'release': release, 'architecture': arch, 'dotnet': dotnet,
+            'created_at': datetime.now(timezone.utc).isoformat(), 'groups': groups}
+
+
+def prepare(family, release, arch, dotnet, cache, opener=None):
+    opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()), MicrosoftRedirect())
+    plan = select_plan(family, release, arch, dotnet, opener)
+    groups = []
+    for selected in plan['groups']:
         fields = {'updateIDs': json.dumps([{'size': 0, 'updateID': selected['id'], 'uidInfo': selected['id']}])}
         links = download_links(fetch_page(opener, CATALOG + '/DownloadDialog.aspx', fields))
         if any(not re.search(r'[-_]' + arch + r'[-_]', item['filename'], re.I) for item in links):
@@ -226,8 +249,7 @@ def prepare(family, release, arch, dotnet, cache, opener=None):
         files = [download(opener, item, directory) for item in links]
         groups.append(dict(selected, files=files,
                            target_path=next(item['path'] for item in files if item['filename'] == target[0]['filename'])))
-    return {'family': family, 'release': release, 'architecture': arch, 'dotnet': dotnet,
-            'created_at': datetime.now(timezone.utc).isoformat(), 'groups': groups}
+    return dict(plan, groups=groups)
 
 
 def main():
@@ -235,8 +257,11 @@ def main():
     for name in ('family', 'release', 'arch', 'cache', 'output'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--dotnet', default='4.8.1', choices=['4.8', '4.8.1', 'none'])
+    parser.add_argument('--select-only', action='store_true', help='Check current KBs without downloading packages')
     args = parser.parse_args()
-    plan = prepare(args.family, args.release, args.arch, '' if args.dotnet == 'none' else args.dotnet, args.cache)
+    dotnet = '' if args.dotnet == 'none' else args.dotnet
+    plan = (select_plan(args.family, args.release, args.arch, dotnet) if args.select_only
+            else prepare(args.family, args.release, args.arch, dotnet, args.cache))
     output = Path(args.output)
     output.write_text(json.dumps(plan, ensure_ascii=True, indent=2), encoding='utf-8')
     print(str(output))

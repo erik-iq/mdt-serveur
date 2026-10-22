@@ -1,13 +1,34 @@
 #requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
-param([string]$InstallPath,[Parameter(Mandatory)][ValidatePattern('^[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$')][string]$RunId)
+param([string]$InstallPath,[ValidatePattern('^[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$')][string]$RunId,[switch]$IfActive)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Console-Installation.ps1')
 . (Join-Path $PSScriptRoot 'Windows-ImageServicing.ps1')
 $InstallPath=Resolve-AtelierConsoleInstallation $InstallPath
 $config=Get-Content -LiteralPath (Join-Path $InstallPath 'data-runtime.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $root=Assert-AtelierServicingPath (Join-Path $config.data_dir 'windows-servicing')
+if (-not $RunId) {
+    $prefix=(Join-Path $root 'runs').TrimEnd([char[]]'\/')+[IO.Path]::DirectorySeparatorChar
+    $pattern='(?i)^'+[regex]::Escape($prefix)+'(?<run>[0-9]{8}-[0-9]{6}-[a-f0-9]{8})[\\/](?:mount|candidate\.wim)$'
+    $found=@(
+        foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name='dism.exe'")) {
+            foreach ($argument in [regex]::Matches([string]$process.CommandLine,'(?i)(?:^|\s)/(?:MountDir|Image|ImageFile|DestinationImageFile):(?:"(?<value>[^"]+)"|(?<value>\S+))')) {
+                $match=[regex]::Match([IO.Path]::GetFullPath($argument.Groups['value'].Value).TrimEnd([char[]]'\/'),$pattern)
+                if ($match.Success) { $match.Groups['run'].Value }
+            }
+        }
+        foreach ($image in @(Get-WindowsImage -Mounted)) {
+            $match=[regex]::Match([string]$image.ImagePath,$pattern)
+            if ($match.Success) { $match.Groups['run'].Value }
+        }
+    )
+    $found=@($found | Sort-Object -Unique)
+    $owner=Get-ScheduledTask -TaskName 'AtelierPXE-WindowsImageMaintenance' -ErrorAction SilentlyContinue
+    if (-not $found.Count -and $IfActive -and $owner.State -ne 'Running') { Write-Host 'Aucune maintenance WIM active a annuler.';return }
+    if ($found.Count -ne 1) { throw 'Execution WIM non identifiable ou ambigue. Aucun processus arrete ; fournir le RunId courant du journal.' }
+    $RunId=$found[0]
+}
 $run=Assert-AtelierServicingPath (Join-Path (Join-Path $root 'runs') $RunId)
 $reportPath=Assert-AtelierServicingPath (Join-Path $run 'report.json')
 $report=Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -23,7 +44,7 @@ function Get-AtelierCandidateDism {
     # Match full argument values, never a global process name or a stale PID.
     @(Get-CimInstance Win32_Process -Filter "Name='dism.exe'" | Where-Object {
         $matchesCandidate=$false
-        foreach ($argument in [regex]::Matches([string]$_.CommandLine,'(?i)(?:^|\s)/(?:MountDir|Image|ImageFile):(?:"(?<value>[^"]+)"|(?<value>\S+))')) {
+        foreach ($argument in [regex]::Matches([string]$_.CommandLine,'(?i)(?:^|\s)/(?:MountDir|Image|ImageFile|DestinationImageFile):(?:"(?<value>[^"]+)"|(?<value>\S+))')) {
             $path=[IO.Path]::GetFullPath($argument.Groups['value'].Value).TrimEnd([char[]]'\/')
             if ($path -eq $mount -or $path -eq $candidate) { $matchesCandidate=$true }
         }
