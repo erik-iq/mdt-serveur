@@ -17,6 +17,11 @@ $config=Get-Content (Join-Path $InstallPath 'data-runtime.json') -Raw -Encoding 
 if ($Mode -eq 'Refresh') {
     $headers=@{}
     if (-not $config.internal_mode) { $headers.Authorization='Bearer '+(Get-Content (Join-Path $config.data_dir 'admin-token') -Raw -Encoding UTF8).Trim() }
+    # La veille des versions reste indépendante des contextes KB déjà connus.
+    try {
+        Invoke-RestMethod -Uri ('http://127.0.0.1:'+$config.port+'/api/maintenance/windows/releases/refresh') -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body '{}' -TimeoutSec 30 | Out-Null
+        Write-Host 'Vérification des nouvelles versions Windows demandée auprès de Microsoft.'
+    } catch { Write-Warning ('Veille des versions Windows non lancée : '+$_.Exception.Message) }
     try {
         $result=Invoke-RestMethod -Uri ('http://127.0.0.1:'+$config.port+'/api/maintenance/windows/kb/refresh') -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body '{}' -TimeoutSec 30
         Write-Host ('Recherche et téléchargement des KB demandés pour '+@($result.jobs).Count+' contexte(s) Windows.')

@@ -28,6 +28,7 @@ from app.computers import computer_routes
 from app.hp_repository import HpRepository
 from app.maintenance import Maintenance
 from app.windows_kb import WindowsKbRepository
+from app.windows_releases import WindowsReleases
 from app.identity import normalize_serial, migrate_identity, public_machine, insert_machine, match_machine
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -813,7 +814,9 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     inventories.routes(api, windows_agent, admin, now)
     hp_repository.routes(api, windows_agent, admin)
     Maintenance(data, db, hp_repository).routes(api, admin)
-    WindowsKbRepository(data, db).routes(api, windows_agent, admin)
+    kb_repository = WindowsKbRepository(data, db)
+    kb_repository.routes(api, windows_agent, admin)
+    WindowsReleases(db, kb_repository.contexts).routes(api, admin)
     computer_routes(api, db, admin, windows_agent, now)
 
     @api.post('/api/windows/{identifier}/progress')

@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Veille des versions Windows, 22 octobre 2026
+
+- Vérification quotidienne des versions stables de Windows 11 depuis Microsoft Release Health, avec contrôle manuel depuis le site.
+- Affichage des versions observées, des nouvelles versions disponibles, des builds, des dates de disponibilité et de fin de support Famille et Pro.
+- Dernier contrôle réussi conservé et clairement signalé comme ancien en cas d’erreur réseau ou de changement du format Microsoft.
+- Accès au média officiel et parcours de préparation puis de validation ; aucune modification automatique des images de production.
+
 ## Correctif de nettoyage WDS, 22 octobre 2026
 
 - Conversion des architectures numériques WDS vers les noms attendus par wdsutil.

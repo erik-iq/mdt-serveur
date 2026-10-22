@@ -55,7 +55,7 @@ async function loadMaintenance(page,fresh=false){
   const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
   try{
     const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
-    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();message.textContent='Dépôt KB actualisé. Les correctifs prêts seront utilisés pendant la préparation Windows.';}
+    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();await loadWindowsReleases();message.textContent='Dépôt KB actualisé. Les correctifs prêts seront utilisés pendant la préparation Windows.';}
   }catch(error){message.textContent=error.message;}
   finally{maintenanceLoading=false;}
 }
@@ -96,4 +96,18 @@ $('windows-kb-context').addEventListener('submit',async event=>{
   event.preventDefault();const body=Object.fromEntries(new FormData(event.target));body.build=Number(body.build);
   try{await api('/maintenance/windows/kb/prepare','POST',body);await loadWindowsKb();$('windows-maintenance-message').textContent='Préparation des KB demandée sur .250.';}
   catch(error){$('windows-maintenance-message').textContent=error.message;}
+});
+
+async function loadWindowsReleases(){
+  const value=await api('/maintenance/windows/releases');
+  const states={not_checked:'Vérification non lancée',running:'Vérification en cours',completed:'Vérification terminée',failed:'Vérification impossible'};
+  const stale=value.status!=='completed';
+  const alert=value.newer_releases.length?`<p><span class="badge queued">Nouvelle version disponible : ${esc(value.newer_releases.join(', '))}</span></p>`:'';
+  $('windows-release-status').innerHTML=`<p><strong>${esc(states[value.status]||value.status)}</strong> | Dernière tentative : ${maintenanceDate(value.checked_at)}</p><p>${esc(value.message)}</p>${value.success_at?`<p>Dernier contrôle réussi : ${maintenanceDate(value.success_at)}${stale?' (résultats précédents, à actualiser)':''}.</p>`:''}<p>Versions observées dans l’atelier : ${esc(value.known_releases.join(', ')||'aucune version connue')}.</p>${alert}${value.comparison==='unknown'?'<p>Comparaison disponible après réception du contexte Windows d’un poste ou ajout d’une version exacte dans le dépôt KB.</p>':''}${value.status==='completed'&&value.comparison==='current'?'<p>Aucune version publiée plus récente que la dernière version connue de l’atelier.</p>':''}${value.releases.length?`<div class="table-wrap"><table><thead><tr><th>VERSION STABLE</th><th>DISPONIBLE DEPUIS</th><th>BUILD</th><th>FIN DE SUPPORT FAMILLE ET PRO</th></tr></thead><tbody>${value.releases.map(release=>`<tr><td>Windows 11 ${esc(release.release)}</td><td>${esc(release.available_at)}</td><td>${esc(release.build)}</td><td>${esc(release.home_pro_end||'Non renseignée')}</td></tr>`).join('')}</tbody></table></div>`:''}<div class="actions"><a class="button secondary" href="https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information" target="_blank" rel="noopener">Publication officielle Microsoft</a><a class="button secondary" href="https://www.microsoft.com/software-download/windows11" target="_blank" rel="noopener">Obtenir le média officiel</a></div>`;
+}
+$('windows-release-check').addEventListener('click',async()=>{
+  const button=$('windows-release-check');button.disabled=true;
+  try{await api('/maintenance/windows/releases/refresh','POST',{});await loadWindowsReleases();}
+  catch(error){$('windows-release-status').textContent=error.message;}
+  finally{button.disabled=false;}
 });

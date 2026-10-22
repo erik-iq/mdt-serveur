@@ -23,3 +23,13 @@ Les MSU sont conservés sur .250 dans `<data_dir>\windows-kb\packages`. Le poste
 Après la fin réussie, les rapports et inventaires sont reçus sur .250 avant nettoyage du dossier privé du poste. Le cache serveur reste disponible pour les déploiements suivants. Une erreur de téléchargement, de compatibilité ou d’installation reste visible dans le bilan et dans la fiche du site. Un installateur encore actif bloque le nettoyage.
 
 Ce parcours évite la maintenance préalable du WIM. Le temps d’installation des correctifs et les redémarrages se produisent sur chaque poste ; aucun gain de durée totale n’est garanti sans mesure sur le matériel réel.
+
+## Nouvelles versions de Windows
+
+Le panneau **Nouvelles versions de Windows 11** consulte la publication officielle Microsoft Release Health. La tâche quotidienne de 02:00 demande aussi cette vérification, même si aucun contexte KB n’est encore connu. Le bouton **Vérifier les versions Windows** permet un contrôle immédiat. La lecture de la page et son actualisation automatique ne déclenchent aucune requête Microsoft supplémentaire.
+
+Seules les versions du canal de disponibilité générale dont la date de disponibilité est passée sont retenues. Les versions Insider, les annonces futures et les tableaux dont le format n’est plus reconnu ne sont pas considérés comme une nouvelle version confirmée. La page indique la date du dernier contrôle réussi ; en cas d’échec, les anciens résultats restent visibles avec un avertissement.
+
+Les versions observées proviennent des contextes KB des postes et des rapports WIM existants. Cette comparaison ne certifie pas la version de chaque profil de production. Sans contexte connu, aucune conclusion « à jour » n’est affichée. Une version plus récente que la dernière version observée produit une notification dans ce panneau.
+
+Le lien **Obtenir le média officiel** ouvre le téléchargement Microsoft. La veille ne télécharge pas un ISO automatiquement et ne contourne aucun accès ou droit de licence. Ajouter ensuite le média via la procédure habituelle, préparer Famille et Pro et les réglages français suisse, tester HPIA, les logiciels et les redémarrages, puis sélectionner les profils validés pour les futurs déploiements. Conserver les anciens profils permet un retour en arrière. Aucun remplacement du WIM ni aucune mise à niveau des postes ne sont réalisés par la veille.

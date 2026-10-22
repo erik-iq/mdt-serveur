@@ -62,6 +62,9 @@ def run():
             kb_job=str(uuid.uuid4())
             with sqlite3.connect(data/'deployment.sqlite3') as con:
                 con.execute('INSERT INTO windows_kb_jobs VALUES (?,?,?,?,?,?,?,?)',(kb_job,json.dumps(kb_context),json.dumps(kb_context,sort_keys=True),'ready','Correctifs disponibles sur .250.',json.dumps(kb_manifest),'2026-10-22T10:00:00Z','2026-10-22T10:01:00Z'))
+            release_info=[{'family':'11','release':'27H2','build':'28000.1','available_at':'2027-10-01','home_pro_end':'2029-10-01'}]
+            with sqlite3.connect(data/'deployment.sqlite3') as con:
+                con.execute("UPDATE windows_release_check SET status='completed',checked_at='2027-10-02T10:00:00Z',success_at='2027-10-02T10:00:00Z',message=?,releases_json=? WHERE id=1",('Versions stables vérifiées <fixture>.',json.dumps(release_info)))
             with sync_playwright() as p:
                 browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
                 page=browser.new_page(viewport={'width':1440,'height':1050});errors=[]
@@ -87,6 +90,18 @@ def run():
                 expect(page.locator('#windows-kb-jobs')).to_contain_text('KB5127648')
                 expect(page.locator('#windows-kb-jobs')).to_contain_text('Correctif <fixture>')
                 assert page.locator('#windows-kb-jobs fixture').count()==0
+                expect(page.locator('#windows-release-status')).to_contain_text('Nouvelle version disponible : 27H2')
+                expect(page.locator('#windows-release-status')).to_contain_text('26H2')
+                expect(page.locator('#windows-release-status')).to_contain_text('Versions stables vérifiées <fixture>')
+                assert page.locator('#windows-release-status fixture').count()==0
+                def release_check(route):
+                    with sqlite3.connect(data/'deployment.sqlite3') as con:
+                        con.execute("UPDATE windows_release_check SET status='failed',message='Vérification Microsoft impossible, résultats conservés.' WHERE id=1")
+                    route.fulfill(status=200,content_type='application/json',body='{}')
+                page.route('**/api/maintenance/windows/releases/refresh',release_check)
+                page.get_by_role('button',name='Vérifier les versions Windows',exact=True).click()
+                expect(page.locator('#windows-release-status')).to_contain_text('résultats précédents, à actualiser')
+                expect(page.locator('#windows-release-status')).to_contain_text('28000.1')
                 page.get_by_text('Historique des anciennes préparations WIM',exact=True).click()
                 expect(page.locator('#windows-maintenance-runs')).to_contain_text('Candidate à tester')
                 page.locator('#windows-maintenance-runs summary').click()
