@@ -31,3 +31,9 @@ Le redémarrage demandé par le kit arrive après 60 secondes. La tâche reprend
 Une interruption pendant une opération sans résultat natif confirmé entraîne une recherche de diagnostic et un bilan à vérifier, sans rejouer automatiquement une installation incertaine. En cas de dépassement du délai d’installation, le kit ne tue aucun processus de maintenance Windows. Une autre installation déjà active bloque le test. La fenêtre du lanceur peut être fermée sans arrêter la tâche SYSTEM.
 
 Le rapport final est vert uniquement après une recherche en ligne réussie sans correctif ni pilote restant proposé, hors changements de version exclus, et après disparition du besoin de redémarrage Windows. Il ne constitue pas un test manuel de chaque périphérique. Le ZIP et le résumé sont dans `C:\IQ_\Rapports\WindowsUpdateInstallation`. Une copie est déposée dans `Rapports` du kit si son chemin est encore disponible. Récupérer le ZIP après la fin des redémarrages. La tâche de reprise est supprimée lorsque le bilan est terminé ; les petits fichiers privés de l’essai restent disponibles pour relire son état jusqu’au nettoyage après validation.
+
+## Correction WU-INSTALL-2 et préparation IQ-5.8
+
+Le rapport du 22 octobre à 15:07 confirme Windows 26H2 build 26300.9711, sans redémarrage en attente, et un seul pilote Intel System Driver Update restant proposé. Le kit précédent l’avait refusé avant toute installation parce que CanRequestUserInput valait vrai. Cette propriété décrit une possibilité, pas la preuve d’une intervention obligatoire.
+
+WU-INSTALL-2 tente donc le mode silencieux ForceQuiet et enregistre le vrai code de retour. Une ancienne exécution terminée WU-INSTALL-1 n’empêche pas la création du nouvel essai. Le même moteur est intégré à la préparation automatique IQ-5.8 ; les nouveaux déploiements n’exigent plus de lancer le kit USB.

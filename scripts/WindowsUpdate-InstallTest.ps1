@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-# Moteur du test physique, distinct de la préparation de production.
+# Moteur partagé par la préparation Windows automatique et le kit de test.
 function ConvertTo-AtelierUpdateTitle([string]$Title) {
     return $Title.Replace([char]0x2013,'-').Replace([char]0x2014,'-')
 }
@@ -49,7 +49,7 @@ function Invoke-AtelierTestUpdatePass {
     }
     try {
         $session=& $SessionFactory
-        $session.ClientApplicationID='Atelier PXE : test installation Windows Update'
+        $session.ClientApplicationID='Atelier PXE : installation Windows Update'
         $searcher=$session.CreateUpdateSearcher();$searcher.Online=$true;$searcher.ServerSelection=2
         $completed=& $CallbackFactory;$progress=& $CallbackFactory
         if ($null -eq $completed -or $null -eq $progress) {throw 'Rappels COM Windows Update absents.'}
@@ -86,7 +86,9 @@ function Invoke-AtelierTestUpdatePass {
             $entry=[pscustomobject]@{id=[string]$update.Identity.UpdateID;revision=[int]$update.Identity.RevisionNumber;title=(ConvertTo-AtelierUpdateTitle $update.Title);type=[int]$update.Type;status='planned';started_utc=[DateTime]::UtcNow.ToString('o');result_code=$null;hresult=$null;reboot_required=$false}
             $result.updates+=@($entry)
             $stage='selection'
-            if ($update.InstallationBehavior.CanRequestUserInput) {throw ('Intervention utilisateur requise : '+$entry.title)}
+            # Cet indicateur décrit une possibilité, pas une obligation. Tenter ForceQuiet
+            # et conserver le vrai résultat natif si le pilote refuse le mode silencieux.
+            $entry | Add-Member NoteProperty can_request_user_input ([bool]$update.InstallationBehavior.CanRequestUserInput)
             if (-not $update.EulaAccepted) {$update.AcceptEula()}
             $collection=& $CollectionFactory
             $collection.Add($update) | Out-Null

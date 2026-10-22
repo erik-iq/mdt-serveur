@@ -29,7 +29,7 @@ function Send-AtelierDiagnostics {
     param([string]$DataPath,$Config)
     Add-Type -AssemblyName System.IO.Compression
     $archivePath=Join-Path $DataPath 'diagnostics-upload.zip'
-    $files=@('result.json','maintenance.json','progress.json','hpia-result.json','hp-repository-state.json','windows-kb-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log')
+    $files=@('result.json','maintenance.json','progress.json','hpia-result.json','hp-repository-state.json','windows-kb-result.json','windows-update-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log')
     foreach ($key in @('vlc','reader','chrome','anydesk','hpia','lenovo_system_update','winget-preparation')) { $files+=@('software-logs/'+$key+'.log') }
     $timings=Join-Path $DataPath 'timings'
     if (Test-Path $timings) {
@@ -90,7 +90,7 @@ function Complete-AtelierLocalCleanup {
         $config=Get-Content (Join-Path $DataPath 'reporting.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         if ([string]$payload.deployment.id -ne [string]$config.id) { throw 'Identité de déploiement différente.' }
         $state=Get-Content (Join-Path $DataPath 'maintenance.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-        if ($state.windows.source -eq 'server_250' -and $state.windows.status -eq 'installing') { return $false }
+        if ($state.windows.source -in @('server_250','windows_update') -and $state.windows.status -eq 'installing') { return $false }
         if ($state.status -notin @('completed','needs_attention')) { return $false }
         if (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)^(winget|msiexec|HPImageAssistant|HpFirmwareUpdRec.*|HPBIOSUPDREC.*|HPBIOSUpdate.*)$' }).Count) { return $false }
         if ($state.reboot_required) {

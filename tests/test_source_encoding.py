@@ -44,7 +44,7 @@ def test_visible_french_and_windows_transport_keep_accents():
 
 def test_maintenance_display_text_is_accented_without_changing_markup():
     text = (ROOT / 'app/static/maintenance.js').read_text(encoding='utf-8')
-    for phrase in ('Dépôt KB actualisé', 'préparation Windows', 'Comparé au passage',
+    for phrase in ('Suivi actualisé', 'préparation des nouveaux postes', 'Comparé au passage',
                    'CORRECTIFS INTÉGRÉS', 'durées détaillées', 'Déjà observé'):
         assert phrase in text
     assert '<details' in text and '<détails' not in text

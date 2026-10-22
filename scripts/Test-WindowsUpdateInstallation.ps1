@@ -142,7 +142,7 @@ if (-not $NewTest) {
     foreach ($folder in $previous) {
         if ($folder.Attributes -band [IO.FileAttributes]::ReparsePoint) {continue}
         try {$candidate=Read-UpdateTestState $folder.FullName} catch {continue}
-        if ($candidate.revision -eq 'WU-INSTALL-1') {$work=$folder.FullName;break}
+        if ($candidate.revision -eq 'WU-INSTALL-2') {$work=$folder.FullName;break}
     }
 }
 if (-not $work) {
@@ -157,7 +157,7 @@ if (-not $work) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $work
     }
     $report=Join-Path $env:SystemDrive ('IQ_\Rapports\WindowsUpdateInstallation\'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+$id.Substring(0,8))
-    $state=[pscustomobject]@{revision='WU-INSTALL-1';computer_name=$env:COMPUTERNAME;windows=$null;reboot_pending=$false;status='new';message='Test prêt à démarrer.';started_utc=[DateTime]::UtcNow.ToString('o');updated_utc=$null;boot='';passes=@();active_pass=$null;verification=$null;restarts=0;kit_path=$PSScriptRoot;report_directory=$report;task_name=('AtelierPXE-TestWindowsUpdateInstallation-'+$id)}
+    $state=[pscustomobject]@{revision='WU-INSTALL-2';computer_name=$env:COMPUTERNAME;windows=$null;reboot_pending=$false;status='new';message='Test prêt à démarrer.';started_utc=[DateTime]::UtcNow.ToString('o');updated_utc=$null;boot='';passes=@();active_pass=$null;verification=$null;restarts=0;kit_path=$PSScriptRoot;report_directory=$report;task_name=('AtelierPXE-TestWindowsUpdateInstallation-'+$id)}
     Save-UpdateTestState $state $work
     $action=New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $work 'Test-WindowsUpdateInstallation.ps1')+'" -Worker')
     $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest

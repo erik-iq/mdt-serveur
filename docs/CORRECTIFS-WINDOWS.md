@@ -1,4 +1,19 @@
-# Correctifs Windows depuis le serveur, IQ-5.7
+# Mises à jour Windows automatiques, IQ-5.8
+
+## Parcours actuel
+
+Les nouveaux déploiements IQ-5.8 recherchent et installent automatiquement les mises à jour avec l’API Windows Update Agent, sous SYSTEM, après les logiciels et HPIA. Les correctifs Windows et .NET, Defender, les pilotes et les firmwares applicables sont inclus. Les changements de version Windows restent exclus et le Store reste manuel.
+
+Chaque installation enregistre son état avant l’appel natif et conserve son résultat individuel. L’indicateur CanRequestUserInput ne bloque plus une tentative silencieuse : ForceQuiet est demandé, les invites de source sont désactivées et un refus réel reste une erreur. Les téléchargements et installations emploient les rappels COM DISPID 0 validés pour la recherche physique sur le HP.
+
+La préparation demande les redémarrages nécessaires et reprend au démarrage. Elle effectue une nouvelle recherche et poursuit les mises à jour restantes, avec un maximum de cinq passes d’installation et six redémarrages. Les recherches indisponibles sont réessayées avec une limite. Une installation interrompue sans résultat confirmé bloque le succès et le nettoyage, sans réinstaller aveuglément le pilote concerné.
+
+Le fichier `windows-update-result.json` est inclus dans les diagnostics du site. Le statut final devient vert seulement après une recherche réussie sans correctif ni pilote restant proposé et sans redémarrage Windows en attente, ainsi qu’après les autres contrôles de préparation. Les rapports sont reçus sur .250 avant suppression du dossier privé du poste.
+
+La tâche quotidienne de 02:00 continue à vérifier les nouvelles versions Windows. Le téléchargement de MSU sur .250 est désormais facultatif : il reste accessible par le bouton du cache KB pour les anciens déploiements, mais n’est pas exécuté automatiquement chaque jour. Le guide historique ci-dessous décrit cette méthode précédente.
+
+## Ancien parcours du cache KB, IQ-5.7
+
 
 ## Fonctionnement
 

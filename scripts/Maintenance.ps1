@@ -135,16 +135,16 @@ try {
     }
     if ($state.status -in @('completed','needs_attention') -and $software.status -eq 'completed' -and $customization.software_status -ne 'needs_attention') { Finish-Maintenance; return }
     if ($customization.status -ne 'completed') { throw 'Les logiciels doivent être terminés avant la finalisation du poste.' }
-    $hpContinuation=($payload.deployment.allow_bios_restart -or $payload.deployment.cached_windows_updates) -and $state.status -in @('reboot_pending','retry_pending')
+    $hpContinuation=($payload.deployment.allow_bios_restart -or $payload.deployment.cached_windows_updates -or $payload.deployment.automatic_windows_update) -and $state.status -in @('reboot_pending','retry_pending')
     if (-not $hpContinuation) { $state.attempts++ }
     if ($state.attempts -gt 6) { throw 'Limite de tentatives atteinte.' }
     $state | Add-Member NoteProperty reboot_required ([bool]$customization.restart_needed -or [bool]$state.reboot_required -or $state.status -eq 'reboot_pending') -Force
     $warnings=New-Object 'System.Collections.Generic.List[string]'
     # Ces anciens paramètres sont ignorés, y compris dans un ancien dossier de travail.
-    $state.windows=if ($payload.deployment.cached_windows_updates) { [pscustomobject]@{status='running';message='Correctifs Windows depuis .250.'} } else { [pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update à lancer manuellement ; aucune recherche Atelier.'} }
+    $state.windows=if ($payload.deployment.automatic_windows_update) { [pscustomobject]@{status='running';source='windows_update';message='Windows Update automatique après les logiciels et HPIA.'} } elseif ($payload.deployment.cached_windows_updates) { [pscustomobject]@{status='running';message='Correctifs Windows depuis .250.'} } else { [pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update à lancer manuellement ; aucune recherche Atelier.'} }
     $state.store=[pscustomobject]@{status='manual';completion_verified=$false;message='Microsoft Store a actualiser manuellement ; aucune recherche Atelier.'}
     $softwareMessage=if (-not $software.selected.Count) { 'Aucun logiciel sélectionne : aucune installation demandée.' } elseif ($software.status -eq 'completed') { 'Logiciels vérifiés : '+$software.verified+'.' } else { 'Logiciels non installés ou non vérifiés : '+($software.missing -join ', ')+'.' }
-    Save-Maintenance 'running' 80 ($softwareMessage+$(if ($payload.deployment.cached_windows_updates) {' Correctifs Windows depuis .250.'}else{' Windows Update et Microsoft Store restent manuels.'}))
+    Save-Maintenance 'running' 80 ($softwareMessage+$(if ($payload.deployment.automatic_windows_update) {' Recherche et installation Windows Update automatiques.'}elseif ($payload.deployment.cached_windows_updates) {' Correctifs Windows depuis .250.'}else{' Windows Update et Microsoft Store restent manuels.'}))
     $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coché : installation et SoftPaq non demandés.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
     if ('hpia' -in @($payload.settings.winget_packages)) {
         $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
@@ -174,7 +174,28 @@ try {
     }
     if ($hp.status -notin @('completed','skipped')) { $warnings.Add(('HP Image Assistant : '+$hp.message)) }
     if ($hp.reboot_required) { $state.reboot_required=$true }
-    if ($payload.deployment.cached_windows_updates) {
+    if ($payload.deployment.automatic_windows_update) {
+        . (Join-Path $DataPath 'Client-WindowsUpdate.ps1')
+        $wu=Invoke-AtelierAutomaticWindowsUpdate -DataPath $DataPath -OnProgress {
+            param($Message)
+            $script:updateDetail=@{percent=-1}
+            Save-Maintenance 'running' 90 $Message
+        }
+        $script:updateDetail=$null;$state.windows=$wu
+        if ($wu.status -in @('retry_pending','reboot_pending')) {
+            Save-Maintenance $wu.status 95 $wu.message
+            if ($wu.status -eq 'reboot_pending') {
+                if ($state.reboots -ge 6) {throw 'Limite des six reprises Windows atteinte. Rapports conservés.'}
+                if (-not $state.final_restart -or $state.final_restart.completed_at) {
+                    $state | Add-Member NoteProperty final_restart ([pscustomobject]@{boot_id=(Get-AtelierHpBootIdentity);requested_at=$null;completed_at=$null;purpose='windows_update'}) -Force
+                }
+                $state.reboot_required=$true
+                Request-AtelierFinalRestart
+            }
+            return
+        }
+        if ($wu.status -ne 'completed') {$warnings.Add(('Windows Update : '+$wu.message))}
+    } elseif ($payload.deployment.cached_windows_updates) {
         . (Join-Path $DataPath 'Client-KBUpdates.ps1')
         $kb=Invoke-AtelierCachedWindowsUpdates -DataPath $DataPath -OnProgress {
             param($Message)

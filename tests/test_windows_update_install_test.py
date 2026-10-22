@@ -19,7 +19,7 @@ def execute(tmp_path,code):
     return json.loads(run.stdout)
 
 
-@pytest.mark.parametrize('case',['success','empty','search_partial','download_failed','install_partial','reboot','pre_reboot','verify','timeout','upgrade'])
+@pytest.mark.parametrize('case',['success','empty','search_partial','download_failed','install_partial','reboot','pre_reboot','verify','timeout','upgrade','can_request_input'])
 def test_real_result_controls_next_action_and_no_install_before_checkpoint(tmp_path,case):
     value=execute(tmp_path,r'''
 $case='CASE'
@@ -33,7 +33,7 @@ function New-TestJob {
  $job|Add-Member ScriptMethod CleanUp {}
  return $job
 }
-$update=[pscustomobject]@{Title='Test software';Type=1;IsDownloaded=$false;EulaAccepted=$true;Identity=@{UpdateID='test';RevisionNumber=1};InstallationBehavior=@{CanRequestUserInput=$false};Categories=@()}
+$update=[pscustomobject]@{Title='Test software';Type=1;IsDownloaded=$false;EulaAccepted=$true;Identity=@{UpdateID='test';RevisionNumber=1};InstallationBehavior=@{CanRequestUserInput=($case -eq 'can_request_input')};Categories=@()}
 if($case -eq 'upgrade'){$update.Categories=@(@{CategoryID='3689bdc8-b205-4af4-8d4a-a63924c5e9d5';Name='Upgrades'})}
 $searcher=[pscustomobject]@{Online=$false;ServerSelection=0;Update=$update}
 $searcher|Add-Member ScriptMethod BeginSearch {param($query,$callback,$state)
@@ -51,6 +51,7 @@ $downloader|Add-Member ScriptMethod EndDownload {param($job)
 }
 $installer=[pscustomobject]@{IsBusy=$false;RebootRequiredBeforeInstallation=($case -eq 'pre_reboot');Updates=$null;AllowSourcePrompts=$true;ForceQuiet=$false}
 $installer|Add-Member ScriptMethod BeginInstall {param($progress,$completed,$state)
+ if(-not $this.ForceQuiet -or $this.AllowSourcePrompts){throw 'Silent mode required'}
  if($script:checkpoint.updates[-1].status -ne 'installing'){throw 'Missing durable checkpoint'}
  Check-Callback $progress $completed;$script:installed++
  $job=New-TestJob
@@ -70,11 +71,11 @@ $result=Invoke-AtelierTestUpdatePass -SessionFactory {$session} -CollectionFacto
 @{result=$result;downloaded=$script:downloaded;installed=$script:installed;callbacks=$script:callbacks}|ConvertTo-Json -Depth 12 -Compress
 '''.replace('CASE',case))
     result=value['result']
-    assert result['status']=={'success':'installed','empty':'verified','search_partial':'failed','download_failed':'failed','install_partial':'failed','reboot':'reboot_required','pre_reboot':'reboot_required','verify':'remaining','timeout':'unknown','upgrade':'verified'}[case],result
+    assert result['status']=={'success':'installed','empty':'verified','search_partial':'failed','download_failed':'failed','install_partial':'failed','reboot':'reboot_required','pre_reboot':'reboot_required','verify':'remaining','timeout':'unknown','upgrade':'verified','can_request_input':'installed'}[case],result
     if case in ('empty','search_partial','pre_reboot','verify','upgrade'):assert value['installed']==value['downloaded']==0
     if case=='download_failed':assert value['downloaded']==1 and value['installed']==0
     if case in ('success','reboot','install_partial','timeout'):assert value['installed']==1 and value['callbacks']==2
-    if case=='success':assert result['updates'][0]['status']=='installed' and result['updates'][0]['hresult']=='0x00000000'
+    if case in ('success','can_request_input'):assert result['updates'][0]['status']=='installed' and result['updates'][0]['hresult']=='0x00000000'
     if case=='install_partial':assert result['updates'][0]['status']=='failed'
     if case=='timeout':assert result['updates'][0]['status']=='installing'
     if case=='upgrade':assert len(result['excluded'])==1

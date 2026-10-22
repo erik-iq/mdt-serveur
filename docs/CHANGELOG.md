@@ -1,5 +1,14 @@
 # Journal des modifications
 
+## IQ-5.8 : recherche et installation Windows Update automatiques, 22 octobre 2026
+
+- Recherche en ligne et installation sous SYSTEM après les logiciels et HPIA, pilotes et firmwares compris, sans mise à niveau automatique de Windows.
+- Tentative silencieuse du pilote Intel au lieu d’un refus fondé uniquement sur CanRequestUserInput. Codes natifs conservés.
+- Reprise après redémarrage, recherche finale obligatoire, limites de passes et conservation des installations incertaines.
+- Résultat Windows Update archivé dans les diagnostics et les étapes du site avant nettoyage.
+- Inclusion des nouveaux moteurs et du module KB historique dans WinPE. Nouveau parcours actif pour les prochains déploiements IQ-5.8.
+- Cache KB facultatif, veille des versions quotidienne conservée. Kit existant corrigé en WU-INSTALL-2.
+
 ## Test physique d’installation Windows Update, 22 octobre 2026
 
 - Lanceur USB distinct pour installer les mises à jour applicables, pilotes et firmwares compris, avec exclusion des changements de version.

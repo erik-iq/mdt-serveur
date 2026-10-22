@@ -1,5 +1,13 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## IQ-5.8 : Windows Update automatique
+
+Après les logiciels et HPIA, le poste recherche et installe automatiquement les correctifs Windows, .NET, Defender, pilotes et firmwares proposés par Windows Update. Les changements de version restent exclus et le Store reste manuel. Les rappels COM de recherche, téléchargement et installation sont valides ; le pilote Intel qui annonçait seulement une possibilité d’interaction est désormais tenté avec ForceQuiet, puis son vrai résultat natif est conservé.
+
+Les checkpoints précèdent chaque installation. Les redémarrages et nouvelles recherches utilisent la reprise de préparation existante. Le succès exige une recherche finale sans mise à jour applicable restante et aucun redémarrage Windows en attente. Une opération sans résultat confirmé conserve les fichiers pour vérification. Le rapport Windows Update est archivé sur le site avant nettoyage du poste.
+
+La console et WinPE portent IQ-5.8. Reconstruire WinPE avec Upgrade-Atelier4.ps1 pour activer ce parcours sur les prochains déploiements. Le kit USB WU-INSTALL-2 permet aussi de tester le pilote restant sur le poste existant. Le cache KB reste facultatif pour les anciens déploiements ; la tâche quotidienne réalise la veille des versions sans télécharger automatiquement de nouveaux MSU.
+
 Cette version unifie le site, WinPE et le suivi Windows en bleu/lilas. Le logo fourni a été adapte sur fond transparent. Pour utiliser le PNG original sans adaptation, passer `-BrandLogoPath C:\chemin\logo.png` au script de mise à jour.
 
 ## IQ-5.7 : correctifs Windows depuis .250

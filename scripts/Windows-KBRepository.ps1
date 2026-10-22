@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 #requires -RunAsAdministrator
 [CmdletBinding()]
-param([string]$InstallPath,[ValidateSet('Enable','Refresh')][string]$Mode='Enable',[switch]$RunNow)
+param([string]$InstallPath,[ValidateSet('Enable','Refresh')][string]$Mode='Enable',[switch]$RunNow,[switch]$DownloadKbCache)
 # Transport UTF-8 pour Python, les journaux et les fichiers texte générés.
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 $env:PYTHONIOENCODING = 'utf-8'
@@ -22,6 +22,7 @@ if ($Mode -eq 'Refresh') {
         Invoke-RestMethod -Uri ('http://127.0.0.1:'+$config.port+'/api/maintenance/windows/releases/refresh') -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body '{}' -TimeoutSec 30 | Out-Null
         Write-Host 'Vérification des nouvelles versions Windows demandée auprès de Microsoft.'
     } catch { Write-Warning ('Veille des versions Windows non lancée : '+$_.Exception.Message) }
+    if (-not $DownloadKbCache) {return}
     try {
         $result=Invoke-RestMethod -Uri ('http://127.0.0.1:'+$config.port+'/api/maintenance/windows/kb/refresh') -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body '{}' -TimeoutSec 30
         Write-Host ('Recherche et téléchargement des KB demandés pour '+@($result.jobs).Count+' contexte(s) Windows.')
@@ -43,4 +44,4 @@ $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount
 $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 Register-ScheduledTask -TaskName 'AtelierPXE-WindowsKBRepository' -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At '02:00') -Principal $principal -Settings $settings -Force | Out-Null
 if ($RunNow) { Start-ScheduledTask -TaskName 'AtelierPXE-WindowsKBRepository' }
-Write-Host 'Cache KB configuré : téléchargement sur .250 chaque jour à 02:00, installation pendant la préparation Windows des postes.' -ForegroundColor Green
+Write-Host 'Veille Windows quotidienne à 02:00 configurée. Les postes installent leurs mises à jour avec Windows Update ; cache KB disponible à la demande.' -ForegroundColor Green

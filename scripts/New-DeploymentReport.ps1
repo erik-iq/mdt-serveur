@@ -112,6 +112,15 @@ if ($maintenance.windows.source -eq 'server_250') {
     }
     if ($maintenance.windows.status -ne 'completed') { $warnings.Add(('Correctifs Windows : '+[string]$maintenance.windows.message)) }
 }
+if ($maintenance.windows.source -eq 'windows_update') {
+    foreach ($pass in @($maintenance.windows.passes)) {
+        foreach ($entry in @($pass.updates)) {
+            if ($entry) {$steps.Add(@{name='Windows Update';status=$(if ($entry.status -eq 'installed') {'completed'} else {'needs_attention'});message=([string]$entry.title+' / Code WUA '+[string]$entry.result_code+' / HRESULT '+[string]$entry.hresult);timestamp=[string]$entry.started_utc})}
+        }
+    }
+    $steps.Add(@{name='Contrôle final Windows Update';status=$(if ($maintenance.windows.status -eq 'completed') {'completed'} else {'needs_attention'});message=[string]$maintenance.windows.message;timestamp=[string]$maintenance.windows.timestamp})
+    if ($maintenance.windows.status -ne 'completed') {$warnings.Add(('Windows Update : '+$maintenance.windows.message))}
+}
 $hp=if ($maintenance.hpia) { $maintenance.hpia } else { Read-ReportJson (Join-Path $DataPath 'hpia-result.json') }
 if ($hp) {
     foreach ($pass in @($hp.history)) {
@@ -153,7 +162,7 @@ if ($warranty) {
     } else { $warnings.Add('Garantie constructeur non vérifiée.') }
 }
 if ($apps.software_status -eq 'needs_attention') { $warnings.Add('Certains logiciels WinGet sont en échec ; consulter software-logs et les étapes du rapport.') }
-$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($software -and $software.status -ne 'completed') { 'needs_attention' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.windows.source -eq 'server_250' -and $maintenance.windows.status -ne 'completed') { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
+$status=if ($apps.status -eq 'failed') { 'failed' } elseif ($software -and $software.status -ne 'completed') { 'needs_attention' } elseif ($hp -and $hp.status -notin @('completed','skipped')) { 'needs_attention' } elseif ($maintenance.windows.source -in @('server_250','windows_update') -and $maintenance.windows.status -ne 'completed') { 'needs_attention' } elseif ($maintenance.status -eq 'completed' -and $apps.status -eq 'completed' -and $apps.software_status -ne 'needs_attention') { 'completed' } else { 'needs_attention' }
 foreach ($key in @($inventory.Keys)) { if ($inventory[$key].Length -gt 2000) { $inventory[$key]=$inventory[$key].Substring(0,2000) } }
 $timingDirectory=Join-Path $DataPath 'timings'
 if (Test-Path $timingDirectory) {
@@ -173,7 +182,7 @@ $lines=@('ATELIER PXE - Rapport de déploiement',('Poste : ' + $env:COMPUTERNAME
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ((Get-AtelierReportLabel $entry.Key) + ' : ' + (Get-AtelierReportLabel $entry.Value)) }
 $lines += @('','DÉROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + (Get-AtelierReportLabel $step.status) + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : vérification humaine requise. Le BIOS Fast Boot n''est pas modifié. Windows Update et Microsoft Store sont manuels.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : vérification humaine requise. Le BIOS Fast Boot n''est pas modifié. Windows Update est automatique pour les nouveaux déploiements ; Microsoft Store reste manuel.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'

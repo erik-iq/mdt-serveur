@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MAX_INVENTORY = 32 * 1024 * 1024
 MAX_DIAGNOSTICS = 8 * 1024 * 1024
-DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','windows-kb-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
+DIAGNOSTIC_NAMES = {'progress.json','result.json','maintenance.json','hpia-result.json','hp-repository-state.json','windows-kb-result.json','windows-update-result.json','first-logon.log','maintenance.log','reporting.log','cleanup.log'}
 HP_SUMMARY = 'Rapport-Installation-HP.html'
 INVENTORY_FILENAMES = {'diagnostics':'Diagnostics-Deploiement.zip','hp_reports':'Rapports-HP.zip','hp_summary':HP_SUMMARY}
 
