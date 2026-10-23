@@ -1,5 +1,9 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## IQ-5.8.5 : HPIA, logiciels puis dossier IQ
+
+Les nouveaux déploiements exécutent HPIA en premier si sa case est cochée : préparation de l’outil, analyse, téléchargement et installation des SoftPaq compatibles. Les logiciels sélectionnés sont ensuite installés, puis le dossier IQ et ses outils sont préparés. Le redémarrage BIOS conserve la reprise du premier compte ; la finalisation réutilise le résultat HP sans relancer l’analyse. Windows Update, les KB et Microsoft Store restent manuels. Reconstruire WinPE avec `Upgrade-Atelier4.ps1` pour embarquer ce parcours.
+
 ## IQ-5.8.2 : Windows Update avant les logiciels
 
 Dès le premier bureau Windows, la préparation attend Windows Update sous SYSTEM avant la personnalisation, les logiciels et HPIA. Les correctifs, Defender, pilotes et firmwares applicables sont installés, puis les redémarrages et recherches reprennent automatiquement. La préparation ne libère les logiciels qu’après un résultat terminé et vérifié. Une erreur ou un résultat incertain bloque cette suite et conserve les rapports. La tâche interactive reste inscrite pendant les redémarrages ; le mode sans intervention rétablit une connexion unique à chaque reprise. Microsoft Store reste manuel.

@@ -109,48 +109,40 @@ try {
     Set-Progress 'running' 5 'Démarrage de la préparation du poste...'
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
+    $hpWinGetTool=$null
+    $clientPackages=@()
+    if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
+    $hpFirstDone=$false
+    if ($payload.deployment.hpia_first -and 'hpia' -in $clientPackages) {
+        Set-Progress 'running' 10 "HP Image Assistant en premier : préparation de l’outil puis installation des SoftPaq compatibles."
+        . (Join-Path $DataPath 'Client-HpiaFirst.ps1')
+        $hpPhase=Invoke-AtelierHpiaFirst -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {param($Percent,$Message);Set-Progress 'running' $Percent $Message}
+        if ($hpPhase.pending) {
+            Set-Progress 'running' 10 $hpPhase.hp.message
+            return
+        }
+        $results.Add($hpPhase.application)
+        $hpWinGetTool=$hpPhase.application.tool
+        $restartNeeded=[bool]$hpPhase.hp.reboot_required
+        $hpFirstDone=$true
+    }
     if ($payload.deployment.automatic_windows_update) {
         Set-Progress 'running' 10 'Windows Update en premier. Les logiciels et HPIA attendent la fin des mises à jour et des redémarrages.'
         . (Join-Path $DataPath 'WindowsUpdate-First.ps1') -DataPath $DataPath
         if (-not (Wait-AtelierWindowsUpdateFirst -DataPath $DataPath)) { return }
     }
-    Write-Trace 'Début de la personnalisation du premier compte administrateur.'
-    $theme = $payload.settings.theme
-    if ($theme -in @('light','dark')) {
-        $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-        New-Item -Path $registry -Force | Out-Null
-        $value = if ($theme -eq 'light') { 1 } else { 0 }
-        New-ItemProperty -Path $registry -Name AppsUseLightTheme -Value $value -PropertyType DWord -Force | Out-Null
-        New-ItemProperty -Path $registry -Name SystemUsesLightTheme -Value $value -PropertyType DWord -Force | Out-Null
-    }
-    if ($payload.wallpaper) {
-        $wallpaperSource = Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
-        Assert-FileHash $wallpaperSource $payload.wallpaper.sha256
-        $wallpaperDirectory=Join-Path $env:SystemDrive 'IQ_\Personnalisation'
-        New-Item -ItemType Directory -Path $wallpaperDirectory -Force | Out-Null
-        $wallpaper=Join-Path $wallpaperDirectory $payload.wallpaper.filename
-        Copy-Item -LiteralPath $wallpaperSource -Destination $wallpaper -Force
-        Assert-FileHash $wallpaper $payload.wallpaper.sha256
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wallpaper
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
-        Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AtelierWallpaper { [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool SystemParametersInfo(int action,int parameter,string value,int flags); }'
-        if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraîchir le fond d''écran.' }
-        Write-Trace 'Fond d''écran applique.'
-    }
     . (Join-Path $DataPath 'Client-Software.ps1')
-    $hpWinGetTool=$null
-    $clientPackages=@()
-    if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
-    if ($clientPackages.Count) {
+    $remainingPackages=@($clientPackages | Where-Object {-not ($hpFirstDone -and $_ -eq 'hpia')})
+    if ($remainingPackages.Count) {
         $softwareTiming=Start-AtelierTiming $DataPath 'software'
-        foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages $clientPackages -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
+        foreach ($entry in @(Install-AtelierClientSoftware -DataPath $DataPath -Packages $remainingPackages -OnProgress { param($Percent,$Message);Set-Progress 'running' $Percent $Message })) {
             $results.Add($entry)
             if ($entry.exit_code -in @(3010,1641)) { $restartNeeded=$true }
             if ($entry.id -eq 'hpia' -and $entry.status -eq 'completed') { $hpWinGetTool=$entry.tool }
         }
     }
     if ($softwareTiming) { Stop-AtelierTiming $DataPath $softwareTiming;Sync-AtelierTimings $DataPath }
+    if ($hpFirstDone) { Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'winget-client-state.json') -Content (ConvertTo-Json -InputObject @($results.ToArray()) -Depth 8) -NoBackup | Out-Null }
     $appIndex = 0
     $readyTools=New-Object 'Collections.Generic.List[object]'
     if ($hpWinGetTool) { $readyTools.Add($hpWinGetTool) }
@@ -221,6 +213,30 @@ try {
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'ready-tools.json') -Content (ConvertTo-Json -InputObject @($readyTools.ToArray()) -Depth 4) -NoBackup | Out-Null
     Stop-AtelierTiming $DataPath $toolsTiming
     Sync-AtelierTimings $DataPath
+    Write-Trace 'Début de la personnalisation du premier compte administrateur.'
+    $theme = $payload.settings.theme
+    if ($theme -in @('light','dark')) {
+        $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+        New-Item -Path $registry -Force | Out-Null
+        $value = if ($theme -eq 'light') { 1 } else { 0 }
+        New-ItemProperty -Path $registry -Name AppsUseLightTheme -Value $value -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $registry -Name SystemUsesLightTheme -Value $value -PropertyType DWord -Force | Out-Null
+    }
+    if ($payload.wallpaper) {
+        $wallpaperSource = Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
+        Assert-FileHash $wallpaperSource $payload.wallpaper.sha256
+        $wallpaperDirectory=Join-Path $env:SystemDrive 'IQ_\Personnalisation'
+        New-Item -ItemType Directory -Path $wallpaperDirectory -Force | Out-Null
+        $wallpaper=Join-Path $wallpaperDirectory $payload.wallpaper.filename
+        Copy-Item -LiteralPath $wallpaperSource -Destination $wallpaper -Force
+        Assert-FileHash $wallpaper $payload.wallpaper.sha256
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wallpaper
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
+        Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AtelierWallpaper { [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool SystemParametersInfo(int action,int parameter,string value,int flags); }'
+        if (-not [AtelierWallpaper]::SystemParametersInfo(20,0,$wallpaper,3)) { throw 'Impossible de rafraîchir le fond d''écran.' }
+        Write-Trace 'Fond d''écran applique.'
+    }
     Set-Progress 'running' 65 'Création du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
     # Exporter une seule fois à la fin, après les logiciels et pilotes, sans doubler le relevé CIM.
@@ -238,6 +254,7 @@ try {
     . (Join-Path $DataPath 'Updates.ps1')
     if ($payload.settings.unattended) { Disable-AtelierAutoLogon }
     Complete-AtelierReport $DataPath
+    Unregister-ScheduledTask -TaskName 'AtelierPXE-Preparation' -Confirm:$false -ErrorAction SilentlyContinue
     Write-Trace ('Échec : ' + $_.Exception.Message)
     throw
 }

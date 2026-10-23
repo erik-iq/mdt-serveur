@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## IQ-5.8.5 : HPIA en premier, sans Windows Update automatique, 23 octobre 2026
+
+- Les nouveaux déploiements désactivent Windows Update et les KB automatiques. HPIA s’exécute avant les autres logiciels si sa case est cochée.
+- Préparation du seul outil HP, analyse et installation des SoftPaq, puis logiciels sélectionnés, dossier IQ, rapports et contrôle final.
+- La tâche du premier compte reprend après un BIOS et vérifie les checkpoints HP. La finalisation relit le résultat HP déjà obtenu sans nouvelle analyse.
+- Les anciens parcours Windows Update restent disponibles pour les anciens payloads et les outils manuels, sans être activés dans les nouveaux déploiements.
+
 ## IQ-5.8.4 : lecture des états et protection contre le nettoyage prématuré, 23 octobre 2026
 
 - Reprise des lectures sur les conflits de partage Windows 32 et 33. Les erreurs de droits, de contenu et les fichiers absents ne sont pas masqués.

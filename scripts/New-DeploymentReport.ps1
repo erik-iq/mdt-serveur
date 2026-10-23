@@ -182,7 +182,7 @@ $lines=@('ATELIER PXE - Rapport de déploiement',('Poste : ' + $env:COMPUTERNAME
 foreach ($entry in $inventory.GetEnumerator()) { $lines += ((Get-AtelierReportLabel $entry.Key) + ' : ' + (Get-AtelierReportLabel $entry.Value)) }
 $lines += @('','DÉROULEMENT')
 foreach ($step in $steps) { $lines += ('[' + (Get-AtelierReportLabel $step.status) + '] ' + $step.name + ' : ' + $step.message) }
-$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : vérification humaine requise. Le BIOS Fast Boot n''est pas modifié. Windows Update est automatique pour les nouveaux déploiements ; Microsoft Store reste manuel.')
+$lines += @('','AVERTISSEMENTS ET LIMITES') + @($warnings.ToArray()) + @('Son, webcam et clavier : vérification humaine requise. Le BIOS Fast Boot n''est pas modifié. Windows Update et Microsoft Store restent manuels.')
 Write-AtelierPdf -Path (Join-Path $OutputDirectory 'Rapport-Deploiement.pdf') -Lines $lines
 if (Get-Command Sync-AtelierTimings -ErrorAction SilentlyContinue) { Sync-AtelierTimings $DataPath }
 $configuration=Join-Path $DataPath 'reporting.json'

@@ -1,4 +1,9 @@
-# Mises à jour Windows automatiques, IQ-5.8.2
+# Correctifs Windows, IQ-5.8.5
+
+La préparation des nouveaux postes ne lance plus Windows Update et n’installe pas automatiquement de KB. HPIA est exécuté en premier si sélectionné, puis les logiciels et le dossier IQ. La veille des versions et le cache KB du serveur restent consultables et utilisables manuellement.
+
+## Ancien parcours Windows Update, IQ-5.8 à IQ-5.8.4
+
 
 ## Parcours actuel
 

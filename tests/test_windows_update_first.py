@@ -64,7 +64,7 @@ catch {if('MODE' -ne 'needs_attention'){throw}}
 @pytest.mark.parametrize('mode', ['completed', 'retry_pending', 'installing', 'needs_attention', 'reboot', 'shutdown_failure', 'account_disabled', 'exception', 'sharing_error'])
 def test_system_worker_preserves_restarts_and_never_releases_unknown_results(tmp_path, mode):
     shutil.copy(ROOT/'scripts/WindowsUpdate-First.ps1', tmp_path)
-    (tmp_path/'personalization.json').write_text(json.dumps({'settings': {'unattended': True}}))
+    (tmp_path/'personalization.json').write_text(json.dumps({'settings': {'unattended': True},'deployment': {'automatic_windows_update': True}}))
     (tmp_path/'Unattend.ps1').write_text('''
 function Write-AtelierVerifiedUtf8File {param($Path,$Content,[switch]$NoBackup);[IO.File]::WriteAllText($Path,$Content,[Text.UTF8Encoding]::new($false))}
 function Read-AtelierSharedUtf8File {param($Path);Get-Content $Path -Raw -Encoding UTF8}

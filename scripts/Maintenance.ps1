@@ -93,10 +93,10 @@ try {
     }
     if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-    # Une ancienne tâche de démarrage ne doit pas finaliser la nouvelle phase Windows Update.
-    if ($payload.deployment.automatic_windows_update -and -not (Test-Path (Join-Path $DataPath 'result.json'))) { return }
+    # Une ancienne tâche attend la fin de la première phase et des logiciels.
+    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first) -and -not (Test-Path (Join-Path $DataPath 'result.json'))) { return }
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-    if ($payload.deployment.automatic_windows_update -and $customization.status -ne 'completed') { return }
+    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first) -and $customization.status -ne 'completed') { return }
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
     if ($state.final_restart -and -not $state.final_restart.completed_at) {
         $boot=Get-AtelierHpBootIdentity
@@ -151,20 +151,29 @@ try {
     Save-Maintenance 'running' 80 ($softwareMessage+$(if ($payload.deployment.automatic_windows_update) {' Recherche et installation Windows Update automatiques.'}elseif ($payload.deployment.cached_windows_updates) {' Correctifs Windows depuis .250.'}else{' Windows Update et Microsoft Store restent manuels.'}))
     $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coché : installation et SoftPaq non demandés.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
     if ('hpia' -in @($payload.settings.winget_packages)) {
+        if ($payload.deployment.hpia_first) {
+            $hpPath=Join-Path $DataPath 'hpia-result.json'
+            if (-not (Test-Path $hpPath)) { throw 'Résultat de la première étape HPIA absent. Rapports conservés.' }
+            $hp=Read-AtelierSharedUtf8File -Path $hpPath | ConvertFrom-Json
+        } else {
         $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
             param($Message)
             $script:updateDetail=@{percent=-1}
             Save-Maintenance 'running' 85 $Message
         }
+        }
     }
     $script:updateDetail=$null
     $state | Add-Member NoteProperty hpia $hp -Force
     if ($hp.resumed_after_reboot -and $state.hp_boot_id -ne $hp.boot_id) {
-        # Ce démarrage réel a consommé les demandes de redémarrage des logiciels et de HP.
-        $state.reboot_required=$false;$state.reboots++
+        # En mode HP premier, les logiciels ont été installés après ce démarrage HP.
+        $state.reboots++
         $state | Add-Member NoteProperty hp_boot_id $hp.boot_id -Force
-        $customization | Add-Member NoteProperty restart_needed $false -Force
-        Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'result.json') -Content ($customization | ConvertTo-Json -Depth 12) -NoBackup | Out-Null
+        if (-not $payload.deployment.hpia_first) {
+            $state.reboot_required=$false
+            $customization | Add-Member NoteProperty restart_needed $false -Force
+            Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'result.json') -Content ($customization | ConvertTo-Json -Depth 12) -NoBackup | Out-Null
+        }
     }
     if ($payload.deployment.allow_bios_restart -and $hp.status -in @('reboot_pending','retry_pending')) {
         $state.reboot_required=[bool]$hp.reboot_required

@@ -63,6 +63,10 @@ function Invoke-AtelierWindowsUpdateFirstWorker {
     }
     try {
         $payload=Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+        if (-not $payload.deployment.automatic_windows_update) {
+            Unregister-ScheduledTask -TaskName 'AtelierPXE-WindowsUpdateFirst' -Confirm:$false -ErrorAction SilentlyContinue
+            return
+        }
         Initialize-AtelierReportTrust -DataPath $DataPath
         Publish-WindowsUpdateFirst 'running' 'Windows Update avant les logiciels : recherche et installation automatiques.' $null
         $wu=Invoke-AtelierAutomaticWindowsUpdate -DataPath $DataPath -OnProgress {
