@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## IQ-5.8.4 : lecture des états et protection contre le nettoyage prématuré, 23 octobre 2026
+
+- Reprise des lectures sur les conflits de partage Windows 32 et 33. Les erreurs de droits, de contenu et les fichiers absents ne sont pas masqués.
+- Un état temporairement verrouillé maintient la préparation en attente et conserve la tâche SYSTEM ainsi que les checkpoints ; il ne devient pas un échec d’installation.
+- Une ancienne tâche de maintenance attend la fin de la préparation des logiciels. Le nettoyage exige Windows Update terminé et prend le même mutex que son moteur avant de verrouiller le dossier privé.
+
 ## IQ-5.8.3 : accès concurrent aux états Windows Update, 22 octobre 2026
 
 - Lecture UTF-8 des états avec partage du remplacement atomique, pour que l’attente interactive et la fenêtre de progression ne bloquent pas l’écriture SYSTEM.

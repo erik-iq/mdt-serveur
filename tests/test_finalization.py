@@ -83,7 +83,7 @@ def write_json(path,value):
 
 
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof','wu_unknown'])
+@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof','wu_unknown','wu_pending','wu_missing','wu_completed','wu_worker_busy'])
 def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preserved(tmp_path,case):
     program=tmp_path/'ProgramData';data=program/'AtelierPXE';data.mkdir(parents=True)
     iq=tmp_path/'IQ_';(iq/'Rapports').mkdir(parents=True);(iq/'Personnalisation').mkdir()
@@ -99,6 +99,15 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
         record=json.loads((data/'maintenance.json').read_text())
         record['windows']={'source':'windows_update','status':'needs_attention','passes':[{'updates':[{'status':'installing'}]}]}
         write_json(data/'maintenance.json',record)
+    if case in ('wu_pending','wu_missing','wu_completed','wu_worker_busy'):
+        payload=json.loads((data/'personalization.json').read_text())
+        payload['deployment']['automatic_windows_update']=True
+        write_json(data/'personalization.json',payload)
+        record=json.loads((data/'maintenance.json').read_text())
+        record['windows']={'source':'windows_update','status':'completed'}
+        write_json(data/'maintenance.json',record)
+        if case!='wu_missing':
+            write_json(data/'windows-update-result.json',{'source':'windows_update','status':'retry_pending' if case=='wu_pending' else 'completed'})
     write_json(data/'progress.json',{'status':status,'message':'Final state'})
     (data/'Inventory').mkdir();(data/'Inventory'/'Inventaire-Technique.xml').write_text('<InventaireOrdinateur ordinateur="PC-LAB"/>')
     (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Catégorie;Propriété;Valeur\nPC-LAB;CPU;Name;Test\n')
@@ -168,6 +177,25 @@ function Invoke-RestMethod {
 . 'DATA/IQ-Paths.ps1'
 . 'DATA/Finalization.ps1'
 $held=$null
+if($script:testMode -eq 'wu_worker_busy'){
+ Add-Type -TypeDefinition @'
+using System;
+using System.Threading;
+public static class WuaMutexFixture {
+ static ManualResetEvent ready=new ManualResetEvent(false);
+ static ManualResetEvent stop=new ManualResetEvent(false);
+ static Thread worker;
+ public static void Start() {
+  worker=new Thread(() => {using(var mutex=new Mutex(false,"Global\\AtelierPXE-WindowsUpdateFirst")) {
+   mutex.WaitOne();ready.Set();stop.WaitOne();mutex.ReleaseMutex();
+  }});
+  worker.Start();if(!ready.WaitOne(5000))throw new Exception("Mutex fixture timeout");
+ }
+ public static void Stop(){stop.Set();worker.Join();}
+}
+'@
+ [WuaMutexFixture]::Start()
+}
 if($script:testMode -eq 'locked_file'){$held=[IO.File]::Open('DATA/result.json',[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)}
 if($script:testMode -eq 'maintenance_worker'){
  & 'DATA/Maintenance.ps1' -DataPath 'DATA' -ToolsPath 'IQ'
@@ -181,12 +209,13 @@ if($script:testMode -eq 'maintenance_worker'){
  }
 }
 if($held){$held.Dispose()}
+if($script:testMode -eq 'wu_worker_busy'){[WuaMutexFixture]::Stop()}
 @{removed=$ok}|ConvertTo-Json|Set-Content 'ROOT/result.json'
 '''.replace('PROGRAM',str(program)).replace('CASE',case).replace('DATA',str(data)).replace('ROOT',str(tmp_path)).replace("'IQ'","'"+str(iq)+"'").replace("'ID'","'"+identifier+"'"),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
     assert run.returncode==0,run.stderr+run.stdout
     removed=json.loads((tmp_path/'result.json').read_text(encoding='utf-8-sig'))['removed']
-    expected=case in {'success','maintenance_worker','offline_retry','after_reboot','failure_archived','hp_reports'}
+    expected=case in {'success','maintenance_worker','offline_retry','after_reboot','failure_archived','hp_reports','wu_completed'}
     assert removed==expected,(run.stdout,(data/'cleanup.log').read_text() if (data/'cleanup.log').exists() else '')
     assert data.exists()!=expected
     assert (outside/'keep').read_text()=='unrelated user file'

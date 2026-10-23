@@ -39,6 +39,8 @@ $ErrorActionPreference='Stop'
 $global:mode='CASE';$global:boot='boot1';$global:calls=0
 . 'DATA/Client-WindowsUpdate.ps1'
 function Get-AtelierHpBootIdentity {return $global:boot}
+function Read-AtelierSharedUtf8File {param($Path);Get-Content $Path -Raw -Encoding UTF8}
+function Test-AtelierFileSharingViolation {param($Exception);return $false}
 function Write-AtelierVerifiedUtf8File {param($Path,$Content,[switch]$NoBackup);[IO.File]::WriteAllText($Path,$Content,[Text.UTF8Encoding]::new($false))}
 function Get-ItemProperty {param($Path);@{DisplayVersion='26H2';CurrentBuildNumber=26300;UBR=9711;EditionID='Professional'}}
 function Test-Path {param($Path)
@@ -92,6 +94,8 @@ function Invoke-AtelierTestUpdatePass {param([switch]$VerifyOnly,$OnProgress)
 $ErrorActionPreference='Stop'
 . 'DATA/Client-WindowsUpdate.ps1'
 function Get-AtelierHpBootIdentity {return 'boot2'}
+function Read-AtelierSharedUtf8File {param($Path);Get-Content $Path -Raw -Encoding UTF8}
+function Test-AtelierFileSharingViolation {param($Exception);return $false}
 function Write-AtelierVerifiedUtf8File {param($Path,$Content,[switch]$NoBackup);[IO.File]::WriteAllText($Path,$Content)}
 function Get-ItemProperty {param($Path);@{DisplayVersion='26H2';CurrentBuildNumber=26300;UBR=9711;EditionID='Professional'}}
 function Test-Path {param($Path);if($Path -like 'HKLM:*'){return $false};return Microsoft.PowerShell.Management\Test-Path $Path}

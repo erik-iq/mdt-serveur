@@ -78,6 +78,7 @@ function Complete-AtelierLocalCleanup {
     param([string]$DataPath,[string]$ToolsPath)
     $safeToLog=$false
     $handles=New-Object 'Collections.Generic.List[IO.FileStream]'
+    $updateMutex=$null;$updateOwned=$false
     try {
         $expected=[IO.Path]::GetFullPath((Join-Path $env:ProgramData 'AtelierPXE'))
         if ([IO.Path]::GetFullPath($DataPath).TrimEnd([char[]]'\/') -ne $expected.TrimEnd([char[]]'\/')) { throw 'Nettoyage limite au dossier ProgramData\AtelierPXE.' }
@@ -90,6 +91,17 @@ function Complete-AtelierLocalCleanup {
         $config=Get-Content (Join-Path $DataPath 'reporting.json') -Encoding UTF8 -Raw | ConvertFrom-Json
         if ([string]$payload.deployment.id -ne [string]$config.id) { throw 'Identité de déploiement différente.' }
         $state=Get-Content (Join-Path $DataPath 'maintenance.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+        if ($payload.deployment.automatic_windows_update) {
+            # Ne jamais verrouiller le dossier pendant la première phase ou sa reprise SYSTEM.
+            if ($state.windows.source -ne 'windows_update' -or $state.windows.status -ne 'completed') { return $false }
+            $updatePath=Join-Path $DataPath 'windows-update-result.json'
+            if (-not (Test-Path $updatePath)) { return $false }
+            $updateState=Read-AtelierSharedUtf8File -Path $updatePath | ConvertFrom-Json
+            if ($updateState.status -ne 'completed') { return $false }
+            $updateMutex=New-Object Threading.Mutex($false,'Global\AtelierPXE-WindowsUpdateFirst')
+            $updateOwned=$updateMutex.WaitOne(0)
+            if (-not $updateOwned) { return $false }
+        }
         if ($state.windows.source -in @('server_250','windows_update') -and $state.windows.status -eq 'installing') { return $false }
         if ($state.windows.source -eq 'windows_update' -and @($state.windows.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -in @('installing','unknown')}).Count) {return $false}
         if ($state.status -notin @('completed','needs_attention')) { return $false }
@@ -162,5 +174,9 @@ function Complete-AtelierLocalCleanup {
         $handles.Clear()
         if ($safeToLog -and (Test-Path $DataPath)) { Add-Content -LiteralPath (Join-Path $DataPath 'cleanup.log') -Value ((Get-Date -Format o)+' Nettoyage differe : '+$_.Exception.Message) -Encoding UTF8 }
         return $false
-    } finally { foreach ($handle in $handles) { $handle.Dispose() } }
+    } finally {
+        foreach ($handle in $handles) { $handle.Dispose() }
+        if ($updateOwned) { $updateMutex.ReleaseMutex() }
+        if ($updateMutex) { $updateMutex.Dispose() }
+    }
 }

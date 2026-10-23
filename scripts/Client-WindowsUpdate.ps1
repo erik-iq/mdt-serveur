@@ -7,7 +7,7 @@ function Invoke-AtelierAutomaticWindowsUpdate {
     $path=Join-Path $DataPath 'windows-update-result.json'
     $boot=Get-AtelierHpBootIdentity
     $state=[pscustomobject]@{source='windows_update';revision='WU-AUTO-1';status='running';message='Windows Update automatique';timestamp='';boot_id=$boot;restarts=0;attempts=0;passes=@();active_pass=$null;verification=$null;count=0;titles=@();reboot_required=$false;windows=$null}
-    if (Test-Path $path) {$state=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json}
+    if (Test-Path $path) {$state=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json}
     if (-not $state.PSObject.Properties['recovery_checks']) {$state | Add-Member NoteProperty recovery_checks 0}
     function Save-AutomaticUpdate {
         $known=@($state.passes | ForEach-Object {$_.updates} | Where-Object {$_.status -in @('installed','installed_verified')})
@@ -93,7 +93,11 @@ function Invoke-AtelierAutomaticWindowsUpdate {
             } elseif ($pass.status -eq 'unknown') {$state.status='installing';$state.message=$pass.message}
             else {$state.status='needs_attention';$state.message=$pass.message}
         }
-    } catch {$state.status='needs_attention';$state.message=$_.Exception.Message}
+    } catch {
+        if (Test-AtelierFileSharingViolation $_.Exception) {
+            $state.status='retry_pending';$state.message='État Windows Update temporairement occupé. Reprise automatique avec les checkpoints conservés.'
+        } else {$state.status='needs_attention';$state.message=$_.Exception.Message}
+    }
     Save-AutomaticUpdate
     return $state
 }

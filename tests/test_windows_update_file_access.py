@@ -71,3 +71,38 @@ try {Read-AtelierSharedUtf8File -Path $path|Out-Null}catch{$rejected=$true}
     assert value['rejected']
     module=(ROOT/'scripts/WindowsUpdate-First.ps1').read_text('utf-8-sig')
     assert 'Get-Content $path -Encoding UTF8 -Raw' not in module
+
+
+@pytest.mark.parametrize('code,blocked',[(32,2),(33,2),(32,40),(5,1)])
+def test_shared_reader_retries_the_native_open_without_masking_permanent_errors(tmp_path,code,blocked):
+    source=(ROOT/'scripts/Unattend.ps1').read_text('utf-8-sig')
+    boundary='[IO.File]::Open([IO.Path]::GetFullPath($Path),[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)'
+    assert boundary in source
+    source=source.replace(boundary,'Open-FixtureSharedFile $Path $share')
+    (tmp_path/'Unattend.ps1').write_text(source,'utf-8-sig')
+    wrapper=tmp_path/'run.ps1'
+    wrapper.write_text(r'''
+$ErrorActionPreference='Stop'
+. 'DATA/Unattend.ps1'
+$global:reads=0;$global:waits=0
+function Start-Sleep {param($Milliseconds);$global:waits++}
+function Open-FixtureSharedFile {
+ param($Path,$Share)
+ $global:reads++
+ if($global:reads -le BLOCKED){throw [IO.IOException]::new('Verrou Windows simulé',(-2147024896+CODE))}
+ return [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,$Share)
+}
+[IO.File]::WriteAllText('DATA/state.json','{"status":"completed"}')
+$content=$null;$failed=$false
+try {$content=Read-AtelierSharedUtf8File 'DATA/state.json'}catch{$failed=$true}
+@{content=$content;failed=$failed;reads=$global:reads;waits=$global:waits}|ConvertTo-Json -Compress
+'''.replace('DATA',str(tmp_path)).replace('BLOCKED',str(blocked)).replace('CODE',str(code)),encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=15)
+    assert run.returncode==0,run.stderr
+    value=json.loads(run.stdout)
+    if code==5 or blocked==40:
+        assert value['failed'] and value['content'] is None
+        assert value['reads']==(1 if code==5 else 40)
+    else:
+        assert not value['failed'] and json.loads(value['content'])['status']=='completed'
+        assert value['reads']==3 and value['waits']==2

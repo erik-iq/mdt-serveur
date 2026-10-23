@@ -121,16 +121,28 @@ function Assert-AtelierUnattendFile {
     Assert-AtelierUnattendContent -Content ($encoding.GetString($bytes))
 }
 
+function Test-AtelierFileSharingViolation {
+    param([Parameter(Mandatory)]$Exception)
+    $cause=$Exception
+    while ($cause.InnerException) { $cause=$cause.InnerException }
+    return ($cause -is [IO.IOException]) -and (($cause.HResult -band 0xFFFF) -in @(32,33))
+}
+
 function Read-AtelierSharedUtf8File {
     param([Parameter(Mandatory)][string]$Path)
-    # Autoriser le remplacement atomique pendant la lecture de cette version du fichier.
+    # Une lecture ne bloque pas le remplacement atomique, mais un tiers peut tenir un verrou exclusif.
     $share=[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
-    $stream=[IO.File]::Open([IO.Path]::GetFullPath($Path),[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)
-    $reader=$null
-    try {
-        $reader=New-Object IO.StreamReader($stream,[Text.UTF8Encoding]::new($false,$true),$true)
-        return $reader.ReadToEnd()
-    } finally { if ($reader) {$reader.Dispose()} else {$stream.Dispose()} }
+    for ($attempt=0; $attempt -lt 40; $attempt++) {
+        $stream=$null;$reader=$null
+        try {
+            $stream=[IO.File]::Open([IO.Path]::GetFullPath($Path),[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)
+            $reader=New-Object IO.StreamReader($stream,[Text.UTF8Encoding]::new($false,$true),$true)
+            return $reader.ReadToEnd()
+        } catch {
+            if (-not (Test-AtelierFileSharingViolation $_.Exception) -or $attempt -ge 39) { throw }
+        } finally { if ($reader) {$reader.Dispose()} elseif ($stream) {$stream.Dispose()} }
+        Start-Sleep -Milliseconds 100
+    }
 }
 
 function Write-AtelierVerifiedUtf8File {

@@ -93,7 +93,10 @@ try {
     }
     if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+    # Une ancienne tâche de démarrage ne doit pas finaliser la nouvelle phase Windows Update.
+    if ($payload.deployment.automatic_windows_update -and -not (Test-Path (Join-Path $DataPath 'result.json'))) { return }
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+    if ($payload.deployment.automatic_windows_update -and $customization.status -ne 'completed') { return }
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
     if ($state.final_restart -and -not $state.final_restart.completed_at) {
         $boot=Get-AtelierHpBootIdentity

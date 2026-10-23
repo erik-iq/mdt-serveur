@@ -8,8 +8,10 @@ function Wait-AtelierWindowsUpdateFirst {
     param([string]$DataPath)
     $path=Join-Path $DataPath 'windows-update-result.json'
     if (Test-Path $path) {
-        $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
-        if ($saved.source -eq 'windows_update' -and $saved.status -eq 'completed') { return $true }
+        try {
+            $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
+            if ($saved.source -eq 'windows_update' -and $saved.status -eq 'completed') { return $true }
+        } catch { if (-not (Test-AtelierFileSharingViolation $_.Exception)) { throw } }
     }
     $powerShell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $action=New-ScheduledTaskAction -Execute $powerShell -Argument ('-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+(Join-Path $DataPath 'WindowsUpdate-First.ps1')+'" -DataPath "'+$DataPath+'" -Worker')
@@ -25,10 +27,15 @@ function Wait-AtelierWindowsUpdateFirst {
     $deadline=[DateTime]::UtcNow.AddHours(3)
     while ([DateTime]::UtcNow -lt $deadline) {
         if (Test-Path $path) {
-            $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
-            if ($saved.source -ne 'windows_update') { throw 'État Windows Update inattendu : logiciels bloqués.' }
-            if ($saved.status -eq 'completed') { return $true }
-            if ($saved.status -eq 'needs_attention') { throw ('Windows Update à vérifier avant les logiciels : '+$saved.message) }
+            try {
+                $saved=Read-AtelierSharedUtf8File -Path $path | ConvertFrom-Json
+                if ($saved.source -ne 'windows_update') { throw 'État Windows Update inattendu : logiciels bloqués.' }
+                if ($saved.status -eq 'completed') { return $true }
+                if ($saved.status -eq 'needs_attention') { throw ('Windows Update à vérifier avant les logiciels : '+$saved.message) }
+            } catch {
+                # Une observation impossible ne constitue ni un échec ni une réussite de Windows Update.
+                if (-not (Test-AtelierFileSharingViolation $_.Exception)) { throw }
+            }
         }
         Start-Sleep -Seconds 5
     }
@@ -103,6 +110,11 @@ function Invoke-AtelierWindowsUpdateFirstWorker {
         Publish-WindowsUpdateFirst $status $wu.message $wu
         if ($status -eq 'needs_attention') { Unregister-ScheduledTask -TaskName 'AtelierPXE-WindowsUpdateFirst' -Confirm:$false -ErrorAction SilentlyContinue }
     } catch {
+        if (Test-AtelierFileSharingViolation $_.Exception) {
+            # Garder les checkpoints intacts et la tâche de reprise inscrite.
+            try { Add-Content -LiteralPath (Join-Path $DataPath 'maintenance.log') -Encoding UTF8 -Value ((Get-Date -Format o)+' État Windows Update occupé ; nouvelle tentative automatique, logiciels en attente.') } catch { }
+            return
+        }
         $message='Windows Update avant les logiciels : '+$_.Exception.Message
         # Un échec du pilotage doit aussi réveiller la préparation en attente.
         $path=Join-Path $DataPath 'windows-update-result.json'
