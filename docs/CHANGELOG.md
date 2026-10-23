@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## Console IQ-6.0.1 : choix du thème, 23 octobre 2026
+
+- Sélecteur Clair, Sombre ou Automatique dans l’en-tête, disponible sur ordinateur et mobile. Le mode automatique suit le réglage du système.
+- Préférence mémorisée dans le navigateur et synchronisée entre les onglets du site. Le thème est appliqué avant la feuille de style pour éviter un éclair clair au chargement.
+- Contrastes adaptés pour les tableaux, statuts, formulaires et fenêtres en mode sombre. Le choix continue à fonctionner lorsque le stockage du navigateur est indisponible.
+
 ## Console IQ-6.0 : interface et suivi des déploiements, 23 octobre 2026
 
 - Navigation bleu nuit, zones de travail claires, tableaux plus lisibles, statuts contrastés et compteur des préparations à vérifier. Adaptation aux écrans étroits et accès au clavier.

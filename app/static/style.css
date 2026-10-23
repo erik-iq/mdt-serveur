@@ -59,3 +59,38 @@ details{border-top:1px solid var(--line);margin:18px 0;padding-top:16px}details.
 @media(max-width:760px){.sidebar{position:static;width:auto;padding:18px 16px 14px;border-right:0;border-bottom:1px solid #2b415a}.brand{padding:0;font-size:22px;min-height:42px}.brand-mark{width:36px;height:40px}.brand-sub{font-size:8px}.workspace-label,.sidebar-note,.sidebar-footer{display:none}nav{display:flex;gap:6px;margin-top:18px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.nav{flex:none;font-size:12px;white-space:nowrap;padding:10px 12px;min-height:42px;border-color:#293f57}.nav-icon{width:16px;height:16px}.nav.active{box-shadow:inset 0 -2px #65dfed}.shell{margin-left:0}.topbar{padding:9px 16px;min-height:60px;gap:8px;font-size:9px;letter-spacing:0}.topbar>div{gap:10px}.topbar>span{max-width:58%;line-height:1.5}.connection{font-size:10px}.brand-logo{width:40px;height:40px}.heading{padding:24px 22px;gap:20px}.heading p{font-size:13px}main{padding:22px 16px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metrics article{padding:17px}.metrics strong{font-size:30px}.metrics small{font-size:11px}.metrics .metric-attention{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;column-gap:14px;align-items:center}.metrics .metric-attention strong{grid-column:2;grid-row:1/3;margin:0}.metrics .metric-attention small{grid-column:1}.profile-grid{grid-template-columns:minmax(0,1fr)}.section-title{align-items:flex-start;gap:10px}.section-title h2{font-size:17px}.padding,.maintenance-card,details.panel{padding:20px}.table-toolbar{gap:10px}.search-field{min-width:150px}.filter-field{width:150px}.table-toolbar input,.table-toolbar select{font-size:13px}.maintenance-card .actions .button{white-space:normal}.maintenance-card table td{max-width:280px;white-space:normal}.computer-facts{grid-template-columns:1fr;gap:4px}.computer-facts dd{margin-bottom:12px}.computer-history-entry .actions{gap:6px}.computer-history-entry .section-title{gap:14px}.event{grid-template-columns:75px minmax(0,1fr);gap:12px}footer{padding:16px;font-size:10px;flex-wrap:wrap}dialog{padding:23px}.button{font-size:12px;min-height:42px}.resource-links{margin-bottom:22px}#automatic-mode{padding:12px 15px;font-size:11px}#windows-kb-context{grid-template-columns:1fr}.maintenance-card .metrics .metric-attention{display:block}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
 @media print{.sidebar,.topbar,footer,.table-toolbar,.actions,.resource-links{display:none!important}.shell{margin:0}main{padding:0}.panel,.heading{box-shadow:none}.table-wrap{overflow:visible}body{background:white}table{white-space:normal}.status-message{display:block;overflow:visible}}
+
+/* Choix d’affichage propre à la console, indépendant du thème Windows déployé. */
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.theme-picker{display:block;flex:none;width:132px;margin:0}.theme-picker select{margin:0;min-height:38px;padding:7px 10px;font-size:12px;font-weight:550}
+:root[data-theme=dark]{--ink:#e6eef8;--paper:#0b1423;--muted:#afc0d4;--line:#2a3d54;--blue:#142b42;--lilac:#1c2845;--surface:#132238;--danger:#ff9bad;color-scheme:dark}
+[data-theme=dark] a,[data-theme=dark] .text-button{color:#9acbff}
+[data-theme=dark] :focus-visible{outline-color:#86c5ff}
+[data-theme=dark] .skip-link,[data-theme=dark] .topbar,[data-theme=dark] dialog{background:var(--surface)}
+[data-theme=dark] .topbar #breadcrumb,[data-theme=dark] .topbar b{color:#afc6df}
+[data-theme=dark] .heading{background:linear-gradient(110deg,var(--blue),var(--lilac));border-color:#314963}
+[data-theme=dark] .heading p,[data-theme=dark] .eyebrow{color:#acd1f1}
+[data-theme=dark] .secondary{background:#1a2c43;border-color:#3b526d;color:#b8d9fa}
+[data-theme=dark] .quiet{color:#b5d5f5}
+[data-theme=dark] .secondary:hover,[data-theme=dark] .quiet:hover,[data-theme=dark] tbody tr[data-job]:hover{background:#203650}
+[data-theme=dark] .metrics article{border-top-color:#487cac}[data-theme=dark] .metrics article.metric-attention{border-top-color:#d6a656}
+[data-theme=dark] th{background:#182a41;color:#b9cde3}
+[data-theme=dark] td{border-bottom-color:#293c53}
+[data-theme=dark] .badge{background:#21354c;color:#c4d5e9;border-color:#3c526c}
+[data-theme=dark] .badge.running,[data-theme=dark] .badge.staged{background:#173659;color:#b3d6ff;border-color:#325c87}
+[data-theme=dark] .badge.completed,[data-theme=dark] .badge.up_to_date,[data-theme=dark] .badge.passed{background:#153b30;color:#95dfb8;border-color:#2b6651}
+[data-theme=dark] .badge.failed,[data-theme=dark] .badge.cancelled{background:#452335;color:#ffbbc7;border-color:#804256}
+[data-theme=dark] .badge.queued,[data-theme=dark] .badge.needs_attention,[data-theme=dark] .badge.retry_pending,[data-theme=dark] .badge.reboot_pending,[data-theme=dark] .badge.partial,[data-theme=dark] .badge.interrupted{background:#40321c;color:#f4d090;border-color:#735b2f}
+[data-theme=dark] input,[data-theme=dark] select,[data-theme=dark] textarea{background:#0f1c2e;color:var(--ink);border-color:#3a506b}
+[data-theme=dark] input::placeholder,[data-theme=dark] textarea::placeholder{color:#9bacc3}
+[data-theme=dark] .table-toolbar label,[data-theme=dark] summary{color:#bbd2ec}
+[data-theme=dark] summary:hover{color:#9ad7ff}
+[data-theme=dark] .notice{background:#342033;border-color:#704153;color:#ffc1cf}
+[data-theme=dark] #automatic-mode{background:#101e31;color:#b3c8df;border-left-color:#5f92b9}
+[data-theme=dark] .icon-button{background:#21354c;color:#c4d5e9}
+[data-theme=dark] .warning-text{color:#f0cc8e}
+[data-theme=dark] .connection[data-state=online]{color:#9edbbb}
+[data-theme=dark] .connection[data-state=online]::before{background:#5bc79b;box-shadow:0 0 0 3px #214333}
+[data-theme=dark] progress,[data-theme=dark] progress::-webkit-progress-bar{background:#293d57}
+@media(max-width:760px){.topbar{flex-wrap:wrap}.topbar>span{max-width:none;width:100%}.topbar>div{width:100%;justify-content:space-between;gap:10px}.theme-picker{width:118px}}
+@media print{.theme-picker{display:none}:root[data-theme=dark]{--ink:#162b43;--paper:white;--muted:#53677f;--line:#dce4ed;--surface:white;color-scheme:light}[data-theme=dark] .heading,[data-theme=dark] th{background:#edf1f8;color:#162b43}}

@@ -232,7 +232,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     static_root = ROOT / 'app' / 'static'
     index_html = (static_root / 'index.html').read_text(encoding='utf-8')
     ui_assets = {}
-    for filename in ('style.css', 'app.js', 'maintenance.js', 'brand-logo.png'):
+    for filename in ('style.css', 'theme.js', 'app.js', 'maintenance.js', 'brand-logo.png'):
         version = file_hash(static_root / filename)[:16]
         original = '/static/' + filename
         ui_assets[filename] = original + '?v=' + version
@@ -400,7 +400,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.0"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.0.1"}
 
     @api.get('/api/session')
     def session_options():
