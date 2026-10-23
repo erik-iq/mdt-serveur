@@ -72,6 +72,29 @@ def run():
                 page.goto(origin);expect(page.locator('#connection')).to_have_text('Console connectée')
                 expect(page.locator('#overview-maintenance-storage')).to_contain_text('Volume')
                 assert page.locator('#hp-maintenance-storage, #windows-maintenance-storage, .bottom-grid').count()==0
+                expect(page.locator('#metric-attention')).to_have_text('0')
+                page.locator('#deployment-search').fill('BROWSER-8323')
+                expect(page.locator('#deployments tr[data-job]')).to_have_count(1)
+                page.locator('#deployment-filter').select_option('failed')
+                expect(page.locator('#deployments tr[data-job]')).to_have_count(0)
+                expect(page.locator('#deployments')).to_contain_text('Aucun déploiement ne correspond')
+                page.locator('#deployment-filter').select_option('completed')
+                expect(page.locator('#deployments tr[data-job]')).to_have_count(1)
+                button=page.locator('#deployments [data-computer]').element_handle()
+                button.focus()
+                requests=[]
+                page.on('request',lambda request:requests.append(request.url))
+                page.evaluate('async()=>{await refresh();await refresh();}')
+                expect(page.locator('#deployment-search')).to_have_value('BROWSER-8323')
+                expect(page.locator('#deployment-filter')).to_have_value('completed')
+                assert button.evaluate('(element)=>element===document.activeElement'), 'Le focus doit être conservé pendant le suivi'
+                assert not [url for url in requests if '/api/maintenance/storage' in url],requests
+                expect(page.locator('#sync-time')).to_contain_text('Actualisé à')
+                page.locator('#deployment-search').fill('introuvable')
+                expect(page.locator('#deployments tr[data-job]')).to_have_count(0)
+                page.locator('#deployment-search').fill('')
+                page.locator('#deployment-filter').select_option('all')
+
                 page.locator('#overview-maintenance-storage').locator('..').locator('summary').first.click()
                 page.screenshot(path='/tmp/atelier-overview-iq56.png',full_page=True)
                 page.get_by_role('button',name='HPIA et pilotes',exact=True).click()

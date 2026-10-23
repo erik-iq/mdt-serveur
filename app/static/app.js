@@ -6,7 +6,9 @@ const inventoryLabels = {'Modele':'Modèle','Numero de serie':'Numéro de série
 const inventoryLabel = key => inventoryLabels[key] || key;
 const labels = {not_needed:'Aucune mise à jour nécessaire',ready:'Prêt',not_ready:'Indisponible',offline:'Dépôt local',online:'HP Internet',unavailable:'Indisponible',manual:'Manuel',skipped:'Non applicable',active_confirmee_operateur:'Active (confirmée par le technicien)',expiree_confirmee_operateur:'Expirée (confirmée par le technicien)',non_verifie:'Non vérifié',passed:'Conforme',not_tested:'Non testé',requested:'Demandé',unknown:'Non connu',up_to_date:'À jour',installed:'Installé',deferred:'Reporté',partial:'Partiellement terminé',interrupted:'Interrompu',queued:'En attente', running:'En cours', staged:'Image appliquée', failed:'Échec', cancelled:'Annulé',completed:'Terminé',needs_attention:'À vérifier',retry_pending:'Nouvelle tentative prévue',reboot_pending:'Redémarrage prévu'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const date = s => new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
+const dateFormatter = new Intl.DateTimeFormat('fr-CH',{dateStyle:'short',timeStyle:'short'});
+const clockFormatter = new Intl.DateTimeFormat('fr-CH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const date = s => dateFormatter.format(new Date(s));
 const size = n => n > 1024**3 ? `${(n/1024**3).toFixed(2)} Go` : `${(n/1024**2).toFixed(1)} Mo`;
 async function api(path, method='GET', body) {
   const response = await fetch('/api'+path, {method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body === undefined ? undefined : JSON.stringify(body)});
@@ -19,6 +21,35 @@ async function api(path, method='GET', body) {
   return data;
 }
 function badge(status) { return `<span class="badge ${esc(status)}">${esc(labels[status] || status)}</span>`; }
+// Conserver les nœuds inchangés pendant les actualisations et la navigation au clavier.
+const renderedFragments = new WeakMap();
+function renderFragment(id, html) {
+  const element=$(id);
+  if(renderedFragments.get(element)===html)return;
+  element.innerHTML=html;renderedFragments.set(element,html);
+}
+function deploymentStatus(deployment) { return deployment.windows_status||deployment.status; }
+function renderDeployments() {
+  if(!state)return;
+  const query=$('deployment-search').value.trim().toLocaleLowerCase('fr-CH');
+  const filter=$('deployment-filter').value;
+  const jobs=state.deployments.filter(d=>{
+    const status=deploymentStatus(d);
+    const matches=filter==='all'||(filter==='active'?['queued','running','retry_pending','reboot_pending'].includes(status):status===filter);
+    return matches&&(!query||[d.hostname,d.serial_number,d.mac,d.profile_name].some(value=>String(value||'').toLocaleLowerCase('fr-CH').includes(query)));
+  });
+  $('deployments-empty').hidden=state.deployments.length>0;
+  $('deployment-count').textContent=jobs.length+' déploiement(s) affiché(s) sur '+state.deployments.length+'.';
+  renderFragment('deployments',jobs.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.serial_number?'SN : '+d.serial_number:'Ancienne fiche MAC : '+d.mac)}</small></td><td>${esc(d.profile_name)}</td><td class="status-cell">${badge(deploymentStatus(d))}${d.windows_message?`<small class="status-message" title="${esc(d.windows_message)}">${esc(d.windows_message)}</small>`:''}</td><td class="progress-cell"><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td><div class="row-actions"><button class="text-button" data-computer="${esc(d.machine_id)}">Fiche ordinateur</button><button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button>${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</div></td></tr>`).join('')||(state.deployments.length?'<tr><td class="filtered-empty" colspan="6">Aucun déploiement ne correspond à votre recherche.</td></tr>':''));
+}
+function setConnection(online) {
+  $('connection').textContent=online?'Console connectée':'Connexion interrompue';
+  $('connection').dataset.state=online?'online':'offline';
+  if(online){const now=new Date();$('sync-time').hidden=false;$('sync-time').dateTime=now.toISOString();$('sync-time').textContent='Actualisé à '+clockFormatter.format(now);}
+}
+$('deployment-search').addEventListener('input',renderDeployments);
+$('deployment-filter').addEventListener('change',renderDeployments);
+
 function render() {
   if($('automatic-mode')) $('automatic-mode').hidden=!state.auto_enroll;
   document.querySelectorAll('[data-open="deployment"]').forEach(button=>button.hidden=!!state.auto_enroll);
@@ -27,21 +58,24 @@ function render() {
   $('metric-profiles').textContent = state.profiles.length;
   $('metric-active').textContent = state.totals.active;
   $('metric-staged').textContent = state.totals.staged;
-  $('deployments-empty').hidden = state.deployments.length > 0;
-  $('deployments').innerHTML = state.deployments.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.serial_number?'SN : '+d.serial_number:'Ancienne fiche MAC : '+d.mac)}</small></td><td>${esc(d.profile_name)}</td><td>${badge(d.windows_status||d.status)}${d.windows_status?`<small>Windows : ${badge(d.windows_status)}</small><small>${esc(d.windows_message)}</small>`:''}</td><td><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td><button class="text-button" data-computer="${esc(d.machine_id)}">Fiche ordinateur</button> <button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button> ${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</td></tr>`).join('');
+  $('metric-attention').textContent=state.deployments.filter(d=>['needs_attention','failed','partial','interrupted'].includes(deploymentStatus(d))).length;
+  renderDeployments();
+  const reportsByMachine=new Map();
+  for(const report of state.reports||[]){if(!reportsByMachine.has(report.machine_id))reportsByMachine.set(report.machine_id,[]);reportsByMachine.get(report.machine_id).push(report);}
+  const assetsById=new Map(state.assets.map(asset=>[asset.id,asset]));
   $('machines-empty').hidden = state.machines.length > 0;
-  $('machines').innerHTML = state.machines.map(m=>`<tr><td><button class="text-button" data-computer="${esc(m.id)}">${esc(m.hostname)}</button></td><td class="hash">${esc(m.serial_number)||'Non renseigné (ancienne fiche)'}${m.mac?`<small>MAC observée : ${esc(m.mac)}</small>`:''}</td><td>${esc(m.description)||'-'}</td><td>${date(m.created_at)}</td><td>${(state.reports||[]).filter(r=>r.machine_id===m.id).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} | PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join('');
-  $('profiles').innerHTML = state.profiles.length ? state.profiles.map(p=>{const a=state.assets.find(a=>a.id===p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} | ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} | ${esc(p.locale)}<br>${esc(p.settings.timezone)} | ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.software_mode==='winget'?`${p.settings.winget_packages.length} logiciel(s) WinGet après Windows`:`${p.settings.bundle_ids.length} bundle(s) | ${p.settings.application_ids.length} logiciel(s)`}<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Créez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis sélectionnez l’index de l’édition avec DISM /Get-WimInfo.</p></div>';
-  $('assets').innerHTML = state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}...</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistre.</td></tr>';
+  renderFragment('machines',state.machines.map(m=>`<tr><td><button class="text-button" data-computer="${esc(m.id)}">${esc(m.hostname)}</button></td><td class="hash">${esc(m.serial_number)||'Non renseigné (ancienne fiche)'}${m.mac?`<small>MAC observée : ${esc(m.mac)}</small>`:''}</td><td>${esc(m.description)||'-'}</td><td>${date(m.created_at)}</td><td>${(reportsByMachine.get(m.id)||[]).map(r=>`<button class="text-button" data-report="${esc(r.deployment_id)}">${esc(r.hostname)} | PDF ${date(r.created_at)}</button>`).join(' ' ) || 'En attente du rapport Windows'}</td></tr>`).join(''));
+  renderFragment('profiles',state.profiles.length ? state.profiles.map(p=>{const a=assetsById.get(p.asset_id);return `<article class="panel profile-card"><span class="badge">WINDOWS ${esc(p.windows_version)} | ${esc(p.edition || 'WIM')}</span><h3>${esc(p.name)}</h3><code>${esc(a?.filename)}</code><p>Index ${p.image_index} | ${esc(p.locale)}<br>${esc(p.settings.timezone)} | ${esc(p.settings.theme)}<br>${p.settings.unattended ? 'Compte Administrateur automatique<br>' : ''}${p.settings.software_mode==='winget'?`${p.settings.winget_packages.length} logiciel(s) WinGet après Windows`:`${p.settings.bundle_ids.length} bundle(s) | ${p.settings.application_ids.length} logiciel(s)`}<br>${a?size(a.size):''}</p></article>`;}).join('') : '<div class="panel padding"><h3>Créez votre premier profil.</h3><p>Enregistrez un fichier install.wim puis sélectionnez l’index de l’édition avec DISM /Get-WimInfo.</p></div>');
+  renderFragment('assets',state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}...</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistré.</td></tr>');
   const hp=state.hp_repository;
   if(hp && $('hp-repository-state')) {
     $('hp-repository-state').textContent=hp.worker.available?hp.worker.message:'Dépôt non disponible pour le moment. Les postes peuvent continuer directement avec HP.';
     $('hp-repository-refresh').disabled=!hp.jobs.length;
     const seen=new Set();
-    $('hp-repository-jobs').innerHTML=hp.jobs.filter(job=>{const key=job.platform+'|'+job.os+'|'+job.os_version;if(seen.has(key))return false;seen.add(key);return true;}).map(job=>{
+  renderFragment('hp-repository-jobs',hp.jobs.filter(job=>{const key=job.platform+'|'+job.os+'|'+job.os_version;if(seen.has(key))return false;seen.add(key);return true;}).map(job=>{
       const saved=hp.snapshots.find(s=>s.platform===job.platform && s.os===job.os && s.os_version===job.os_version);
       return `<article class="hp-repository-entry"><div><b>HP ${esc(job.platform)} | Windows ${job.os==='win11'?'11':'10'} ${esc(job.os_version)}</b> ${badge(job.status)}<p>${esc(job.message)}</p><small>${saved?'Copie conservée : '+esc(size(saved.size))+' | '+esc(date(saved.created_at)):'Premier téléchargement en préparation'}</small></div></article>`;
-    }).join('') || '<p>Le dépôt sera alimenté automatiquement au premier poste avec HP Image Assistant sélectionne.</p>';
+    }).join('') || '<p>Le dépôt sera alimenté automatiquement au premier poste avec HP Image Assistant sélectionné.</p>');
   }
 
 
@@ -49,8 +83,8 @@ function render() {
 async function refresh() {
   if ((!token && !internalMode) || refreshing) return;
   refreshing = true;
-  try { state = await api('/state'); render(); $('connection').textContent = ' Console connectée'; $('notice').hidden = true; await openRequestedDeployment(); }
-  catch(e) { $('connection').textContent = ' Connexion interrompue'; $('notice').textContent = e.message; $('notice').hidden = false; }
+  try { state = await api('/state'); render(); setConnection(true); $('notice').hidden = true; await openRequestedDeployment(); }
+  catch(e) { setConnection(false); $('notice').textContent = e.message; $('notice').hidden = false; }
   finally { refreshing = false; }
 }
 function field(label,name,type='text',extra='') { return `<label>${label}<input name="${name}" type="${type}" ${extra} required></label>`; }
@@ -85,7 +119,7 @@ function openForm(kind) {
 }
 $('login-form').addEventListener('submit',async e=>{
   e.preventDefault(); token=new FormData(e.target).get('token').trim(); $('login-error').textContent='';
-  try { state=await api('/state'); e.target.reset(); $('login-dialog').close(); render(); $('connection').textContent=' Console connectée'; await openRequestedDeployment(); }
+  try { state=await api('/state'); e.target.reset(); $('login-dialog').close(); render(); setConnection(true); await openRequestedDeployment(); }
   catch(error) { token=''; $('login-error').textContent=error.message; }
 });
 $('login-dialog').addEventListener('cancel',e=>e.preventDefault());
@@ -122,10 +156,10 @@ document.addEventListener('click',async e=>{
   const report=e.target.closest('[data-report]');
   if(report){e.stopPropagation();await downloadReport(report.dataset.report);return;}
 
-  const nav=e.target.closest('[data-page]'); if(nav){document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+nav.dataset.page);document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n===nav));$('breadcrumb').textContent=nav.textContent.trim();}
+  const nav=e.target.closest('[data-page]'); if(nav){document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+nav.dataset.page);document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n===nav));$('breadcrumb').textContent=nav.textContent.trim();document.querySelectorAll('.nav').forEach(n=>{if(n===nav)n.setAttribute('aria-current','page');else n.removeAttribute('aria-current');});}
   const open=e.target.closest('[data-open]'); if(open) openForm(open.dataset.open);
   const close=e.target.closest('[data-close]'); if(close) { if(close.dataset.close==='token-dialog') clearJobToken(); $(close.dataset.close).close(); }
-  const cancel=e.target.closest('[data-cancel]'); if(cancel){e.stopPropagation(); if(confirm('Demander l’annulation ? Les opérations déjà effectuées ne sont pas restaurees.')){try{await api('/deployments/'+cancel.dataset.cancel+'/cancel','POST');await refresh();}catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}}return;}
+  const cancel=e.target.closest('[data-cancel]'); if(cancel){e.stopPropagation(); if(confirm('Demander l’annulation ? Les opérations déjà effectuées ne sont pas restaurées.')){try{await api('/deployments/'+cancel.dataset.cancel+'/cancel','POST');await refresh();}catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}}return;}
   const job=e.target.closest('[data-job]'); if(job) await showEvents(job.dataset.job);
 });
 function clearJobToken() { $('job-token').value=''; $('job-token').type='password'; $('job-id').value=''; $('boot-code').value=''; }
@@ -135,6 +169,7 @@ $('copy-boot-code').addEventListener('click',async()=>{try{await navigator.clipb
 $('refresh').addEventListener('click',()=> sessionReady ? refresh() : initializeSession());
 $('logout').addEventListener('click',()=>{token='';state=null;document.querySelectorAll('dialog[open]').forEach(d=>d.close());location.reload();});
 setInterval(()=>{if(!document.hidden) refresh();},5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 
 initializeSession();
 
@@ -152,7 +187,7 @@ async function initializeSession() {
   } catch (error) {
     $('notice').textContent = error.message;
     $('notice').hidden = false;
-    $('connection').textContent = ' Connexion interrompue';
+    setConnection(false);
   }
 }
 

@@ -61,10 +61,10 @@ def run():
                 expect(page.locator('#connection')).to_have_text('Console connectée')
                 assert_logo(page)
                 gradient=page.locator('.heading').first.evaluate('(el)=>getComputedStyle(el).backgroundImage')
-                assert 'rgb(210, 228, 241)' in gradient and 'rgb(233, 217, 234)' in gradient,gradient
+                assert 'rgb(230, 241, 250)' in gradient and 'rgb(237, 241, 255)' in gradient,gradient
                 sidebar=page.locator('.sidebar').evaluate('(el)=>getComputedStyle(el).backgroundImage')
                 assert 'linear-gradient' in sidebar
-                assert page.locator('[data-page]').count()==3
+                assert page.locator('[data-page]').count()==5
                 for width,height,name in [(1440,1000,'desktop'),(390,844,'mobile'),(1920,1080,'large')]:
                     page.set_viewport_size({'width':width,'height':height})
                     assert_logo(page)
@@ -75,7 +75,7 @@ def run():
                 page.set_viewport_size({'width':1440,'height':1000});page.reload();assert_logo(page)
                 assert not errors,errors
                 browser.close()
-            print('Thème browser passed: stale CSS reproduces the fault; content versions restore blue/lilac; logo is 40x40 at top right on desktop/mobile/large and with legacy CSS.')
+            print('Thème browser passed: stale CSS reproduces the fault; content versions restore the high contrast interface; logo is 40x40 at top right on desktop/mobile/large and with legacy CSS.')
         finally:
             process.terminate();process.wait(timeout=10)
 

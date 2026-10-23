@@ -4,7 +4,9 @@ const maintenanceBytes=value=>Number.isFinite(value)?size(value):'Non transmis';
 const maintenanceStates={preparing:'Préparation en cours',ready_for_test:'Candidate à tester',cancelled_cleanup_required:'Annulée - montage à récupérer',failed_cleanup_required:'Échec - montage à récupérer',testing:'Tests en cours',published:'Publiée',Ready:'Au repos',Running:'En cours',Disabled:'En pause',Unknown:'État non transmis',NotConfigured:'Non planifiée',not_checked:'Recherche non lancée'};
 const maintenanceLabel=value=>maintenanceStates[value]||labels[value]||value||'Non transmis';
 const maintenanceDuration=value=>Number.isFinite(value)?`${Math.floor(value/60)} min ${Math.round(value%60)} s`:'Non mesuré';
-let maintenanceLoading=false;
+const maintenanceRequests=new Map();
+const maintenanceFetched=new Map();
+const maintenanceFragments=new WeakMap();
 
 function maintenanceStorage(value){
   if(!value)return '<p>Mesure du stockage en attente.</p>';
@@ -12,6 +14,8 @@ function maintenanceStorage(value){
 }
 
 function maintenanceReplace(id,html){
+  if(maintenanceFragments.get($(id))===html)return;
+  maintenanceFragments.set($(id),html);
   const opened=new Set([...$(id).querySelectorAll('details[open][data-maint-key]')].map(d=>d.dataset.maintKey));
   $(id).innerHTML=html;
   $(id).querySelectorAll('details[data-maint-key]').forEach(d=>{if(opened.has(d.dataset.maintKey))d.open=true;});
@@ -27,9 +31,9 @@ function renderHpMaintenance(value){
   $('hp-maintenance-message').textContent=`Agent : ${maintenanceLabel(value.worker.state)}. ${value.worker.message} Dernier contact : ${maintenanceDate(value.worker.last_seen)}.`;
   maintenanceReplace('hp-maintenance-models',value.models.map(m=>{
     const search=[...m.names,m.platform,...m.packages.flatMap(p=>[p.id,p.title||'',p.version||''])].join(' ').toLowerCase();
-    return `<article class="panel padding maintenance-card" data-hp-search="${esc(search)}"><div class="section-title"><div><h3>${esc(m.names.join(' / ')||'Modèle non encore transmis')}</h3><p>Plateforme ${esc(m.platform)} | ${esc(m.os)} ${esc(m.os_version)} | ${m.machine_count} poste(s)</p></div>${badge(m.latest_job?.status||(m.snapshot?'completed':'not_ready'))}</div><p>${m.snapshot?`${m.packages.length} SoftPaq dans la dernière archivé (${maintenanceBytes(m.snapshot.size)}), publiée le ${maintenanceDate(m.snapshot.created_at)}.`:'Aucune archivé disponible sur le serveur pour cette plateforme.'}</p>${m.latest_job?`<p>${esc(m.latest_job.message)}</p>`:''}${m.issues.map(i=>`<p class="form-error">${esc(i)}</p>`).join('')}<p>${!m.required.length?'Aucune liste de SoftPaq attendus transmise.':m.missing.length?'SoftPaq demandés encore absents : '+esc(m.missing.join(', ')):'Tous les SoftPaq demandés sont présents dans la liste du cache.'}</p><details data-maint-key="hp-${esc(m.platform+'-'+m.os_version)}"><summary>Pilotes et logiciels stockés (${m.packages.length})</summary><p>Présence et taille de l’archivé contrôlées. Le tableau ne recalcule pas les empreintes de plusieurs Go à chaque ouverture.</p><div class="table-wrap"><table><thead><tr><th>SOFTPAQ</th><th>DESCRIPTION</th><th>VERSION CVA</th><th>TAILLE EXE</th></tr></thead><tbody>${m.packages.map(p=>`<tr><td>${esc(p.id)}<small>${esc(p.filename)}</small></td><td>${esc(p.title||'Description non renseignée')}</td><td>${esc(p.version||'Non renseignée')}</td><td>${maintenanceBytes(p.size)}</td></tr>`).join('')}</tbody></table></div></details></article>`;
+    return `<article class="panel padding maintenance-card" data-hp-search="${esc(search)}"><div class="section-title"><div><h3>${esc(m.names.join(' / ')||'Modèle non encore transmis')}</h3><p>Plateforme ${esc(m.platform)} | ${esc(m.os)} ${esc(m.os_version)} | ${m.machine_count} poste(s)</p></div>${badge(m.latest_job?.status||(m.snapshot?'completed':'not_ready'))}</div><p>${m.snapshot?`${m.packages.length} SoftPaq dans la dernière archive (${maintenanceBytes(m.snapshot.size)}), publiée le ${maintenanceDate(m.snapshot.created_at)}.`:'Aucune archive disponible sur le serveur pour cette plateforme.'}</p>${m.latest_job?`<p>${esc(m.latest_job.message)}</p>`:''}${m.issues.map(i=>`<p class="form-error">${esc(i)}</p>`).join('')}<p>${!m.required.length?'Aucune liste de SoftPaq attendus transmise.':m.missing.length?'SoftPaq demandés encore absents : '+esc(m.missing.join(', ')):'Tous les SoftPaq demandés sont présents dans la liste du cache.'}</p><details data-maint-key="hp-${esc(m.platform+'-'+m.os_version)}"><summary>Pilotes et logiciels stockés (${m.packages.length})</summary><p>Présence et taille de l’archive contrôlées. Le tableau ne recalcule pas les empreintes de plusieurs Go à chaque ouverture.</p><div class="table-wrap"><table><thead><tr><th>SOFTPAQ</th><th>DESCRIPTION</th><th>VERSION CVA</th><th>TAILLE EXE</th></tr></thead><tbody>${m.packages.map(p=>`<tr><td>${esc(p.id)}<small>${esc(p.filename)}</small></td><td>${esc(p.title||'Description non renseignée')}</td><td>${esc(p.version||'Non renseignée')}</td><td>${maintenanceBytes(p.size)}</td></tr>`).join('')}</tbody></table></div></details></article>`;
   }).join('')||'<div class="panel padding"><h3>Aucun modèle HP connu</h3><p>Un poste avec HPIA sélectionné transmet sa plateforme et ses recommandations pendant la préparation.</p></div>');
-  $('hp-maintenance-history').innerHTML=`<div class="panel table-wrap"><table><thead><tr><th>PLATEFORME</th><th>WINDOWS</th><th>ÉTAT</th><th>DÉTAIL</th><th>ACTUALISÉ LE</th></tr></thead><tbody>${value.jobs.map(j=>`<tr><td>${esc(j.platform)}</td><td>${esc(j.os)} ${esc(j.os_version)}</td><td>${badge(j.status)}</td><td>${esc(j.message)}</td><td>${maintenanceDate(j.updated_at)}</td></tr>`).join('')}</tbody></table></div>`;
+  renderFragment('hp-maintenance-history',`<div class="panel table-wrap"><table><thead><tr><th>PLATEFORME</th><th>WINDOWS</th><th>ÉTAT</th><th>DÉTAIL</th><th>ACTUALISÉ LE</th></tr></thead><tbody>${value.jobs.map(j=>`<tr><td>${esc(j.platform)}</td><td>${esc(j.os)} ${esc(j.os_version)}</td><td>${badge(j.status)}</td><td>${esc(j.message)}</td><td>${maintenanceDate(j.updated_at)}</td></tr>`).join('')}</tbody></table></div>`);
   filterHpMaintenance();
 }
 
@@ -49,15 +53,26 @@ function renderWindowsMaintenance(value){
 }
 
 async function loadMaintenance(page,fresh=false){
-  if(maintenanceLoading||(!sessionReady))return;
-  maintenanceLoading=true;
-  const overview=page==='overview';
-  const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
-  try{
-    const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
-    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();await loadWindowsReleases();message.textContent='Suivi actualisé. Les KB et Windows Update restent manuels pendant la préparation des nouveaux postes ; HPIA précède les logiciels et le dossier IQ.';}
-  }catch(error){message.textContent=error.message;}
-  finally{maintenanceLoading=false;}
+  if(!sessionReady)return;
+  if(maintenanceRequests.has(page))return maintenanceRequests.get(page);
+  if(!fresh&&Date.now()-(maintenanceFetched.get(page)||0)<15000)return;
+  const task=(async()=>{
+    const overview=page==='overview';
+    const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
+    try{
+      const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
+      if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));
+      else if(hp)renderHpMaintenance(value);
+      else{
+        renderWindowsMaintenance(value);
+        await Promise.all([loadWindowsKb(),loadWindowsReleases()]);
+        message.textContent='Suivi actualisé. Les KB et Windows Update restent manuels pendant la préparation des nouveaux postes ; HPIA précède les logiciels et le dossier IQ.';
+      }
+      maintenanceFetched.set(page,Date.now());
+    }catch(error){message.textContent=error.message;}
+  })();
+  maintenanceRequests.set(page,task);
+  try{await task;}finally{maintenanceRequests.delete(page);}
 }
 
 document.addEventListener('click',async event=>{

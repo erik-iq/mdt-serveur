@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Console IQ-6.0 : interface et suivi des déploiements, 23 octobre 2026
+
+- Navigation bleu nuit, zones de travail claires, tableaux plus lisibles, statuts contrastés et compteur des préparations à vérifier. Adaptation aux écrans étroits et accès au clavier.
+- Recherche locale par poste, numéro de série ou profil et filtre par état, avec nombre de résultats. Conservation des filtres pendant les actualisations.
+- Réutilisation des fragments HTML inchangés pour préserver le focus et les détails ouverts. Mutualisation des demandes simultanées de maintenance et espacement de leur actualisation à quinze secondes.
+- La dernière actualisation réussie est affichée dans la console. Le parcours Windows reste celui d’IQ-5.8.9, sans KB automatiques. Cette mise à jour du site ne nécessite pas de reconstruire WinPE.
+
 ## IQ-5.8.9 : retrait des KB automatiques sur les postes, 23 octobre 2026
 
 - Les nouveaux déploiements désactivent le cache KB et son étape initiale. Windows Update automatique reste désactivé.
