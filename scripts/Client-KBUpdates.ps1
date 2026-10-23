@@ -96,6 +96,31 @@ function Get-AtelierKbFailureDetails {
     return $detail
 }
 
+function Set-AtelierKb552Verification {
+    param([hashtable]$State,[string]$DataPath)
+    foreach ($entry in @($State.entries)) {
+        if ($entry.status -ne 'failed' -or $entry.exit_code -ne 552 -or $entry.kind -ne 'os' -or
+            $entry.kb -ne $State.active_kb -or $entry.kb -notmatch '^KB[0-9]{6,9}$' -or
+            $entry.target_build -notmatch '^\d{5}\.\d+$' -or $entry.verification_failed) { continue }
+        $log=Join-Path $DataPath ('kb-'+$entry.kb+'.log')
+        if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { continue }
+        $tail=(Get-Content -LiteralPath $log -Tail 100 -Encoding UTF8) -join "`n"
+        $session=$tail.LastIndexOf('<----- Starting Dism.exe session ----->',[StringComparison]::Ordinal)
+        if ($session -ge 0) { $tail=$tail.Substring($session) }
+        # Ce journal autorise une vérification après redémarrage, jamais une réussite immédiate.
+        if ($tail -notmatch 'Install exited\. Error:\[0x0\]' -or
+            $tail -notmatch 'Repair needed: \[FALSE\]' -or
+            $tail -notmatch 'ExecuteCmdLine\(hr:0x80070228\)' -or
+            $tail -notmatch 'Image session has been closed\. Reboot required=yes\.') { continue }
+        $entry.status='verification_pending'
+        $entry | Add-Member NoteProperty diagnostic 'DISM a signalé une installation et un redémarrage requis avant le code 552. Confirmation du build après redémarrage obligatoire.' -Force
+        $State.status='reboot_pending';$State.reboot_required=$true
+        $State.message='Code DISM 552 conservé. Redémarrage nécessaire pour vérifier la KB réellement appliquée avant de continuer.'
+        return $true
+    }
+    return $false
+}
+
 function Invoke-AtelierCachedWindowsUpdates {
     param([string]$DataPath,[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,600)][int]$ServerWaitSeconds=180)
     $path=Join-Path $DataPath 'windows-kb-result.json'
@@ -107,29 +132,31 @@ function Invoke-AtelierCachedWindowsUpdates {
             $saved=Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
             foreach ($property in $saved.PSObject.Properties) { $state[$property.Name]=$property.Value }
             if ($state.context.build -ne $context.build -or $state.context.release -ne $context.release -or $state.context.architecture -ne $context.architecture) { throw 'Le contexte Windows a changé depuis le début des KB.' }
+            [void](Set-AtelierKb552Verification -State $state -DataPath $DataPath)
             $sameBoot=$state.boot_id -and ([datetime]$state.boot_id).ToUniversalTime() -eq ([datetime]$boot).ToUniversalTime()
             if ($sameBoot -and $state.status -eq 'running' -and @($state.entries|Where-Object {$_.status -eq 'installed'}).Count) {
                 $state.status='reboot_pending';$state.reboot_required=$true
                 Save-AtelierKbState $path $state
             }
-            if ($sameBoot -and $state.status -eq 'reboot_pending') { return [pscustomobject]$state }
+            if ($sameBoot -and $state.status -eq 'reboot_pending') { Save-AtelierKbState $path $state;return [pscustomobject]$state }
             if ($state.status -eq 'installing') {
                 if ($sameBoot) { throw 'Une installation KB est interrompue ou encore active ; aucun second DISM lancé.' }
                 throw 'Installation KB interrompue par un redémarrage non confirmé. Consulter le journal DISM.'
             }
-            if (-not $sameBoot -and @($state.entries|Where-Object {$_.status -eq 'installed'}).Count) {
+            if (-not $sameBoot -and @($state.entries|Where-Object {$_.status -in @('installed','verification_pending')}).Count) {
                 $packages=@(Get-WindowsPackage -Online -ErrorAction Stop)
                 foreach ($entry in @($state.entries)) {
-                    if ($entry.status -ne 'installed') { continue }
-                    if ($entry.kind -eq 'os' -and $entry.target_build -and (Get-AtelierKbBuild) -lt [version]('10.0.'+$entry.target_build)) { throw ('Le build Windows attendu après '+$entry.kb+' n''est pas confirmé.') }
+                    if ($entry.status -notin @('installed','verification_pending')) { continue }
+                    if ($entry.kind -eq 'os' -and $entry.target_build -and (Get-AtelierKbBuild) -lt [version]('10.0.'+$entry.target_build)) { $entry | Add-Member NoteProperty verification_failed $true -Force;throw ('Le build Windows attendu après '+$entry.kb+" n’est pas confirmé. Code natif conservé : "+$entry.exit_code+'.') }
                     foreach ($name in @($entry.package_names)) {
                         if (-not @($packages|Where-Object {$_.PackageName -eq $name -and [string]$_.PackageState -in @('Installed','Superseded')}).Count) { throw ('Paquet Windows non finalisé après redémarrage : '+$name) }
                     }
                     $entry.status='completed'
+                    $entry | Add-Member NoteProperty verified_after_boot $boot -Force
                 }
                 $state.reboot_required=$false
             }
-            if ($state.status -eq 'completed') { return [pscustomobject]$state }
+            if ($state.status -in @('completed','needs_attention')) { Save-AtelierKbState $path $state;return [pscustomobject]$state }
         }
         $state.context=$context;$state.boot_id=$boot;$state.status='running';$state.reboot_required=$false
         $config=Get-Content (Join-Path $DataPath 'reporting.json') -Raw -Encoding UTF8|ConvertFrom-Json
@@ -179,6 +206,9 @@ function Invoke-AtelierCachedWindowsUpdates {
                 $log=Join-Path $DataPath ('kb-'+$group.kb+'.log')
                 $detail=Get-AtelierKbFailureDetails -Code $code -LogPath $log
                 $entry | Add-Member NoteProperty diagnostic $detail -Force
+                if (Set-AtelierKb552Verification -State $state -DataPath $DataPath) {
+                    Save-AtelierKbState $path $state;return [pscustomobject]$state
+                }
                 throw ('Installation de '+$group.kb+' en échec (code '+$code+').'+$detail+' Voir '+$log)
             }
             $packages=@(Get-WindowsPackage -Online -ErrorAction Stop)

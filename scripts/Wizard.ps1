@@ -403,7 +403,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.8.7'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.8.8'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'Dpi'
 $form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96)

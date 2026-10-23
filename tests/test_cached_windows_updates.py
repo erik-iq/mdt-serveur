@@ -153,3 +153,74 @@ try {$code=Invoke-AtelierKbInstall -Directory 'PACKAGES' -LogPath 'DATA/kb-KB512
     else:
         assert value['failed'] and not Path(str(executable)+'.args').exists()
     assert (packages/'windows11.0-kb5043080-x64.msu').read_bytes()==b'checkpoint'
+
+
+@pytest.mark.parametrize('case',['confirmed','build_missing','legacy','no_reboot','old_session'])
+def test_dism552_waits_for_boot_and_real_build_without_reinstall(tmp_path,case):
+    """Le code 552 reçu après la fin du traitement reste tracé et non confirmé avant le redémarrage."""
+    (tmp_path/'reporting.json').write_text('{}')
+    script=r'''
+$ErrorActionPreference='Stop'
+. 'PROJECT/scripts/Unattend.ps1'
+. 'PROJECT/scripts/Client-KBUpdates.ps1'
+$global:boot='2026-10-23T06:51:35Z';$global:confirmed=$false
+function Get-AtelierKbContext {return @{family='11';release='26H2';architecture='x64';dotnet='4.8.1';build=26300}}
+function Get-AtelierKbBoot {return $global:boot}
+function Get-AtelierKbBuild {return [version]$(if($global:confirmed){'10.0.26300.9711'}else{'10.0.26300.9457'})}
+function Get-HotFix { [CmdletBinding()]param() }
+function Get-WindowsPackage { [CmdletBinding()]param([switch]$Online) }
+function Invoke-RestMethod {throw 'Aucune nouvelle recherche autorisée'}
+function Get-AtelierKbFile {param($Config,$File,$Destination,$OnProgress);Set-Content $Destination 'fixture'}
+$manifest=[pscustomobject]@{id='1f99fd15-f6ea-48ed-ab9c-0d8d7c27ad8f';status='ready';context=[pscustomobject](Get-AtelierKbContext);groups=@(
+ [pscustomobject]@{kind='net';kb='KB5127694';title='.NET';target_build='';files=@()},
+ [pscustomobject]@{kind='os';kb='KB5127648';title='Windows';target_build='26300.9711';files=@([pscustomobject]@{filename='windows11.0-kb5127648-x64.msu'})})}
+$state=@{status='running';context=(Get-AtelierKbContext);boot_id=$global:boot;manifest=$manifest;active_kb='KB5127648';reboot_required=$false;entries=@(
+ [pscustomobject]@{kb='KB5127694';kind='net';status='completed';exit_code=3010;package_names=@()})}
+if ('CASE' -eq 'legacy') {
+ $state.status='needs_attention'
+ $state.entries+=@([pscustomobject]@{kb='KB5127648';kind='os';status='failed';target_build='26300.9711';exit_code=552;package_names=@()})
+}
+$state|ConvertTo-Json -Depth 18|Set-Content 'DATA/windows-kb-result.json'
+# Séquence de fin du journal transmis, sans données propres au poste.
+$evidence=@'
+2026-10-23 09:04:20, Info                         Repair needed: [FALSE]
+2026-10-23 09:04:20, Info                         Install exited. Error:[0x0]
+2026-10-23 09:04:20, Info                  DISM   MsuManager: Trying to delete expand dir - CDismMsuPackage::Install
+2026-10-23 09:04:41, Error                 DISM   DISM Package Manager: Failed while processing command add-package. - CPackageManagerCLIHandler::ExecuteCmdLine(hr:0x80070228)
+2026-10-23 09:04:41, Info                  DISM   DISM.EXE: Image session has been closed. Reboot required=yes.
+'@
+if ('CASE' -eq 'no_reboot') {$evidence=$evidence.Replace('Reboot required=yes.','Reboot required=no.')}
+if ('CASE' -eq 'old_session') {$evidence+="`n<----- Starting Dism.exe session ----->`nFailed - CPackageManagerCLIHandler::ExecuteCmdLine(hr:0x80070228)`nImage session has been closed. Reboot required=yes."}
+Set-Content 'DATA/kb-KB5127648.log' $evidence
+function Invoke-AtelierKbInstall {param($Directory,$LogPath,$OnProgress,$State,$StatePath);Add-Content 'DATA/calls' 'install';return 552}
+$first=Invoke-AtelierCachedWindowsUpdates -DataPath 'DATA'
+$first|ConvertTo-Json -Depth 18|Set-Content 'DATA/first.json'
+if ('CASE' -in @('no_reboot','old_session')) {exit}
+$same=Invoke-AtelierCachedWindowsUpdates -DataPath 'DATA'
+if ($same.status -ne 'reboot_pending' -or -not $same.reboot_required) {throw 'La reprise doit attendre un autre démarrage'}
+$global:boot='2026-10-23T08:00:00Z';$global:confirmed=('CASE' -ne 'build_missing')
+$last=Invoke-AtelierCachedWindowsUpdates -DataPath 'DATA'
+$last|ConvertTo-Json -Depth 18|Set-Content 'DATA/last.json'
+$again=Invoke-AtelierCachedWindowsUpdates -DataPath 'DATA'
+if ($again.status -ne $last.status) {throw 'Le résultat ne doit pas relancer une installation'}
+'''.replace('PROJECT',str(ROOT)).replace('DATA',str(tmp_path)).replace('CASE',case)
+    wrapper=tmp_path/'run.ps1';wrapper.write_text(script,encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
+    assert run.returncode==0,run.stdout+run.stderr
+    read=lambda name:json.loads((tmp_path/name).read_text('utf-8-sig'))
+    first=read('first.json')
+    assert first['entries'][-1]['exit_code']==552
+    calls=(tmp_path/'calls').read_text().splitlines() if (tmp_path/'calls').exists() else []
+    assert calls==([] if case=='legacy' else ['install'])
+    if case in ('no_reboot','old_session'):
+        assert first['status']=='needs_attention'
+        return
+    assert first['status']=='reboot_pending'
+    assert first['entries'][-1]['status']=='verification_pending'
+    last=read('last.json')
+    assert last['entries'][-1]['exit_code']==552
+    if case=='build_missing':
+        assert last['status']=='needs_attention' and last['entries'][-1]['verification_failed']
+    else:
+        assert last['status']=='completed'
+        assert last['entries'][-1]['status']=='completed' and last['entries'][-1]['verified_after_boot']

@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## IQ-5.8.8 : vérification des KB après une sortie DISM 552, 23 octobre 2026
+
+- Lorsqu’un code 552 suit une installation signalée comme réussie et un redémarrage requis dans la même session DISM, la préparation attend le redémarrage au lieu de lancer HPIA et les logiciels.
+- La KB reste non confirmée jusqu’au contrôle du build Windows après redémarrage. Le code natif 552 est conservé ; un build insuffisant ou un journal sans ces preuves maintient le statut à vérifier sans réinstallation automatique.
+- Le parcours est vérifié avec la séquence du journal reçu : .NET terminé, KB Windows en attente, contrôle après redémarrage, puis HPIA. Aucun changement des droits Windows ni intégration dans le WIM.
+
 ## IQ-5.8.7 : relais HPIA et diagnostic des échecs KB, 23 octobre 2026
 
 - Capture du destinataire de progression HPIA pour éviter un rappel récursif et le dépassement de profondeur des appels PowerShell.
