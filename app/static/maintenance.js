@@ -55,7 +55,7 @@ async function loadMaintenance(page,fresh=false){
   const hp=page==='hp-maintenance';const message=$(overview?'overview-maintenance-storage':hp?'hp-maintenance-message':'windows-maintenance-message');
   try{
     const value=await api('/maintenance/'+(overview?'storage':hp?'hp':'windows')+(fresh?'?fresh=true':''));
-    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();await loadWindowsReleases();message.textContent='Suivi actualisé. Windows Update recherche et installe automatiquement les mises à jour pendant la préparation des nouveaux postes.';}
+    if(overview)maintenanceReplace('overview-maintenance-storage',maintenanceStorage(value));else if(hp)renderHpMaintenance(value);else{renderWindowsMaintenance(value);await loadWindowsKb();await loadWindowsReleases();message.textContent='Suivi actualisé. Les KB et Windows Update restent manuels pendant la préparation des nouveaux postes ; HPIA précède les logiciels et le dossier IQ.';}
   }catch(error){message.textContent=error.message;}
   finally{maintenanceLoading=false;}
 }

@@ -45,6 +45,8 @@ function Request-AtelierHpBiosRestart {param($DataPath);Add-Content (Join-Path $
 ''',encoding='utf-8-sig')
     (data/'Prepare-IQTools.ps1').write_text("param($DataPath);Add-Content (Join-Path $DataPath 'order') 'iq'")
     (data/'WindowsUpdate-First.ps1').write_text("throw 'Windows Update ne doit pas être lancé'")
+    (data/'Client-KBUpdates.ps1').write_text("function Invoke-AtelierCachedWindowsUpdates {throw 'Les KB ne doivent pas être installées'}")
+    (data/'Client-KBFirst.ps1').write_text("throw 'La phase initiale KB ne doit pas démarrer'")
     (data/'Reporting.ps1').write_text('''
 function Initialize-AtelierReportTrust {}
 function Send-AtelierWindowsProgress {}
@@ -89,7 +91,7 @@ $global:checkingMaintenance=$true
 def test_new_deployments_disable_both_update_paths_and_include_hp_first_module():
     deploy=(ROOT/'scripts/Deploy.ps1').read_text('utf-8-sig')
     assert 'automatic_windows_update=$false;hpia_first=$true;' in deploy
-    assert 'cached_windows_updates=$true;kb_first=$true;' in deploy
+    assert 'cached_windows_updates=$false;kb_first=$false;' in deploy
     for name in ('Deploy.ps1','Build-WinPE.ps1'):
         assert "'Client-HpiaFirst.ps1'" in (ROOT/'scripts'/name).read_text('utf-8-sig')
 

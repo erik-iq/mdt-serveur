@@ -87,6 +87,7 @@ def run():
                 page.locator('#hp-maintenance-search').fill('')
                 page.screenshot(path='/tmp/atelier-maintenance-hp.png',full_page=True)
                 page.get_by_role('button',name='Correctifs Windows',exact=True).click()
+                expect(page.locator('#windows-maintenance-message')).to_contain_text('Les KB et Windows Update restent manuels')
                 expect(page.locator('#windows-kb-jobs')).to_contain_text('KB5127648')
                 expect(page.locator('#windows-kb-jobs')).to_contain_text('Correctif <fixture>')
                 assert page.locator('#windows-kb-jobs fixture').count()==0

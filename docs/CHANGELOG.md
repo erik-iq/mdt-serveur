@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## IQ-5.8.9 : retrait des KB automatiques sur les postes, 23 octobre 2026
+
+- Les nouveaux déploiements désactivent le cache KB et son étape initiale. Windows Update automatique reste désactivé.
+- HPIA si sélectionné, puis logiciels, personnalisation, dossier IQ et bilan final. Les reprises HP et le correctif du relais de progression sont conservés.
+- L’assistant et le site décrivent ce parcours. La veille et le dépôt KB restent disponibles séparément ; aucun correctif déjà installé n’est désinstallé.
+
 ## IQ-5.8.8 : vérification des KB après une sortie DISM 552, 23 octobre 2026
 
 - Lorsqu’un code 552 suit une installation signalée comme réussie et un redémarrage requis dans la même session DISM, la préparation attend le redémarrage au lieu de lancer HPIA et les logiciels.

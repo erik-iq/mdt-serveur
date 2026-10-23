@@ -95,9 +95,9 @@ function Start-ScheduledTask {Add-Content 'DATA/order' 'start'}
     assert (data/'order').read_text().splitlines()==['ui','register','start']
 
 
-def test_new_payload_uses_server_cache_and_embeds_kb_first_helper():
+def test_new_payload_disables_server_cache_and_retains_legacy_helper():
     source=(ROOT/'scripts/Deploy.ps1').read_text('utf-8-sig')
-    assert 'cached_windows_updates=$true;kb_first=$true;automatic_windows_update=$false;' in source
+    assert 'cached_windows_updates=$false;kb_first=$false;automatic_windows_update=$false;' in source
     for name in ('Deploy.ps1','Build-WinPE.ps1'):
         assert "'Client-KBFirst.ps1'" in (ROOT/'scripts'/name).read_text('utf-8-sig')
 

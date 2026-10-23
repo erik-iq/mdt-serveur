@@ -1,5 +1,9 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## IQ-5.8.9 : HPIA en premier, sans installation automatique des KB
+
+Les nouveaux déploiements exécutent HPIA si sélectionné, puis les logiciels, la personnalisation et le dossier IQ. Les KB et Windows Update restent manuels. La progression immédiate, la reprise HP et le bilan après redémarrage sont conservés. Reconstruire WinPE avec `Upgrade-Atelier4.ps1` pour embarquer ce parcours.
+
 ## IQ-5.8.6 : KB au début et suivi immédiat
 
 Les KB compatibles du cache .250 sont installées au début de la préparation Windows, avant HPIA, les logiciels et le dossier IQ. Les redémarrages nécessaires reprennent cette étape sans relancer un DISM déjà en cours. La fenêtre de progression s’ouvre dès la première connexion Windows, avant l’attente du bureau et les opérations réseau ; elle suit également le thème et le fond d’écran. La recherche Windows Update en ligne reste manuelle. Reconstruire WinPE pour embarquer ce parcours.
