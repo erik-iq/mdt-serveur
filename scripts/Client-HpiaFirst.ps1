@@ -26,10 +26,13 @@ function Invoke-AtelierHpiaFirst {
         Set-ItemProperty $winlogon AutoAdminLogon '1'
         New-ItemProperty $winlogon AutoLogonCount -Value 1 -PropertyType DWord -Force | Out-Null
     }
-    $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {
+    # Capturer le destinataire : le moteur possède aussi un paramètre OnProgress.
+    $hpFirstProgressSink=$OnProgress
+    $hpFirstProgressRelay={
         param($Message)
-        & $OnProgress 10 $Message | Out-Null
-    }
+        & $hpFirstProgressSink 10 $Message | Out-Null
+    }.GetNewClosure()
+    $hp=Invoke-AtelierHpia -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress $hpFirstProgressRelay
     $pending=$hp.status -in @('running','reboot_pending','retry_pending')
     if ($hp.status -eq 'reboot_pending' -and $payload.deployment.allow_bios_restart) { Request-AtelierHpBiosRestart -DataPath $DataPath }
     return [pscustomobject]@{pending=$pending;application=$entry;hp=$hp}

@@ -37,7 +37,7 @@ function Send-AtelierDiagnostics {
             if ($file.Name -match '^[a-z0-9_-]{1,80}\.json$') { $files+=@('timings/'+$file.Name) }
         }
     }
-    foreach ($file in @(Get-ChildItem -LiteralPath $DataPath -Filter 'kb-KB*.log' -File)) { if ($file.Name -match '^kb-KB[0-9]{6,9}\.log$') { $files+=@($file.Name) } }
+    foreach ($file in @(Get-ChildItem -LiteralPath $DataPath -Filter 'kb-KB*.log' -File)) { if ($file.Name -match '^kb-KB[0-9]{6,9}(?:-console)?\.log$') { $files+=@($file.Name) } }
     foreach ($name in @('result.json','maintenance.json')) { if (-not (Test-Path (Join-Path $DataPath $name) -PathType Leaf)) { throw 'Résultats obligatoires absents.' } }
     $stream=[IO.File]::Open($archivePath,[IO.FileMode]::Create)
     $zip=New-Object IO.Compression.ZipArchive($stream,[IO.Compression.ZipArchiveMode]::Create)
@@ -137,6 +137,11 @@ function Complete-AtelierLocalCleanup {
         if ($payload.deployment.hp_repository -and 'hpia' -in @($payload.settings.winget_packages)) {
             . (Join-Path $DataPath 'HP-Reports.ps1')
             $proof.hp_reports=Send-AtelierHpReports -DataPath $DataPath -ToolsPath $ToolsPath -Config $config
+        }
+        # Les nouveaux parcours conservent leur dossier réparable si une étape reste à vérifier.
+        if (($payload.deployment.hpia_first -or $payload.deployment.kb_first) -and $state.status -eq 'needs_attention') {
+            Unregister-ScheduledTask -TaskName 'AtelierPXE-Maintenance' -Confirm:$false -ErrorAction SilentlyContinue
+            return $false
         }
         $confirmation=Invoke-RestMethod -Uri ($config.server_url+'/api/windows/'+$config.id+'/cleanup-ready') -Method Post -Headers @{Authorization=('Bearer '+$config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($proof|ConvertTo-Json))) -TimeoutSec 15
         if (-not $confirmation.cleanup_allowed -or $confirmation.deployment_id -ne $config.id) { return $false }

@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## IQ-5.8.7 : relais HPIA et diagnostic des échecs KB, 23 octobre 2026
+
+- Capture du destinataire de progression HPIA pour éviter un rappel récursif et le dépassement de profondeur des appels PowerShell.
+- DISM cible le MSU de la KB demandée ; les checkpoints restent dans son dossier pour leur résolution automatique. Aucun contrôle de compatibilité n’est ignoré.
+- Conservation de la sortie console DISM dans les diagnostics et ajout des HRESULT relevés au message d’échec. Le code 552 conserve un statut à vérifier et nécessite le journal du paquet pour confirmer sa cause.
+- La réparation HP locale conserve le résultat des KB, y compris un échec déjà enregistré. Les nouveaux parcours archivent les diagnostics puis gardent le dossier privé en cas de préparation à vérifier, sans répéter la transmission chaque minute.
+
 ## IQ-5.8.6 : KB en premier et progression dès la connexion Windows, 23 octobre 2026
 
 - Réactivation des KB du cache .250 au début de Windows, avant HPIA et les logiciels, avec contrôles de compatibilité et reprise après redémarrage. La recherche Windows Update en ligne reste désactivée.

@@ -22,7 +22,7 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 def archive(entries=None):
     stream=io.BytesIO()
     with zipfile.ZipFile(stream,'w',compression=zipfile.ZIP_DEFLATED) as z:
-        for name,body in (entries or [('result.json','{"status":"completed"}'),('maintenance.json','{"status":"completed"}'),('software-logs/vlc.log','WinGet fixture')]):z.writestr(name,body)
+        for name,body in (entries or [('result.json','{"status":"completed"}'),('maintenance.json','{"status":"completed"}'),('software-logs/vlc.log','WinGet fixture'),('kb-KB5127648-console.log','Error: 0x80070228')]):z.writestr(name,body)
     return stream.getvalue()
 
 
@@ -83,7 +83,7 @@ def write_json(path,value):
 
 
 @pytest.mark.skipif(not PWSH,reason='PowerShell required')
-@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof','wu_unknown','wu_pending','wu_missing','wu_completed','wu_worker_busy'])
+@pytest.mark.parametrize('case',['success','maintenance_worker','offline_retry','bad_archive_receipt','bad_final_proof','pending_report','stale_result','stale_report','active_installer','before_reboot','after_reboot','unsafe_link','unsafe_root','unsafe_previous','locked_file','failure_archived','hp_reports','hp_bad_receipt','hp_bad_proof','wu_unknown','wu_pending','wu_missing','wu_completed','wu_worker_busy','first_failure','kb_first_failure'])
 def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preserved(tmp_path,case):
     program=tmp_path/'ProgramData';data=program/'AtelierPXE';data.mkdir(parents=True)
     iq=tmp_path/'IQ_';(iq/'Rapports').mkdir(parents=True);(iq/'Personnalisation').mkdir()
@@ -93,7 +93,7 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
     write_json(data/'personalization.json',{'settings':{'winget_packages':[]},'deployment':{'id':identifier,'cleanup_after_reporting':True,'previous_payload_name':previous.name}})
     write_json(data/'reporting.json',{'id':identifier,'server_url':'https://atelier.test','token':'fixture-private-report-token','expires':'2099-01-01T00:00:00Z'})
     write_json(data/'result.json',{'status':'completed','deployment_id':identifier,'applications':[]})
-    status='needs_attention' if case in ('failure_archived','wu_unknown') else 'completed'
+    status='needs_attention' if case in ('failure_archived','wu_unknown','first_failure','kb_first_failure') else 'completed'
     write_json(data/'maintenance.json',{'status':status,'attempts':1,'timestamp':'2026-10-19T00:00:00Z','reboot_required':case in {'before_reboot','after_reboot'}})
     if case=='wu_unknown':
         record=json.loads((data/'maintenance.json').read_text())
@@ -108,11 +108,17 @@ def test_payload_removed_only_after_proof_and_native_process_exit_with_iq_preser
         write_json(data/'maintenance.json',record)
         if case!='wu_missing':
             write_json(data/'windows-update-result.json',{'source':'windows_update','status':'retry_pending' if case=='wu_pending' else 'completed'})
+    if case in ('first_failure','kb_first_failure'):
+        payload=json.loads((data/'personalization.json').read_text())
+        payload['deployment']['hpia_first']=case=='first_failure'
+        payload['deployment']['kb_first']=case=='kb_first_failure'
+        write_json(data/'personalization.json',payload)
     write_json(data/'progress.json',{'status':status,'message':'Final state'})
     (data/'Inventory').mkdir();(data/'Inventory'/'Inventaire-Technique.xml').write_text('<InventaireOrdinateur ordinateur="PC-LAB"/>')
     (data/'Inventory'/'Inventaire-Technique.csv').write_text('Ordinateur;Catégorie;Propriété;Valeur\nPC-LAB;CPU;Name;Test\n')
     (data/'software-logs').mkdir();(data/'software-logs'/'vlc.log').write_text('fixture-private-report-token Downloaded VLC successfully')
     (data/'Unattend.generated.xml').write_text('<Password>private-setup-password</Password>')
+    (data/'kb-KB5127648-console.log').write_text('Error: 0x80070228')
     hp_case=case in {'hp_reports','hp_bad_receipt','hp_bad_proof'}
     if hp_case:
         write_json(data/'personalization.json',{'settings':{'winget_packages':['hpia']},'deployment':{'id':identifier,'cleanup_after_reporting':True,'hp_repository':True,'previous_payload_name':previous.name}})
@@ -228,7 +234,12 @@ if($script:testMode -eq 'wu_worker_busy'){[WuaMutexFixture]::Stop()}
             assert 'Unattend.generated.xml' not in z.namelist() and 'reporting.json' not in z.namelist()
             assert b'fixture-private-report-token' not in b''.join(z.read(n) for n in z.namelist())
             assert 'software-logs/vlc.log' in z.namelist()
+            assert 'kb-KB5127648-console.log' in z.namelist()
         launcher=(iq/'Rapports'/'Generer-Rapport.ps1').read_text()
         assert '?deployment='+identifier+'&view=report' in launcher and 'ProgramData' not in launcher
+    elif case in ('first_failure','kb_first_failure'):
+        assert (tmp_path/'tasks').read_text().splitlines()==['AtelierPXE-Maintenance']
+        assert (tmp_path/'sent.zip').exists()
+        assert (data/'reporting.json').exists()
     else:
         assert not (tmp_path/'tasks').exists()

@@ -34,6 +34,9 @@ function Invoke-AtelierHpia {
  param($DataPath,$ToolsPath,$OnProgress)
  if($global:checkingMaintenance){throw 'La finalisation ne doit pas relancer HPIA'}
  Add-Content (Join-Path $DataPath 'order') 'hp.install'
+ & $OnProgress 'Analyse HP simulée' | Out-Null
+ $published=Get-Content (Join-Path $DataPath 'progress.json') -Raw|ConvertFrom-Json
+ if($published.message -ne 'Analyse HP simulée' -or $published.progress -ne 10){throw 'Relais de progression HP incorrect'}
  $value=[pscustomobject]@{status=$(if($global:mode -eq 'bios_resume' -and -not $global:resumed){'reboot_pending'}elseif($global:mode -eq 'hp_attention'){'needs_attention'}else{'completed'});message='Fixture HP';reboot_required=$false;exit_code=0;resumed_after_reboot=[bool]$global:resumed;boot_id='2026-10-23T09:00:00Z'}
  $value|ConvertTo-Json|Set-Content (Join-Path $DataPath 'hpia-result.json')
  return $value

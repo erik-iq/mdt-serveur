@@ -56,12 +56,19 @@ function Get-AtelierKbFile {
 }
 function Invoke-AtelierKbInstall {
     param([string]$Directory,[string]$LogPath,[scriptblock]$OnProgress,[hashtable]$State,[string]$StatePath)
+    # Cibler le MSU demandé ; DISM découvre ses checkpoints voisins sans réappliquer tout le dossier.
+    $target=@(Get-ChildItem -LiteralPath $Directory -Filter '*.msu' -File | Where-Object {$_.Name -match ('(?i)\b'+[regex]::Escape([string]$State.active_kb)+'[-_]')})
+    if ($target.Count -ne 1) { $State.status='needs_attention';throw 'MSU cible absent ou ambigu dans le dossier des correctifs.' }
+    $consolePath=[IO.Path]::Combine([IO.Path]::GetDirectoryName($LogPath),([IO.Path]::GetFileNameWithoutExtension($LogPath)+'-console.log'))
+    $State.log_path=$LogPath;$State.console_path=$consolePath;$State.target_msu=$target[0].Name
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=Join-Path $env:SystemRoot 'System32\dism.exe'
-    $info.Arguments='/Online /English /Add-Package /PackagePath:"'+$Directory+'" /Quiet /NoRestart /LogPath:"'+$LogPath+'"'
+    $info.Arguments='/Online /English /Add-Package /PackagePath:"'+$target[0].FullName+'" /Quiet /NoRestart /LogPath:"'+$LogPath+'"'
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+    $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
     $process=[Diagnostics.Process]::Start($info)
     try {
+        $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
         $State.process_id=$process.Id
         Save-AtelierKbState $StatePath $State
         $watch=[Diagnostics.Stopwatch]::StartNew()
@@ -69,9 +76,26 @@ function Invoke-AtelierKbInstall {
             & $OnProgress ('Installation de '+$State.active_kb+' dans Windows : '+[int]$watch.Elapsed.TotalSeconds+' s.') | Out-Null
             if ($watch.Elapsed.TotalHours -ge 2) { throw 'Installation KB encore active après deux heures ; aucune autre installation ni aucun redémarrage lancé.' }
         }
+        $output=$stdout.GetAwaiter().GetResult()+"`r`n"+$stderr.GetAwaiter().GetResult()
+        if ($output.Trim()) { Write-AtelierVerifiedUtf8File -Path $consolePath -Content $output -NoBackup | Out-Null }
         return [int]$process.ExitCode
     } finally { $process.Dispose() }
 }
+function Get-AtelierKbFailureDetails {
+    param([int]$Code,[string]$LogPath)
+    $detail=''
+    foreach ($path in @($LogPath,([IO.Path]::Combine([IO.Path]::GetDirectoryName($LogPath),([IO.Path]::GetFileNameWithoutExtension($LogPath)+'-console.log'))))) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $lines=@(Get-Content -LiteralPath $path -Tail 80 -Encoding UTF8)
+        $matches=[regex]::Matches(($lines -join ' '),'(?i)0x[89a-f][0-9a-f]{7}')
+        if ($matches.Count) { $detail+=' HRESULT relevés : '+((@($matches | ForEach-Object {$_.Value.ToUpperInvariant()} | Select-Object -Unique)) -join ', ')+'.' }
+    }
+    if ($Code -eq 552) { $detail+=" Windows signale des informations de contrôle d’accès insuffisantes ; le journal DISM doit identifier le paquet et le chemin concernés." }
+    $detail=$detail.Replace([char]0x2013,'-').Replace([char]0x2014,'-')
+    if ($detail.Length -gt 900) { $detail=$detail.Substring(0,900) }
+    return $detail
+}
+
 function Invoke-AtelierCachedWindowsUpdates {
     param([string]$DataPath,[scriptblock]$OnProgress={param($Message)},[ValidateRange(1,600)][int]$ServerWaitSeconds=180)
     $path=Join-Path $DataPath 'windows-kb-result.json'
@@ -151,7 +175,12 @@ function Invoke-AtelierCachedWindowsUpdates {
             $entry.exit_code=$code
             $state.process_id=$null
             if ($code -notin @(0,3010)) { $entry.status='failed';$state.status='needs_attention' }
-            if ($code -notin @(0,3010)) { throw ('Installation de '+$group.kb+' en échec (code '+$code+').') }
+            if ($code -notin @(0,3010)) {
+                $log=Join-Path $DataPath ('kb-'+$group.kb+'.log')
+                $detail=Get-AtelierKbFailureDetails -Code $code -LogPath $log
+                $entry | Add-Member NoteProperty diagnostic $detail -Force
+                throw ('Installation de '+$group.kb+' en échec (code '+$code+').'+$detail+' Voir '+$log)
+            }
             $packages=@(Get-WindowsPackage -Online -ErrorAction Stop)
             $entry.package_names=@($packages|Where-Object {$_.PackageName -notin $before}|ForEach-Object {$_.PackageName})
             $entry.status='installed';$installed++;$state.status='running';$state.process_id=$null

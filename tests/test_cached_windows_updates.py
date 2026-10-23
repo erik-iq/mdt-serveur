@@ -10,7 +10,7 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell requis')
 
 
-@pytest.mark.parametrize('case',['success','already_installed','wrong_context','install_failure','download_failure','lost_process','bad_build_after_boot','checkpoint_gap'])
+@pytest.mark.parametrize('case',['success','already_installed','wrong_context','install_failure','install_failure552','download_failure','lost_process','bad_build_after_boot','checkpoint_gap'])
 def test_no_wua_scan_and_no_false_success_without_install_and_boot(tmp_path,case):
     (tmp_path/'reporting.json').write_text(json.dumps({'id':'1f99fd15-f6ea-48ed-ab9c-0d8d7c27ad8f','server_url':'https://atelier.test','token':'fixture'}))
     script=r'''
@@ -42,6 +42,7 @@ function Invoke-AtelierKbInstall {
  if ('CASE' -eq 'lost_process') {throw 'Processus encore actif'}
  $global:package=$true
  if ('CASE' -eq 'install_failure') {return 5}
+ if ('CASE' -eq 'install_failure552') {Set-Content $LogPath 'Error: 0x80070228';return 552}
  return 3010
 }
 function Invoke-AtelierWindowsUpdates {throw 'Recherche Windows Update interdite'}
@@ -67,6 +68,10 @@ if ('CASE' -in @('success','bad_build_after_boot','checkpoint_gap')) {
         assert read('last.json')['entries'][0]['status']=='completed'
         assert (tmp_path/'native-calls').read_text().splitlines()==['install']
     elif case=='already_installed':assert first['status']=='completed' and not (tmp_path/'native-calls').exists()
+    elif case=='install_failure552':
+        assert first['status']=='needs_attention' and first['entries'][0]['exit_code']==552
+        assert '0X80070228' in first['message']
+        assert first['entries'][0]['diagnostic']
     elif case=='lost_process':assert first['status']=='installing'
     elif case=='bad_build_after_boot':assert read('last.json')['status']=='needs_attention'
     else:assert first['status']=='needs_attention'
@@ -107,3 +112,44 @@ $third|ConvertTo-Json -Depth 18|Set-Content 'DATA/final.json'
     result=json.loads((tmp_path/'final.json').read_text(encoding='utf-8-sig'))
     assert result['status']=='completed' and all(e['status']=='completed' for e in result['entries'])
     assert (tmp_path/'calls').read_text().splitlines()==['KB5127694','KB5127648']
+
+
+@pytest.mark.skipif(os.name=='nt',reason='Exécutable natif Linux de simulation')
+@pytest.mark.parametrize('mode',['target','missing','ambiguous'])
+def test_dism_uses_exact_target_msu_preserves_checkpoints_and_captures_output(tmp_path,mode):
+    system=tmp_path/'system';(system/'System32').mkdir(parents=True)
+    executable=system/'System32/dism.exe'
+    executable.write_text('''#!/usr/bin/env python3
+import pathlib,sys,json
+pathlib.Path(__file__+'.args').write_text(json.dumps(sys.argv[1:]))
+print('DISM fixture output')
+print('DISM fixture error output',file=sys.stderr)
+''');executable.chmod(0o755)
+    packages=tmp_path/'packages';packages.mkdir()
+    (packages/'windows11.0-kb5043080-x64.msu').write_bytes(b'checkpoint')
+    if mode!='missing':(packages/'windows11.0-kb5127648-x64.msu').write_bytes(b'target')
+    if mode=='ambiguous':(packages/'windows11.0-kb5127648-x64_rev2.msu').write_bytes(b'other')
+    wrapper=tmp_path/'run.ps1'
+    wrapper.write_text(r'''
+$ErrorActionPreference='Stop'
+. 'PROJECT/scripts/Unattend.ps1'
+. 'PROJECT/scripts/Client-KBUpdates.ps1'
+$env:SystemRoot='SYSTEM'
+$state=@{status='installing';active_kb='KB5127648';entries=@()}
+$failed=$false;$code=$null
+try {$code=Invoke-AtelierKbInstall -Directory 'PACKAGES' -LogPath 'DATA/kb-KB5127648.log' -OnProgress {param($Message)} -State $state -StatePath 'DATA/state.json'}catch{$failed=$true}
+@{failed=$failed;code=$code;state=$state}|ConvertTo-Json -Depth 8|Set-Content 'DATA/out.json'
+'''.replace('PROJECT',str(ROOT)).replace('SYSTEM',str(system)).replace('PACKAGES',str(packages)).replace('DATA',str(tmp_path)),encoding='utf-8-sig')
+    run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=20)
+    assert run.returncode==0,run.stderr
+    value=json.loads((tmp_path/'out.json').read_text('utf-8-sig'))
+    if mode=='target':
+        assert value['code']==0 and not value['failed'],value
+        args=json.loads(Path(str(executable)+'.args').read_text())
+        assert '/PackagePath:'+str(packages/'windows11.0-kb5127648-x64.msu') in args
+        assert not any(arg=='/PackagePath:'+str(packages) for arg in args)
+        console=(tmp_path/'kb-KB5127648-console.log').read_text('utf-8-sig')
+        assert 'DISM fixture output' in console and 'DISM fixture error output' in console
+    else:
+        assert value['failed'] and not Path(str(executable)+'.args').exists()
+    assert (packages/'windows11.0-kb5043080-x64.msu').read_bytes()==b'checkpoint'

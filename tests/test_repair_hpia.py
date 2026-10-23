@@ -12,7 +12,7 @@ PWSH=os.environ.get('ATELIER_PWSH') or shutil.which('pwsh')
 pytestmark=pytest.mark.skipif(not PWSH,reason='PowerShell required')
 
 
-@pytest.mark.parametrize('case',['ready','active','not_hp'])
+@pytest.mark.parametrize('case',['ready','ready_kb_failure','active','not_hp'])
 def test_repair_refreshes_hpia_only_after_preparation(tmp_path,case):
     source=tmp_path/'source';source.mkdir()
     data=tmp_path/'deployed';data.mkdir()
@@ -21,6 +21,9 @@ def test_repair_refreshes_hpia_only_after_preparation(tmp_path,case):
     (data/'result.json').write_text(json.dumps({'status':'completed','software_status':'needs_attention','restart_needed':False,'applications':[{'id':'vlc','name':'VLC','status':'completed'},{'id':'hpia','name':'HP Image Assistant','status':'failed'}]}))
     (data/'hpia-result.json').write_text('{"status":"needs_attention","message":"old missing tool"}')
     (data/'maintenance.json').write_text('{"status":"needs_attention","reboot_required":false}')
+    if case=='ready_kb_failure':
+        (data/'personalization.json').write_text(json.dumps({'deployment':{'cached_windows_updates':True}}))
+        (data/'windows-kb-result.json').write_text(json.dumps({'status':'needs_attention','source':'server_250','entries':[{'kb':'KB5127648','exit_code':552}]}))
     (source/'Client-Software.ps1').write_text('''function Install-AtelierClientSoftware {
 param($DataPath,$Packages,$OnProgress)
 if ($Packages.Count -ne 1 -or $Packages[0] -ne 'hpia') {throw 'Only HPIA may be installed'}
@@ -46,7 +49,7 @@ function Get-Process {param($ErrorAction)}
 """.replace('MANUFACTURER','Dell' if case=='not_hp' else 'HP').replace('TASK_STATE','Running' if case=='active' else 'Ready')
     .replace('REPAIR',str(source/'Repair-HPIA.ps1')).replace('DATA',str(data)).replace('TOOLS',str(tmp_path/'IQ')),encoding='utf-8-sig')
     run=subprocess.run([PWSH,'-NoProfile','-File',str(wrapper)],capture_output=True,text=True,timeout=30)
-    if case!='ready':
+    if case not in ('ready','ready_kb_failure'):
         assert run.returncode!=0
         assert not (data/'repair-backups').exists()
         assert not (data/'report-refreshed').exists()
@@ -56,6 +59,9 @@ function Get-Process {param($ErrorAction)}
     assert [a['id'] for a in result['applications']]==['vlc','hpia']
     assert result['software_status']=='completed'
     state=json.loads((data/'maintenance.json').read_text(encoding='utf-8-sig'))
-    assert state['status']=='completed' and state['windows']['status']==state['store']['status']=='manual'
+    if case=='ready_kb_failure':
+        assert state['status']=='needs_attention' and state['windows']['entries'][0]['exit_code']==552
+    else:
+        assert state['status']=='completed' and state['windows']['status']==state['store']['status']=='manual'
     assert (data/'report-refreshed').exists()
     assert len(list((data/'repair-backups').glob('*/hpia-result.json')))==1

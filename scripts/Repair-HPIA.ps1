@@ -67,7 +67,17 @@ try {
         $restart=$restart -or [bool]$old.reboot_required
     }
     $status=if ($hp.status -eq 'completed' -and $customization.software_status -eq 'completed' -and -not $restart) { 'completed' } else { 'needs_attention' }
-    $state=@{status=$status;attempts=1;passes=0;reboots=0;hpia=$hp;reboot_required=$restart;timestamp=[DateTime]::UtcNow.ToString('o');message=[string]$hp.message;windows=@{status='manual';message='Windows Update à lancer manuellement'};store=@{status='manual';message='Microsoft Store à lancer manuellement'}}
+    $windows=@{status='manual';message='Windows Update à lancer manuellement'}
+    $payloadFile=Join-Path $DataPath 'personalization.json'
+    if (Test-Path $payloadFile) {
+        $deployment=(Get-Content $payloadFile -Raw -Encoding UTF8 | ConvertFrom-Json).deployment
+        if ($deployment.cached_windows_updates -or $deployment.automatic_windows_update) {
+            $updatePath=Join-Path $DataPath $(if($deployment.cached_windows_updates){'windows-kb-result.json'}else{'windows-update-result.json'})
+            $windows=if(Test-Path $updatePath){Get-Content $updatePath -Raw -Encoding UTF8 | ConvertFrom-Json}else{@{status='needs_attention';source=$(if($deployment.cached_windows_updates){'server_250'}else{'windows_update'});message='Résultat des correctifs absent, réparation HP uniquement.'}}
+            if ($windows.status -ne 'completed') { $status='needs_attention' }
+        }
+    }
+    $state=@{status=$status;attempts=1;passes=0;reboots=0;hpia=$hp;reboot_required=$restart;timestamp=[DateTime]::UtcNow.ToString('o');message=[string]$hp.message;windows=$windows;store=@{status='manual';message='Microsoft Store à lancer manuellement'}}
     Write-AtelierVerifiedUtf8File -Path $oldMaintenancePath -Content ($state | ConvertTo-Json -Depth 8) -NoBackup | Out-Null
     & (Join-Path $DataPath 'New-DeploymentReport.ps1') -DataPath $DataPath -OutputDirectory $ToolsPath -RefreshInventory
     Write-Host $hp.message
