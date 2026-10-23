@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## Console IQ-6.1 : statistiques des déploiements, 23 octobre 2026
+
+- Nouvelle page Statistiques : périodes de 7, 30 ou 90 jours et historique complet, taux de réussite par modèle, durée moyenne mesurée et classement des étapes les plus longues.
+- Résultats Windows définitifs avec rapport reçu et échecs WinPE comptabilisés. Les annulations et les préparations sans bilan final sont exclues du taux de réussite. Le modèle reste celui du rapport de chaque installation.
+- Moyennes de durée fondées sur les déploiements réussis ayant des mesures WinPE et Windows exploitables. Les mesures absentes ou partielles sont comptées séparément, sans les remplacer par zéro. Les chevauchements sont fusionnés par environnement et les passages successifs regroupés par déploiement.
+- Consultation authentifiée de l’historique complet, sans limite aux cent opérations de la vue globale, sans nouveau chronométrage sur les postes ni reconstruction WinPE. Modes clair et sombre conservés.
+
 ## Console IQ-6.0.1 : choix du thème, 23 octobre 2026
 
 - Sélecteur Clair, Sombre ou Automatique dans l’en-tête, disponible sur ordinateur et mobile. Le mode automatique suit le réglage du système.

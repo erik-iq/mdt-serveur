@@ -64,7 +64,7 @@ def run():
                 assert 'rgb(230, 241, 250)' in gradient and 'rgb(237, 241, 255)' in gradient,gradient
                 sidebar=page.locator('.sidebar').evaluate('(el)=>getComputedStyle(el).backgroundImage')
                 assert 'linear-gradient' in sidebar
-                assert page.locator('[data-page]').count()==5
+                assert page.locator('[data-page]').count()==6
                 for width,height,name in [(1440,1000,'desktop'),(390,844,'mobile'),(1920,1080,'large')]:
                     page.set_viewport_size({'width':width,'height':height})
                     assert_logo(page)
