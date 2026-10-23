@@ -201,3 +201,28 @@ def test_explicit_package_cache_preserves_real_windows_version_and_requires_capa
         assert result['status'] == 'ready' and result['os_version'] == '26H2'
         legacy = client.post(route, headers=headers, json={**body, 'package_cache': False}).json()
         assert legacy['status'] == 'unavailable' and legacy['snapshot'] is None
+
+
+def test_cache_availability_is_separate_from_failed_refresh_and_reported_source(system):
+    client,data,job,headers=hp_client(system)
+    route='/api/windows/'+job['id']+'/hp-repository'
+    client.post(route,headers=headers,json=request_body())
+    wh,identity=worker(client,data)
+    published,path=publish(client,data,identity,wh)
+    # Une nouvelle recommandation peut échouer sans supprimer la copie publiée.
+    client.post(route,headers=headers,json=request_body(required_softpaqs=['SP12345','SP99999']))
+    claimed=client.post('/api/hp-repository/worker/claim',headers=wh,json=identity).json()['job']
+    client.post('/api/hp-repository/worker/jobs/'+claimed['id']+'/finish',headers=wh,
+                json={**identity,'success':False,'message':'Actualisation HP indisponible'})
+    def state():return client.get('/api/hp-repository',headers=auth()).json()
+    current=state()
+    assert current['jobs'][0]['status']=='failed'
+    assert current['cache_states'][0]['status']=='ready'
+    assert client.get('/api/state',headers=auth()).json()['deployments'][0]['hp_source'] is None
+    with sqlite3.connect(data/'deployment.sqlite3') as con:
+        con.execute('UPDATE hp_repository_snapshots SET created_at=?',((datetime.now(timezone.utc)-timedelta(days=2)).isoformat(),))
+    assert state()['cache_states'][0]['status']=='stale'
+    path.write_bytes('Copie modifiée'.encode('utf-8'))
+    assert state()['cache_states'][0]['status']=='unavailable'
+    path.unlink()
+    assert state()['cache_states'][0]['status']=='unavailable'

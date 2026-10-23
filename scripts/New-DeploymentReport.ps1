@@ -131,7 +131,7 @@ if ($hp) {
         }
     }
     if ($hp.resumed_after_reboot) { $steps.Add(@{name='Reprise HP après redémarrage';status='completed';message=('Nouvelle analyse HP ; passage '+[string]$hp.pass_number+'. Les logiciels déjà vérifiés ne sont pas réinstallés.');timestamp=[string]$hp.timestamp}) }
-    if ($hp.source) { $inventory['Source des pilotes HP']=if ($hp.source -eq 'depot_250') { 'Dépôt local .250' } else { 'Serveurs HP (Internet)' } }
+    if ($hp.source) { $inventory['Source des pilotes HP']=if ($hp.repository.status -eq 'package_cache') { 'Cache .250, analyse HP par Internet' } elseif ($hp.source -eq 'depot_250') { 'Dépôt local .250' } elseif ($hp.source -eq 'online') { 'Serveurs HP (Internet)' } else { 'Source HP non reconnue : '+[string]$hp.source } }
     if ($hp.repository) { $steps.Add(@{name='Dépôt HP .250';status=[string]$hp.repository.status;message=[string]$hp.repository.message;timestamp=[string]$hp.timestamp}) }
     $steps.Add(@{name='HP Image Assistant / SoftPaq';status=[string]$hp.status;message=([string]$hp.message+' / Code '+[string]$hp.exit_code);timestamp=[string]$hp.timestamp})
     foreach ($package in @($hp.packages)) {

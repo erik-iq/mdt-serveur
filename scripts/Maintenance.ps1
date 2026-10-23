@@ -28,6 +28,14 @@ function Save-Maintenance([string]$Status,[int]$Percent,[string]$Message) {
     Write-AtelierVerifiedUtf8File -Path $statePath -Content ($state | ConvertTo-Json -Depth 8) -NoBackup | Out-Null
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message;timestamp=$state.timestamp;detail=$script:updateDetail} | ConvertTo-Json -Depth 5) -NoBackup | Out-Null
     Add-Content -LiteralPath $logPath -Value ($state.timestamp + ' ' + $Message) -Encoding UTF8
+    $script:AtelierDeploymentStage='';$script:AtelierDeploymentStageStatus='running'
+    if ($Percent -eq 100 -or $state.final_restart.completed_at) {
+        $script:AtelierDeploymentStage='summary'
+        $script:AtelierDeploymentStageStatus=if ($Status -in @('failed','needs_attention')) {$Status}else{'running'}
+    } elseif ($state.final_restart -and -not $state.final_restart.completed_at) {
+        $script:AtelierDeploymentStage='restart'
+        $script:AtelierDeploymentStageStatus=if ($Status -eq 'reboot_pending') {'reboot_pending'}else{'running'}
+    }
     if (Get-Command Send-AtelierWindowsProgress -ErrorAction SilentlyContinue) { Send-AtelierWindowsProgress $DataPath $Status $Percent $Message }
 }
 function Finish-Maintenance {
@@ -120,6 +128,10 @@ try {
         $state.final_restart | Add-Member NoteProperty completed_at ([DateTime]::UtcNow.ToString('o')) -Force
         $state.final_restart | Add-Member NoteProperty verified_boot_id $boot -Force
         $state.status='running'
+        if (Get-Command Send-AtelierWindowsProgress -ErrorAction SilentlyContinue) {
+            $script:AtelierDeploymentStage='restart';$script:AtelierDeploymentStageStatus='completed'
+            Send-AtelierWindowsProgress $DataPath 'running' 95 'Nouveau démarrage Windows confirmé ; contrôle final du poste.'
+        }
         $hpPath=Join-Path $DataPath 'hpia-result.json'
         if (Test-Path $hpPath) {
             $savedHp=Get-Content $hpPath -Encoding UTF8 -Raw | ConvertFrom-Json
@@ -148,6 +160,10 @@ try {
     $state.windows=if ($payload.deployment.automatic_windows_update) { [pscustomobject]@{status='running';source='windows_update';message='Windows Update vérifié au début de la préparation pour les nouveaux déploiements.'} } elseif ($payload.deployment.cached_windows_updates) { [pscustomobject]@{status='running';message='Correctifs Windows depuis .250.'} } else { [pscustomobject]@{status='manual';count=0;reboot_required=$false;titles=@();message='Windows Update à lancer manuellement ; aucune recherche Atelier.'} }
     $state.store=[pscustomobject]@{status='manual';completion_verified=$false;message='Microsoft Store a actualiser manuellement ; aucune recherche Atelier.'}
     $softwareMessage=if (-not $software.selected.Count) { 'Aucun logiciel sélectionne : aucune installation demandée.' } elseif ($software.status -eq 'completed') { 'Logiciels vérifiés : '+$software.verified+'.' } else { 'Logiciels non installés ou non vérifiés : '+($software.missing -join ', ')+'.' }
+    if ($software.status -ne 'completed' -and (Get-Command Send-AtelierWindowsProgress -ErrorAction SilentlyContinue)) {
+        $script:AtelierDeploymentStage='software';$script:AtelierDeploymentStageStatus='needs_attention'
+        Send-AtelierWindowsProgress $DataPath 'running' 80 $softwareMessage
+    }
     Save-Maintenance 'running' 80 ($softwareMessage+$(if ($payload.deployment.automatic_windows_update) {' Recherche et installation Windows Update automatiques.'}elseif ($payload.deployment.cached_windows_updates) {' Correctifs Windows depuis .250.'}else{' Windows Update et Microsoft Store restent manuels.'}))
     $hp=[pscustomobject]@{status='skipped';message='HP Image Assistant non coché : installation et SoftPaq non demandés.';exit_code=$null;reboot_required=$false;timestamp=[DateTime]::UtcNow.ToString('o')}
     if ('hpia' -in @($payload.settings.winget_packages)) {

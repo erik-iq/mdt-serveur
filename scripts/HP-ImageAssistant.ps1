@@ -345,7 +345,7 @@ function Invoke-AtelierHpia {
                     $arguments='/Operation:Analyze /Category:All /Selection:All /InstallType:AutoInstallable /Silent /IgnoreGenericOsError /Debug /ReportFolder:"'+$reports+'" /SoftpaqDownloadFolder:"'+$downloads+'" /Action:Install'
                     if ($repository -and $repository.status -eq 'offline') { $arguments+=' /OfflineMode:"'+$repository.path+'"' }
                     # HPIA gère les paquets compatibles. Ne jamais forcer un firmware non pris en charge.
-                    $sourceText=if ($result.source -eq 'depot_250') { 'dépôt local .250' } else { 'serveurs HP par Internet' }
+                    $sourceText=if ($repository.status -eq 'package_cache') { 'paquets du cache .250 ; analyse HP par Internet' } elseif ($result.source -eq 'depot_250') { 'dépôt CMSL .250' } else { 'serveurs HP par Internet' }
                     $result.status='running';$result.phase='analyse et installation';$result.message='Analyse et installation des SoftPaq HP en cours (pilotes, logiciels, BIOS et firmwares compatibles). Source : '+$sourceText+'.'
                     Save-AtelierHpCheckpoint $resultPath $result
                     & $OnProgress $result.message | Out-Null

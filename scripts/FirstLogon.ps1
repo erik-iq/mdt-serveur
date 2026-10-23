@@ -19,6 +19,7 @@ $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UT
 $manufacturer = ''
 $results = New-Object 'System.Collections.Generic.List[object]'
 $restartNeeded = $false
+$script:AtelierDeploymentStage='';$script:AtelierDeploymentStageStatus='running'
 function Set-Progress([string]$Status,[int]$Percent,[string]$Message,[switch]$Indeterminate,[switch]$LocalOnly) {
     Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message;timestamp=[DateTime]::UtcNow.ToString('o');detail=$(if($Indeterminate){@{percent=-1}}else{$null})} | ConvertTo-Json -Depth 5) -NoBackup | Out-Null
     if (-not $LocalOnly) { Send-AtelierWindowsProgress $DataPath $Status $Percent $Message }
@@ -36,6 +37,7 @@ function Start-Maintenance {
     # Les anciens postes utilisaient une tâche interactive pour ouvrir HPIA après maintenance.
     Unregister-ScheduledTask -TaskName 'AtelierPXE-Tools' -Confirm:$false -ErrorAction SilentlyContinue
     $detail=if ($script:softwareSummary.status -eq 'needs_attention') { 'Logiciels non installés ou non vérifiés : '+($script:softwareSummary.missing -join ', ')+'.' } else { 'Logiciels vérifiés : '+$script:softwareSummary.verified+'.' }
+    $script:AtelierDeploymentStage='';$script:AtelierDeploymentStageStatus='running'
     Set-Progress 'running' 75 ($detail+' Finalisation et pilotes constructeur en arrière-plan.')
     # Cette copie IQ survit au nettoyage et affiche le bilan après reconnexion.
     $uiRoot=Join-Path $ToolsPath 'Rapports\Preparation'
@@ -96,7 +98,7 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
 }
 
 try {
-    Set-Progress 'running' 2 'Préparation du poste en cours : correctifs KB, HPIA, logiciels et personnalisation.' -LocalOnly
+    Set-Progress 'running' 2 'Préparation du poste en cours : HPIA, logiciels et personnalisation.' -LocalOnly
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
     # La fenêtre est déjà ouverte pendant l’arrivée du bureau et les opérations réseau.
@@ -126,10 +128,12 @@ try {
     if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
     $hpFirstDone=$false
     if ($payload.deployment.hpia_first -and 'hpia' -in $clientPackages) {
+        $script:AtelierDeploymentStage='hpia';$script:AtelierDeploymentStageStatus='running'
         Set-Progress 'running' 10 "HP Image Assistant en premier : préparation de l’outil puis installation des SoftPaq compatibles."
         . (Join-Path $DataPath 'Client-HpiaFirst.ps1')
         $hpPhase=Invoke-AtelierHpiaFirst -DataPath $DataPath -ToolsPath $ToolsPath -OnProgress {param($Percent,$Message);Set-Progress 'running' $Percent $Message}
         if ($hpPhase.pending) {
+            $script:AtelierDeploymentStageStatus=if ($hpPhase.hp.status -eq 'reboot_pending') {'reboot_pending'}else{'running'}
             Set-Progress 'running' 10 $hpPhase.hp.message
             return
         }
@@ -137,6 +141,11 @@ try {
         $hpWinGetTool=$hpPhase.application.tool
         $restartNeeded=[bool]$hpPhase.hp.reboot_required
         $hpFirstDone=$true
+        $script:AtelierDeploymentStageStatus=if ($hpPhase.hp.status -in @('completed','skipped')) {[string]$hpPhase.hp.status}else{'needs_attention'}
+        Set-Progress 'running' 10 $hpPhase.hp.message
+    } elseif ('hpia' -notin $clientPackages) {
+        $script:AtelierDeploymentStage='hpia';$script:AtelierDeploymentStageStatus='skipped'
+        Set-Progress 'running' 10 'HPIA non sélectionné pour ce déploiement.'
     }
     if ($payload.deployment.automatic_windows_update) {
         Set-Progress 'running' 10 'Windows Update en premier. Les logiciels et HPIA attendent la fin des mises à jour et des redémarrages.'
@@ -144,6 +153,8 @@ try {
         if (-not (Wait-AtelierWindowsUpdateFirst -DataPath $DataPath)) { return }
     }
     . (Join-Path $DataPath 'Client-Software.ps1')
+    $script:AtelierDeploymentStage='software';$script:AtelierDeploymentStageStatus='running'
+    Set-Progress 'running' 12 'Installation des logiciels sélectionnés.'
     $remainingPackages=@($clientPackages | Where-Object {-not ($hpFirstDone -and $_ -eq 'hpia')})
     if ($remainingPackages.Count) {
         $softwareTiming=Start-AtelierTiming $DataPath 'software'
@@ -226,6 +237,9 @@ try {
     Stop-AtelierTiming $DataPath $toolsTiming
     Sync-AtelierTimings $DataPath
     Write-Trace 'Début de la personnalisation du premier compte administrateur.'
+    $script:AtelierDeploymentStageStatus=if (@($results | Where-Object {$_.status -eq 'failed'}).Count) {'needs_attention'} elseif (-not $remainingPackages.Count -and -not @($payload.applications).Count) {'skipped'} else {'completed'}
+    Set-Progress 'running' 60 'Phase logiciels terminée ; les résultats individuels sont conservés dans le bilan.'
+    $script:AtelierDeploymentStage='iq';$script:AtelierDeploymentStageStatus='running'
     Set-Progress 'running' 62 'Personnalisation du bureau : application du thème Windows.'
     $theme = $payload.settings.theme
     if ($theme -in @('light','dark')) {
@@ -253,6 +267,8 @@ try {
     }
     Set-Progress 'running' 65 'Création du dossier C:\IQ_ et des diagnostics...'
     & (Join-Path $DataPath 'Prepare-IQTools.ps1') -DataPath $DataPath
+    $script:AtelierDeploymentStageStatus='completed'
+    Set-Progress 'running' 65 'Personnalisation et préparation du dossier IQ terminées.'
     # Exporter une seule fois à la fin, après les logiciels et pilotes, sans doubler le relevé CIM.
     $script:softwareSummary=Get-AtelierSoftwareSummary -Packages $clientPackages -Results @($results.ToArray())
     $softwareStatus=if (@($results | Where-Object { $_.status -eq 'failed' }).Count) { 'needs_attention' } else { $script:softwareSummary.status }
@@ -264,6 +280,7 @@ try {
     if ($toolsTiming) { Stop-AtelierTiming $DataPath $toolsTiming 'failed' }
     Sync-AtelierTimings $DataPath
     @{status='failed'; timestamp=(Get-Date).ToString('o'); message=$_.Exception.Message; applications=@($results.ToArray())} | ConvertTo-Json -Depth 6 | Set-Content $resultPath -Encoding UTF8
+    $script:AtelierDeploymentStageStatus='failed'
     Set-Progress 'failed' 0 ('Préparation interrompue : ' + $_.Exception.Message)
     . (Join-Path $DataPath 'Updates.ps1')
     if ($payload.settings.unattended) { Disable-AtelierAutoLogon }

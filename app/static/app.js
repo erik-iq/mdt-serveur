@@ -20,7 +20,59 @@ async function api(path, method='GET', body) {
   }
   return data;
 }
-function badge(status) { return `<span class="badge ${esc(status)}">${esc(labels[status] || status)}</span>`; }
+function contextBadge(status,label){return `<span class="badge ${esc(status)}">${esc(label)}</span>`;}
+function badge(status) { return contextBadge(status,labels[status]||status); }
+function deploymentBadge(job){
+  const status=deploymentStatus(job);
+  const text=job.windows_status?({completed:job.has_report?'Préparation réussie':'Préparation terminée, bilan attendu',needs_attention:'Préparation à vérifier',failed:'Préparation en échec',running:'Préparation Windows en cours',reboot_pending:'Redémarrage Windows attendu',retry_pending:'Préparation en attente de reprise'}[status]||labels[status]):({queued:'En attente de WinPE',running:'Déploiement WinPE en cours',staged:'Image appliquée, préparation Windows attendue',failed:'Déploiement WinPE en échec',cancelled:'Déploiement annulé'}[status]||labels[status]);
+  return contextBadge(status==='completed'&&!job.has_report?'staged':status,text||status);
+}
+function hpSourceLabel(source){return ({'Serveurs HP (Internet)':'Téléchargement direct chez HP','Dépôt local .250':'Dépôt local du serveur .250'}[source]||source);}
+function hpSyncBadge(status){return contextBadge(status||'unknown',({completed:'Actualisation réussie',failed:'Actualisation échouée',queued:'Actualisation en attente',running:'Actualisation en cours'}[status]||'Actualisation non transmise'));}
+function hpCacheBadge(cache){const status=cache?.status||'unknown';return contextBadge(({ready:'completed',stale:'queued',unavailable:'failed',missing:'unknown'}[status]||'unknown'),({ready:'Cache disponible',stale:'Copie conservée, à actualiser',unavailable:'Cache inutilisable ou non confirmé',missing:'Aucun cache publié'}[status]||'Disponibilité non transmise'));}
+let pipelineJob=null,pipelineServerEpoch=Date.now(),pipelineClientTick=performance.now();
+function syncPipelineClock(timestamp){const value=Date.parse(timestamp);if(Number.isFinite(value)){pipelineServerEpoch=value;pipelineClientTick=performance.now();}}
+function pipelineNow(){return pipelineServerEpoch+performance.now()-pipelineClientTick;}
+function phaseName(stage){return ({running:'En cours, signal reçu',reboot_pending:'Redémarrage attendu',completed:'Terminé, confirmé',failed:'Échec signalé',needs_attention:'À vérifier',skipped:'Non applicable ou non demandé',unknown:'Résultat non transmis',pending:'En attente'})[stage.status]||stage.status;}
+function phaseClock(stage,active){
+  if(!stage.started_at)return '<span class="muted">Début non transmis</span>';
+  if(!active&&!stage.ended_at)return '<span class="muted">Durée non confirmée</span>';
+  return `<span class="phase-clock" data-phase-clock="${esc(stage.started_at)}" data-phase-end="${esc(stage.ended_at||'')}">Calcul de la durée...</span>`;
+}
+function pipelineMini(job){
+  const pipeline=job.pipeline;
+  if(!pipeline)return '<small>Suivi détaillé non transmis.</small>';
+  const current=!pipeline.terminal&&pipeline.stages.filter(stage=>['running','reboot_pending'].includes(stage.status)).sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at)))[0];
+  return current?`<div class="pipeline-mini"><strong>${esc(current.label)}</strong>${phaseClock(current,true)}<small data-phase-contact="${esc(job.windows_updated_at||current.updated_at||'')}"></small></div>`:`<small>${pipeline.terminal?'Bilan final disponible ou déploiement arrêté.':'En attente du prochain signal d’étape.'}</small>`;
+}
+function updatePipelineClocks(){
+  const now=pipelineNow();
+  document.querySelectorAll('[data-phase-clock]').forEach(element=>{
+    const start=Date.parse(element.dataset.phaseClock),end=element.dataset.phaseEnd?Date.parse(element.dataset.phaseEnd):now;
+    element.textContent=Number.isFinite(start)&&Number.isFinite(end)?(element.dataset.phaseEnd?'Durée : ':'Depuis le début : ')+measuredDuration(Math.max(0,(end-start)/1000)):'Durée non transmise';
+  });
+  document.querySelectorAll('[data-phase-contact]').forEach(element=>{
+    const age=(now-Date.parse(element.dataset.phaseContact))/1000;
+    element.textContent=Number.isFinite(age)?'Dernier signal reçu il y a '+measuredDuration(Math.max(0,age))+'.':'Dernier contact non transmis.';
+    element.classList.toggle('phase-stale',age>120);
+  });
+}
+function renderPipelineDialog(job){
+  if(!job)return;pipelineJob=job;
+  $('pipeline-title').textContent='Étapes de '+job.hostname;
+  const stages=job.pipeline?.stages||[];
+  renderFragment('pipeline-stages',`<ol class="phase-grid">${stages.map((stage,index)=>`<li class="phase-card ${esc(stage.status)}"><div class="phase-heading"><span>${index+1}</span><h3>${esc(stage.label)}</h3></div>${contextBadge(stage.status,phaseName(stage))}<p>${esc(stage.message)}</p>${phaseClock(stage,!job.pipeline.terminal&&['running','reboot_pending'].includes(stage.status))}${stage.updated_at?`<small>Dernier signal : ${date(stage.updated_at)}</small>`:''}</li>`).join('')}</ol>${!job.pipeline?.detailed?'<p class="muted">Cet agent ne transmet pas le détail de toutes les étapes. Aucun résultat manquant n’est déduit du pourcentage global.</p>':''}`);
+  updatePipelineClocks();
+}
+async function showPipeline(identifier){
+  try{
+    let job=state?.deployments.find(item=>item.id===identifier);
+    if(!job){const value=await api('/deployments/'+encodeURIComponent(identifier)+'/pipeline');job=value.job;syncPipelineClock(value.generated_at);}
+    renderPipelineDialog(job);if(!$('pipeline-dialog').open)$('pipeline-dialog').showModal();
+  }catch(error){$('notice').textContent=error.message;$('notice').hidden=false;}
+}
+setInterval(()=>{if(!document.hidden)updatePipelineClocks();},1000);
+
 // Conserver les nœuds inchangés pendant les actualisations et la navigation au clavier.
 const renderedFragments = new WeakMap();
 function renderFragment(id, html) {
@@ -35,12 +87,12 @@ function renderDeployments() {
   const filter=$('deployment-filter').value;
   const jobs=state.deployments.filter(d=>{
     const status=deploymentStatus(d);
-    const matches=filter==='all'||(filter==='active'?['queued','running','retry_pending','reboot_pending'].includes(status):status===filter);
+    const matches=filter==='all'||(filter==='active'?['queued','running','retry_pending','reboot_pending','staged'].includes(status):status===filter);
     return matches&&(!query||[d.hostname,d.serial_number,d.mac,d.profile_name].some(value=>String(value||'').toLocaleLowerCase('fr-CH').includes(query)));
   });
   $('deployments-empty').hidden=state.deployments.length>0;
   $('deployment-count').textContent=jobs.length+' déploiement(s) affiché(s) sur '+state.deployments.length+'.';
-  renderFragment('deployments',jobs.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.serial_number?'SN : '+d.serial_number:'Ancienne fiche MAC : '+d.mac)}</small></td><td>${esc(d.profile_name)}</td><td class="status-cell">${badge(deploymentStatus(d))}${d.windows_message?`<small class="status-message" title="${esc(d.windows_message)}">${esc(d.windows_message)}</small>`:''}</td><td class="progress-cell"><progress max="100" value="${d.progress}" aria-label="Progression ${d.progress} %"></progress>${d.progress} %</td><td>${date(d.created_at)}</td><td><div class="row-actions"><button class="text-button" data-computer="${esc(d.machine_id)}">Fiche ordinateur</button><button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button>${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</div></td></tr>`).join('')||(state.deployments.length?'<tr><td class="filtered-empty" colspan="6">Aucun déploiement ne correspond à votre recherche.</td></tr>':''));
+  renderFragment('deployments',jobs.map(d=>`<tr data-job="${esc(d.id)}"><td><button class="text-button" data-events="${esc(d.id)}">${esc(d.hostname)}</button><small>${esc(d.serial_number?'SN : '+d.serial_number:'Ancienne fiche MAC : '+d.mac)}</small></td><td>${esc(d.profile_name)}</td><td class="status-cell">${deploymentBadge(d)}${d.hp_source?`<small>Source HPIA déclarée : ${esc(hpSourceLabel(d.hp_source))}</small>`:''}${d.windows_message?`<small class="status-message" title="${esc(d.windows_message)}">${esc(d.windows_message)}</small>`:''}</td><td class="progress-cell"><small>${d.windows_status?'Windows':'Image Windows'} : ${d.windows_status?(d.windows_progress??0):d.progress} %</small>${pipelineMini(d)}<button class="text-button" data-pipeline="${esc(d.id)}">Suivre les étapes</button></td><td>${date(d.created_at)}</td><td><div class="row-actions"><button class="text-button" data-computer="${esc(d.machine_id)}">Fiche ordinateur</button><button class="text-button" data-inventory="${esc(d.id)}">Dossier inventaire${d.has_inventory?' disponible':''}</button>${d.has_report?`<button class="text-button" data-report="${esc(d.id)}">Rapport PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}${['queued','running'].includes(d.status)?`<button class="cancel" data-cancel="${esc(d.id)}">Annuler</button>`:''}</div></td></tr>`).join('')||(state.deployments.length?'<tr><td class="filtered-empty" colspan="6">Aucun déploiement ne correspond à votre recherche.</td></tr>':''));
 }
 function setConnection(online) {
   $('connection').textContent=online?'Console connectée':'Connexion interrompue';
@@ -51,6 +103,7 @@ $('deployment-search').addEventListener('input',renderDeployments);
 $('deployment-filter').addEventListener('change',renderDeployments);
 
 function render() {
+  if(state.generated_at)syncPipelineClock(state.generated_at);
   if($('automatic-mode')) $('automatic-mode').hidden=!state.auto_enroll;
   document.querySelectorAll('[data-open="deployment"]').forEach(button=>button.hidden=!!state.auto_enroll);
   if(typeof loadMaintenance==='function' && !$('page-overview').hidden)loadMaintenance('overview');
@@ -60,6 +113,7 @@ function render() {
   $('metric-staged').textContent = state.totals.staged;
   $('metric-attention').textContent=state.deployments.filter(d=>['needs_attention','failed','partial','interrupted'].includes(deploymentStatus(d))).length;
   renderDeployments();
+  updatePipelineClocks();
   const reportsByMachine=new Map();
   for(const report of state.reports||[]){if(!reportsByMachine.has(report.machine_id))reportsByMachine.set(report.machine_id,[]);reportsByMachine.get(report.machine_id).push(report);}
   const assetsById=new Map(state.assets.map(asset=>[asset.id,asset]));
@@ -69,13 +123,14 @@ function render() {
   renderFragment('assets',state.assets.map(a=>`<tr><td><b>${esc(a.filename)}</b></td><td><span class="badge">${esc(a.kind)}</span></td><td>${size(a.size)}</td><td class="hash" title="${esc(a.sha256)}">${esc(a.sha256.slice(0,20))}...</td></tr>`).join('') || '<tr><td colspan="4">Aucun fichier enregistré.</td></tr>');
   const hp=state.hp_repository;
   if(hp && $('hp-repository-state')) {
-    $('hp-repository-state').textContent=hp.worker.available?hp.worker.message:'Dépôt non disponible pour le moment. Les postes peuvent continuer directement avec HP.';
+    $('hp-repository-state').textContent=hp.worker.available?hp.worker.message:'Agent de synchronisation sans contact récent. Les caches existants sont indiqués séparément ; HPIA peut télécharger chez HP si le poste a accès à Internet.';
     $('hp-repository-refresh').disabled=!hp.jobs.length;
     const seen=new Set();
   renderFragment('hp-repository-jobs',hp.jobs.filter(job=>{const key=job.platform+'|'+job.os+'|'+job.os_version;if(seen.has(key))return false;seen.add(key);return true;}).map(job=>{
       const saved=hp.snapshots.find(s=>s.platform===job.platform && s.os===job.os && s.os_version===job.os_version);
-      return `<article class="hp-repository-entry"><div><b>HP ${esc(job.platform)} | Windows ${job.os==='win11'?'11':'10'} ${esc(job.os_version)}</b> ${badge(job.status)}<p>${esc(job.message)}</p><small>${saved?'Copie conservée : '+esc(size(saved.size))+' | '+esc(date(saved.created_at)):'Premier téléchargement en préparation'}</small></div></article>`;
+      return `<article class="hp-repository-entry"><div><b>HP ${esc(job.platform)} | Windows ${job.os==='win11'?'11':'10'} ${esc(job.os_version)}</b><div class="hp-status-pair">${hpCacheBadge(hp.cache_states?.find(cache=>cache.platform===job.platform&&cache.os===job.os&&cache.os_version===job.os_version))}${hpSyncBadge(job.status)}</div><p>Dernière actualisation : ${esc(job.message)}</p><small>${saved?'Copie conservée : '+esc(size(saved.size))+' | '+esc(date(saved.created_at)):'Aucune copie publiée sur le serveur.'}</small></div></article>`;
     }).join('') || '<p>Le dépôt sera alimenté automatiquement au premier poste avec HP Image Assistant sélectionné.</p>');
+  if($('pipeline-dialog').open)renderPipelineDialog(state.deployments.find(job=>job.id===pipelineJob?.id)||pipelineJob);
   }
 
 
@@ -147,6 +202,7 @@ async function showEvents(id) {
   catch(error) { $('notice').textContent=error.message; $('notice').hidden=false; }
 }
 document.addEventListener('click',async e=>{
+  const pipeline=e.target.closest('[data-pipeline]');if(pipeline){e.stopPropagation();await showPipeline(pipeline.dataset.pipeline);return;}
   const computer=e.target.closest('[data-computer]');if(computer){e.stopPropagation();await openComputer(computer.dataset.computer);return;}
   const reportView=e.target.closest('[data-report-view]');if(reportView){e.stopPropagation();await viewComputerReport(reportView.dataset.reportView);return;}
   const history=e.target.closest('[data-history-offset]');if(history){await openComputer(currentComputer,Number(history.dataset.historyOffset));return;}
@@ -268,7 +324,7 @@ async function openComputer(id,offset=0) {
     $('computer-subtitle').textContent=(details.machine.serial_number?'SN : '+details.machine.serial_number:'Ancienne fiche MAC : '+details.machine.mac)+' | '+details.total+' déploiement(s)';
     const inventory=details.latest_report?.inventory || {};
     $('computer-summary').innerHTML=`<h2>Identité du poste</h2><dl class="computer-facts">${['Constructeur','Modele','Numero de serie','Windows','RAM (Go)','Processeur','Activation Windows'].map(key=>`<dt>${esc(inventoryLabel(key))}</dt><dd>${esc(inventory[key]||'Non transmis')}</dd>`).join('')}</dl><p>${esc(details.machine.description)}</p>`;
-    $('computer-history').innerHTML=details.deployments.length?details.deployments.map(d=>`<article class="panel padding computer-history-entry"><div class="section-title"><div><h3>${esc(d.profile_name)} - ${esc(d.hostname)}</h3><p>${esc(date(d.created_at))} ${badge(d.windows_status||d.status)}</p></div><div class="actions"><button class="button secondary" data-journal="${esc(d.id)}">Journal</button><button class="button secondary" data-inventory="${esc(d.id)}">Inventaire</button>${d.has_report?`<button class="button secondary" data-report-view="${esc(d.id)}">Voir le rapport</button><button class="button secondary" data-report="${esc(d.id)}">PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}</div></div><details><summary>Durées par étape</summary>${timingRows(d.timings)}</details></article>`).join(''):'<p>Aucun déploiement pour ce poste.</p>';
+    $('computer-history').innerHTML=details.deployments.length?details.deployments.map(d=>`<article class="panel padding computer-history-entry"><div class="section-title"><div><h3>${esc(d.profile_name)} - ${esc(d.hostname)}</h3><p>${esc(date(d.created_at))} ${badge(d.windows_status||d.status)}</p></div><div class="actions"><button class="button secondary" data-pipeline="${esc(d.id)}">Suivre les étapes</button><button class="button secondary" data-journal="${esc(d.id)}">Journal</button><button class="button secondary" data-inventory="${esc(d.id)}">Inventaire</button>${d.has_report?`<button class="button secondary" data-report-view="${esc(d.id)}">Voir le rapport</button><button class="button secondary" data-report="${esc(d.id)}">PDF</button>`:''}${hpSummaryButton(d.id,d.has_hp_summary)}</div></div><details><summary>Durées par étape</summary>${timingRows(d.timings)}</details></article>`).join(''):'<p>Aucun déploiement pour ce poste.</p>';
     $('computer-pagination').innerHTML=(offset?`<button class="button secondary" data-history-offset="${Math.max(0,offset-details.limit)}">Historique précédent</button>`:'')+(details.has_more?`<button class="button secondary" data-history-offset="${offset+details.limit}">Historique suivant</button>`:'');
     if(details.latest_report) renderComputerReport(details.latest_report,details.latest_report_deployment_id);else $('computer-report').innerHTML='<p>Aucun rapport reçu. Les tests, informations Windows et garantie seront affichés après transmission.</p>';
     $('computer-notes').innerHTML=details.notes.length?details.notes.map(n=>`<article class="computer-note"><small>${esc(date(n.created_at))} ${esc(n.author)}</small><p>${esc(n.text)}</p></article>`).join(''):'<p>Aucune observation enregistrée.</p>';

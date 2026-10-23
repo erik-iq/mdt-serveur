@@ -122,14 +122,16 @@ class Maintenance:
             status = self.hp.state(con)
             snapshots = [dict(r) for r in con.execute('SELECT * FROM hp_repository_snapshots ORDER BY created_at DESC')]
             requests = [dict(r) for r in con.execute('''SELECT q.platform,q.os,q.os_version,q.required_json,d.machine_id,
-                json_extract(r.report_json,'$.inventory.Modele') AS model FROM hp_repository_requests q
+                COALESCE(json_extract(r.report_json,'$.inventory.Modèle'),json_extract(r.report_json,'$.inventory.Modele')) AS model,
+                json_extract(r.report_json,'$.inventory."Source des pilotes HP"') AS hp_source FROM hp_repository_requests q
                 JOIN deployments d ON d.id=q.deployment_id LEFT JOIN computer_reports r ON r.deployment_id=d.id''')]
         models = {}
         for item in [*requests, *snapshots]:
             key = (item['platform'],item['os'],item['os_version'])
             model = models.setdefault(key, {'platform':key[0],'os':key[1],'os_version':key[2],
-                'names':set(),'machines':set(),'required':set(),'packages':[],'snapshot':None,'issues':[]})
+                'names':set(),'machines':set(),'required':set(),'packages':[],'snapshot':None,'issues':[],'reported_sources':set(),'cache':{'status':'missing','message':'Aucune copie publiée.'}})
             if item.get('model'): model['names'].add(item['model'])
+            if item.get('hp_source'): model['reported_sources'].add(item['hp_source'])
             if item.get('machine_id'): model['machines'].add(item['machine_id'])
             if item.get('required_json'): model['required'].update(json.loads(item['required_json']))
         seen = set()
@@ -137,6 +139,7 @@ class Maintenance:
             key = (snapshot['platform'],snapshot['os'],snapshot['os_version'])
             if key in seen: continue
             seen.add(key);model=models[key]
+            model['cache']=self.hp.cache_status(snapshot)
             model['snapshot'] = {k:snapshot[k] for k in ('id','created_at','size','sha256')}
             path = self.hp.checked(self.hp.root / 'snapshots' / (snapshot['id']+'.zip'))
             try:
@@ -166,8 +169,11 @@ class Maintenance:
                             package['title']=title[1].strip()[:300] if title else None
                         model['packages'].append(package)
                 self.cache[cache_key]=signature,list(model['packages'])
-            except (OSError, ValueError, zipfile.BadZipFile) as exc: model['issues'].append(str(exc))
+            except (OSError, ValueError, zipfile.BadZipFile) as exc:
+                model['issues'].append(str(exc))
+                model['cache']={'status':'unavailable','message':'Archive absente, illisible ou taille différente ; utilisation non confirmée.'}
         for key, model in models.items():
+            model['reported_sources']=sorted(model['reported_sources'])
             model['names']=sorted(model['names']);model['machine_count']=len(model.pop('machines'))
             model['required']=sorted(model['required']);model['packages'].sort(key=lambda p:p['id'])
             model['missing']=sorted(set(model['required'])-{p['id'] for p in model['packages']})

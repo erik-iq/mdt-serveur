@@ -1,5 +1,13 @@
 # Journal des modifications
 
+## IQ-6.2 : étapes et états contextualisés, 23 octobre 2026
+
+- Suivi Image Windows, HPIA, Logiciels, Dossier IQ, Redémarrage et Bilan. Les nouveaux agents transmettent explicitement leurs étapes ; le serveur conserve leur première réception et leur fin confirmée.
+- Compteur local du temps écoulé, heure du dernier signal et consultation depuis la vue globale ou l’historique du poste. Une absence de message ne prouve pas un blocage. Les étapes des anciens agents sans résultat transmis restent inconnues.
+- Séparation entre la disponibilité du cache HP, sa dernière actualisation et les sources déclarées par les postes. Une actualisation échouée ne transforme plus à elle seule une copie conservée en échec d’installation Windows. Les caches anciens, absents ou modifiés sont distingués.
+- Libellés distincts pour image appliquée, préparation Windows, réception du bilan et préparation des fichiers KB. Le compteur des déploiements actifs inclut la préparation Windows. Les paquets HPIA du cache .250 avec analyse Internet sont nommés explicitement dans les nouveaux rapports.
+- Reconstruction WinPE nécessaire pour embarquer les nouveaux signaux Windows. Le site exploite les preuves déjà reçues pour les anciennes installations ; aucun résultat manquant n’est inventé.
+
 ## Console IQ-6.1 : statistiques des déploiements, 23 octobre 2026
 
 - Nouvelle page Statistiques : périodes de 7, 30 ou 90 jours et historique complet, taux de réussite par modèle, durée moyenne mesurée et classement des étapes les plus longues.

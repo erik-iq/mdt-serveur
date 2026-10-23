@@ -26,6 +26,7 @@ from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
 from app.statistics import statistics_routes
+from app.phases import initialize_phases, record_phase, public_phases
 from app.hp_repository import HpRepository
 from app.maintenance import Maintenance
 from app.windows_kb import WindowsKbRepository
@@ -198,6 +199,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 report_json TEXT NOT NULL, created_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS events_deployment ON events(deployment_id,id);
         """)
+
+        initialize_phases(con)
 
         # Les migrations additives préservent la console installée sur DEPLOY-01.
         additions = {
@@ -401,7 +404,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.1"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.2"}
 
     @api.get('/api/session')
     def session_options():
@@ -424,22 +427,26 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             result["deployments"] = [dict(r) for r in con.execute("""SELECT d.id,d.machine_id,d.profile_id,d.disk_number,d.status,
                 d.progress,d.created_at,d.updated_at,d.selection_json,d.wizard_enabled,m.hostname,m.mac,m.serial_number,p.name AS profile_name,
                 d.windows_status,d.windows_progress,d.windows_message,d.windows_updated_at,
+                json_extract(cr.report_json,'$.inventory."Source des pilotes HP"') AS hp_source,
                 EXISTS(SELECT 1 FROM computer_reports r WHERE r.deployment_id=d.id) AS has_report,
                 EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id) AS has_inventory,
                 EXISTS(SELECT 1 FROM inventory_files i WHERE i.deployment_id=d.id AND i.kind='hp_summary') AS has_hp_summary
                 FROM deployments d JOIN machines m ON m.id=d.machine_id JOIN profiles p ON p.id=d.profile_id
+                LEFT JOIN computer_reports cr ON cr.deployment_id=d.id
                 ORDER BY d.created_at DESC LIMIT 100""")]
             for item in result['deployments']:
                 selection = json.loads(item.pop('selection_json'))
                 item['hostname'] = selection.get('hostname', item['hostname'])
+                item['pipeline'] = public_phases(con, item)
             result['reports'] = [dict(r) for r in con.execute('''SELECT r.deployment_id,r.created_at,d.machine_id,
                 d.windows_status,json_extract(r.report_json,'$.hostname') AS hostname
                 FROM computer_reports r JOIN deployments d ON d.id=r.deployment_id ORDER BY r.created_at DESC LIMIT 100''')]
             # Le parcours WinGet du poste ne dépend pas de l’interface d’un agent serveur.
             result['software_sync'] = None if client_apps else software.state(con)
             result['hp_repository'] = hp_repository.state(con)
-            result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running')").fetchone()[0],
+            result["totals"] = {"active": con.execute("SELECT COUNT(*) FROM deployments WHERE status IN ('queued','running') OR (status='staged' AND COALESCE(windows_status,'running') NOT IN ('completed','failed','needs_attention'))").fetchone()[0],
                                 "staged": con.execute("SELECT COUNT(*) FROM deployments WHERE status='staged'").fetchone()[0]}
+        result["generated_at"] = now()
         result["boot_ready"] = BOOT_KINDS <= {a["kind"] for a in result["assets"]}
         result["base_url"] = public_url
         result['customization_options'] = OPTIONS
@@ -821,6 +828,14 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     computer_routes(api, db, admin, windows_agent, now)
     statistics_routes(api, db, admin, now)
 
+    @api.get('/api/deployments/{identifier}/pipeline', dependencies=[Depends(admin)])
+    def pipeline(identifier: str):
+        with db() as con:
+            job = row(con, 'deployments', identifier)
+            selected = json.loads(job['selection_json'])
+            hostname = selected.get('hostname') or row(con, 'machines', job['machine_id'])['hostname']
+            return {'generated_at':now(), 'job':{'id':identifier,'hostname':hostname,'pipeline':public_phases(con,job)}}
+
     @api.post('/api/windows/{identifier}/progress')
     def windows_progress(identifier: str, body: WindowsProgress, authorization: str = Header(default='')):
         with db(write=True) as con:
@@ -829,6 +844,8 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
                 raise HTTPException(409, 'Préparation Windows déjà terminée')
             con.execute('UPDATE deployments SET windows_status=?,windows_progress=?,windows_message=?,windows_updated_at=? WHERE id=?',
                         (body.status, body.progress, body.message, now(), identifier))
+            if body.stage and body.stage_status:
+                record_phase(con, identifier, body.stage, body.stage_status, body.message, now())
         return {'accepted': True}
 
     @api.post('/api/windows/{identifier}/report')
@@ -850,6 +867,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
             con.execute('INSERT OR REPLACE INTO report_receipts VALUES (?,?)',(identifier,report_hash))
             con.execute('UPDATE deployments SET windows_status=?,windows_progress=?,windows_updated_at=? WHERE id=?',
                         (body.status, 100 if body.status == 'completed' else 90, now(), identifier))
+            record_phase(con, identifier, 'summary', body.status, 'Bilan final reçu sur le serveur.', now())
         return {'accepted': True, 'pdf_path': f'/api/deployments/{identifier}/report.pdf','deployment_id':identifier,'sha256':report_hash}
 
     @api.get('/api/deployments/{identifier}/report.pdf', dependencies=[Depends(admin)])

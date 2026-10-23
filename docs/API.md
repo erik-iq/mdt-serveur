@@ -103,3 +103,14 @@ Le transport de rapports reste borne avant l’analyse et les fichiers HP sont s
 `POST /api/boot/discover` accepte `{release:"ATELIER-4", serial_number:"SN-DU-PC", macs:[]}`. Le SN BIOS normalise est la clé de rapprochement ; une MAC n’est pas obligatoire et peut être partagée entre plusieurs SN. Le même SN retourne la même fiche, même après changement de dock. Le plan expose `serial_number`. Les SN absents/generiques sont refusés par le nouvel assistant. Le SN n’est pas un secret ni une attestation cryptographique ; les jetons restent nécessaires pour agir sur un déploiement.
 
 `POST /api/boot/connect` exige le SN d’une fiche liée au SN, même si une MAC correspond. Les codes, délais et rotations de jetons sont conservés. Le champ MAC reste un contrôle pour les anciennes fiches sans SN seulement ; une ancienne requête MAC ne prend jamais une fiche liée à un SN. Le site demande un SN pour l’enregistrement manuel. Les IDs et historiques SQLite restent conservés pendant la migration ; aucune ancienne fiche partagée n’est fusionnee sans preuve.
+
+
+## Étapes explicites IQ-6.2
+
+`POST /api/windows/{id}/progress` accepte les champs facultatifs couplés `stage` et `stage_status`. Les étapes Windows sont `hpia`, `software`, `iq`, `restart` et `summary`. Les états sont `running`, `reboot_pending`, `completed`, `failed`, `needs_attention` et `skipped`. L’ancien format sans ces champs reste accepté. Le jeton Windows du déploiement reste obligatoire.
+
+Le serveur conserve la première réception comme début et la première clôture comme fin. Un signal en cours ne rouvre pas une étape clôturée. Une correction finale peut rectifier son résultat. Les dates du client ne sont pas acceptées comme horodatages d’étape.
+
+`GET /api/deployments/{id}/pipeline`, réservé aux administrateurs, fournit les six étapes, leur état, leur message, leurs dates et `generated_at`. La vue globale expose aussi ce suivi. L’étape image repose sur les événements WinPE ; la réussite du bilan exige la réception du rapport Windows. Un résultat manquant devient `unknown` à la clôture, sans durée inventée.
+
+Les réponses du dépôt HP ajoutent `cache_states`, indépendant des tâches de synchronisation. `ready` confirme une copie récente présente avec la taille enregistrée, `stale` une copie ancienne conservée, `unavailable` une copie absente ou non confirmée, `missing` aucune copie publiée. Ce contrôle ne remplace ni les recommandations du poste ni la vérification des empreintes par le client.

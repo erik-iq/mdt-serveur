@@ -4,11 +4,13 @@ IQ Atelier installe Windows sur les ordinateurs de l’atelier depuis le réseau
 
 ## Avant de commencer
 
-Depuis IQ-5.5, deux pages de suivi complètent le site. **HPIA et pilotes** regroupe les plateformes/modeles connus, les SoftPaq présents dans la dernière archive serveur, leurs descriptions et versions CVA, les demandes encore absentes et les synchronisations. Le bouton de synchronisation alimente le cache serveur ; il n’installe aucun pilote sur .250. Une recherche filtre les modèles, plateformes et SoftPaq. Chaque poste garde son analyse HPIA avant installation.
+Depuis IQ-6.2, **Suivre les étapes** présente Image Windows, HPIA, Logiciels, Dossier IQ, Redémarrage et Bilan, depuis la vue globale ou l’historique du poste. Le compteur part du premier signal reçu, sans repartir à zéro à chaque actualisation. Les résultats absents des anciens agents restent non confirmés. Consulter [la signification des états](ETATS-ET-SUIVI.md).
 
-**Images et correctifs** montre les WIM utilisés, l’état mesuré de la tâche, les KB et les durées des préparations, les erreurs et les candidats à tester. Le bouton de recherche consulte uniquement le catalogue Microsoft, sans télécharger ni installer de correctif. Nouveau est compare au passage indiqué ; ce n’est pas une confirmation de mise à jour de la production. Les rapports JSON sont telechargeables et une candidate prête propose la commande de mise en test sur .250.
+**HPIA et pilotes** regroupe les plateformes et modèles connus, les SoftPaq conservés, leurs descriptions et versions CVA, les recommandations encore absentes et les actualisations. Le bouton de synchronisation alimente le cache serveur ; il n’installe aucun pilote sur .250. Un cache conservé et une actualisation échouée peuvent coexister. La source déclarée par chaque poste est indépendante de ces deux états.
 
-Les deux pages affichent l’espace libre des volumes et une répartition des fichiers Atelier. Ce sont des tailles logiques, avec la date de mesure ; le stockage des montages Windows est exclu du calcul detaille. Les métadonnées HPIA sont mises en cache pour éviter de relire toutes les archives à chaque actualisation. Consulter [la maintenance des images](MAINTENANCE-IMAGES-WINDOWS.md) pour les étapes de validation, la pause et l’annulation.
+**Correctifs Windows** présente le cache KB, sa recherche et son téléchargement sur .250, ainsi que la veille des versions Windows. Ces fichiers ne sont pas installés automatiquement pendant les nouveaux déploiements. L’historique des anciennes préparations WIM reste consultable : une candidate prête à tester ne signifie pas qu’elle est en production.
+
+L’espace libre et la répartition des fichiers sont affichés uniquement dans la vue globale. Ce sont des tailles logiques datées ; les montages Windows sont exclus du calcul détaillé. Les métadonnées HPIA sont mises en cache pour éviter de relire toutes les archives à chaque actualisation.
 
 Sauvegarder les données du poste : le déploiement effacé toutes les partitions du disque choisi. Brancher l’alimentation et un câble réseau. Le poste doit démarrer en UEFI. Vérifier qu’une image Windows et ses profils Pro/Famille sont disponibles dans Atelier.
 

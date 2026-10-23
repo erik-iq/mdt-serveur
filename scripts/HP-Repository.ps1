@@ -45,7 +45,9 @@ function Test-AtelierHpCmslOsVersion {
 function Save-AtelierHpSelectedPackages {
     param([string]$Work,$Job)
     $ids=@($Job.required_softpaqs | Sort-Object -Unique)
-    if (-not $ids.Count -or $ids.Count -gt 200 -or @($ids | Where-Object { [string]$_ -notmatch '^SP[0-9]{4,8}$' }).Count) { throw 'CMSL ne reconnait pas cette version Windows. Une liste valide de recommandations HPIA est nécessaire pour le cache des paquets.' }
+    if (-not $ids.Count) { throw 'Actualisation du cache impossible : CMSL ne reconnaît pas cette version Windows et aucune recommandation SoftPaq HPIA reçue. Aucune nouvelle copie publiée.' }
+    if ($ids.Count -gt 200) { throw 'Actualisation du cache refusée : plus de 200 SoftPaq recommandés. Aucune nouvelle copie publiée.' }
+    if (@($ids | Where-Object { [string]$_ -notmatch '^SP[0-9]{4,8}$' }).Count) { throw 'Actualisation du cache refusée : identifiants SoftPaq invalides. Aucune nouvelle copie publiée.' }
     foreach ($id in $ids) {
         $exe=Join-Path $Work ($id.ToLowerInvariant()+'.exe')
         if (Test-Path -LiteralPath $exe) {

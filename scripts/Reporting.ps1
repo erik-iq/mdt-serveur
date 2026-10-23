@@ -28,7 +28,11 @@ function Send-AtelierWindowsProgress {
     try {
         $config = Get-Content $configuration -Encoding UTF8 -Raw | ConvertFrom-Json
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $body = @{status=$Status;progress=$Percent;message=$Message} | ConvertTo-Json -Compress
+        $progressBody=@{status=$Status;progress=$Percent;message=$Message}
+        if ($script:AtelierDeploymentStage -in @('hpia','software','iq','restart','summary') -and $script:AtelierDeploymentStageStatus -in @('running','reboot_pending','completed','failed','needs_attention','skipped')) {
+            $progressBody.stage=$script:AtelierDeploymentStage;$progressBody.stage_status=$script:AtelierDeploymentStageStatus
+        }
+        $body = $progressBody | ConvertTo-Json -Compress
         Invoke-RestMethod -Uri ($config.server_url + '/api/windows/' + $config.id + '/progress') -Method Post -Headers @{Authorization=('Bearer ' + $config.token)} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null
     } catch {
         $script:nextReportingAttempt=[DateTime]::UtcNow.AddMinutes(1)

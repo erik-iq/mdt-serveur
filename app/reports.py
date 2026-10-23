@@ -3,7 +3,7 @@ from typing import Literal
 from app.text import inventory_label, status_label
 import textwrap
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ReportStep(BaseModel):
@@ -30,6 +30,14 @@ class WindowsProgress(BaseModel):
     status: Literal['running', 'reboot_pending', 'retry_pending', 'completed', 'needs_attention', 'failed']
     progress: int = Field(ge=0, le=100)
     message: str = Field(min_length=1, max_length=1500)
+    stage: Literal['hpia','software','iq','restart','summary'] | None = None
+    stage_status: Literal['running','reboot_pending','completed','failed','needs_attention','skipped'] | None = None
+
+    @model_validator(mode='after')
+    def paired_stage(self):
+        if (self.stage is None) != (self.stage_status is None):
+            raise ValueError('L’étape et son état doivent être transmis ensemble')
+        return self
 
 
 def report_lines(report, events=()):

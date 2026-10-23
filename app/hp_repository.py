@@ -117,13 +117,38 @@ class HpRepository:
         con.execute('INSERT INTO hp_repository_jobs VALUES (?,?,?,?,?,?,NULL,?,?)',(identifier,*key,'queued','Préparation du dépôt HP demandée',time,time))
         return dict(con.execute('SELECT * FROM hp_repository_jobs WHERE id=?',(identifier,)).fetchone())
 
+    def cache_status(self,snapshot):
+        if not snapshot:
+            return {'status':'missing','message':'Aucune copie publiée sur le serveur.'}
+        path=self.checked(self.root/'snapshots'/(snapshot['id']+'.zip'))
+        try:
+            if not path.is_file() or path.stat().st_size!=snapshot['size']:
+                return {'status':'unavailable','message':'Copie absente ou taille différente ; utilisation non confirmée.'}
+            created=datetime.fromisoformat(snapshot['created_at'].replace('Z','+00:00'))
+            if created.utcoffset() is None:raise ValueError('Date sans fuseau')
+            current=datetime.now(timezone.utc)
+            if created>current+timedelta(minutes=5):
+                return {'status':'unavailable','message':'Date de la copie incohérente ; disponibilité non confirmée.'}
+            fresh=created>=current-timedelta(hours=24)
+        except (OSError,ValueError,TypeError):
+            return {'status':'unavailable','message':'Disponibilité de la copie non confirmée.'}
+        return {'status':'ready' if fresh else 'stale',
+                'message':'Copie disponible, présence et taille confirmées.' if fresh else 'Copie conservée depuis plus de 24 heures ; actualisation nécessaire avant réutilisation automatique.'}
+
     def state(self,con):
         worker=con.execute('SELECT state,message,last_seen FROM hp_repository_worker WHERE singleton=1').fetchone()
         agent=dict(worker) if worker else {'state':'not_ready','message':'Agent CMSL non configuré','last_seen':None}
         agent['available']=bool(worker and worker['state'] in {'ready','busy'} and worker['last_seen']>(datetime.now(timezone.utc)-timedelta(seconds=90)).isoformat())
         jobs=[dict(r) for r in con.execute('SELECT id,platform,os,os_version,status,message,created_at,updated_at FROM hp_repository_jobs ORDER BY created_at DESC LIMIT 100')]
         snapshots=[dict(r) for r in con.execute('SELECT id,platform,os,os_version,size,created_at FROM hp_repository_snapshots ORDER BY created_at DESC LIMIT 100')]
-        return {'worker':agent,'jobs':jobs,'snapshots':snapshots}
+        cache_states=[];seen=set()
+        for item in [*snapshots,*jobs]:
+            key=(item['platform'],item['os'],item['os_version'])
+            if key in seen:continue
+            seen.add(key)
+            snapshot=con.execute('SELECT * FROM hp_repository_snapshots WHERE platform=? AND os=? AND os_version=? ORDER BY created_at DESC LIMIT 1',key).fetchone()
+            cache_states.append(dict(platform=key[0],os=key[1],os_version=key[2],**self.cache_status(snapshot)))
+        return {'worker':agent,'jobs':jobs,'snapshots':snapshots,'cache_states':cache_states}
 
     @staticmethod
     def selected(job):
