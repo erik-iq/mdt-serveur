@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## IQ-5.8.6 : KB en premier et progression dès la connexion Windows, 23 octobre 2026
+
+- Réactivation des KB du cache .250 au début de Windows, avant HPIA et les logiciels, avec contrôles de compatibilité et reprise après redémarrage. La recherche Windows Update en ligne reste désactivée.
+- La fenêtre est lancée dès FirstLogonCommands, avant la tâche de travail, l’attente du bureau et la validation réseau. Le travail planifié démarre immédiatement.
+- La progression couvre explicitement le thème, le fond d’écran et la création du dossier IQ. La finalisation réutilise le résultat KB déjà obtenu.
+
 ## IQ-5.8.5 : HPIA en premier, sans Windows Update automatique, 23 octobre 2026
 
 - Les nouveaux déploiements désactivent Windows Update et les KB automatiques. HPIA s’exécute avant les autres logiciels si sa case est cochée.

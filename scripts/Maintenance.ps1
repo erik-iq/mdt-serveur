@@ -94,9 +94,9 @@ try {
     if (-not $state.PSObject.Properties['windows_history']) { $state | Add-Member NoteProperty windows_history @() }
     $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     # Une ancienne tâche attend la fin de la première phase et des logiciels.
-    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first) -and -not (Test-Path (Join-Path $DataPath 'result.json'))) { return }
+    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first -or $payload.deployment.kb_first) -and -not (Test-Path (Join-Path $DataPath 'result.json'))) { return }
     $customization = Get-Content (Join-Path $DataPath 'result.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first) -and $customization.status -ne 'completed') { return }
+    if (($payload.deployment.automatic_windows_update -or $payload.deployment.hpia_first -or $payload.deployment.kb_first) -and $customization.status -ne 'completed') { return }
     $software=Get-AtelierSoftwareSummary -Packages @($payload.settings.winget_packages) -Results @($customization.applications)
     if ($state.final_restart -and -not $state.final_restart.completed_at) {
         $boot=Get-AtelierHpBootIdentity
@@ -210,11 +210,17 @@ try {
         }
         if ($wu.status -ne 'completed') {$warnings.Add(('Windows Update : '+$wu.message))}
     } elseif ($payload.deployment.cached_windows_updates) {
+        if ($payload.deployment.kb_first) {
+            $kbPath=Join-Path $DataPath 'windows-kb-result.json'
+            if (-not (Test-Path $kbPath)) { throw 'Résultat des KB au début de la préparation absent. Rapports conservés.' }
+            $kb=Read-AtelierSharedUtf8File -Path $kbPath | ConvertFrom-Json
+        } else {
         . (Join-Path $DataPath 'Client-KBUpdates.ps1')
         $kb=Invoke-AtelierCachedWindowsUpdates -DataPath $DataPath -OnProgress {
             param($Message)
             $script:updateDetail=@{percent=-1}
             Save-Maintenance 'running' 90 $Message
+        }
         }
         $script:updateDetail=$null
         $state.windows=$kb

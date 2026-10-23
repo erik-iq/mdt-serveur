@@ -1,11 +1,16 @@
-# Correctifs Windows, IQ-5.8.5
+# Correctifs Windows depuis .250, IQ-5.8.6
+
+Les nouveaux déploiements installent les KB compatibles du cache serveur au début de la préparation Windows. La fenêtre est affichée dès la première connexion. Les reprises et redémarrages des KB précèdent HPIA, les logiciels et la création du dossier IQ. La finalisation relit ce résultat sans réinstaller les paquets. Windows Update en ligne et Microsoft Store restent manuels.
+
+## Historique IQ-5.8.5
+
 
 La préparation des nouveaux postes ne lance plus Windows Update et n’installe pas automatiquement de KB. HPIA est exécuté en premier si sélectionné, puis les logiciels et le dossier IQ. La veille des versions et le cache KB du serveur restent consultables et utilisables manuellement.
 
 ## Ancien parcours Windows Update, IQ-5.8 à IQ-5.8.4
 
 
-## Parcours actuel
+### Parcours de cette ancienne version
 
 Les nouveaux déploiements IQ-5.8.2 recherchent et installent automatiquement les mises à jour avec l’API Windows Update Agent, sous SYSTEM, avant les logiciels et HPIA. Les correctifs Windows et .NET, Defender, les pilotes et les firmwares applicables sont inclus. Les changements de version Windows restent exclus et le Store reste manuel.
 

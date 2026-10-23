@@ -16,12 +16,12 @@ $logPath = Join-Path $DataPath 'first-logon.log'
 $payload = Get-Content (Join-Path $DataPath 'personalization.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 . (Join-Path $DataPath 'Unattend.ps1')
 . (Join-Path $DataPath 'Reporting.ps1')
-$manufacturer = (Get-CimInstance Win32_ComputerSystem).Manufacturer
+$manufacturer = ''
 $results = New-Object 'System.Collections.Generic.List[object]'
 $restartNeeded = $false
-function Set-Progress([string]$Status,[int]$Percent,[string]$Message) {
-    Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message;timestamp=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json) -NoBackup | Out-Null
-    Send-AtelierWindowsProgress $DataPath $Status $Percent $Message
+function Set-Progress([string]$Status,[int]$Percent,[string]$Message,[switch]$Indeterminate,[switch]$LocalOnly) {
+    Write-AtelierVerifiedUtf8File -Path (Join-Path $DataPath 'progress.json') -Content (@{status=$Status;progress=$Percent;message=$Message;timestamp=[DateTime]::UtcNow.ToString('o');detail=$(if($Indeterminate){@{percent=-1}}else{$null})} | ConvertTo-Json -Depth 5) -NoBackup | Out-Null
+    if (-not $LocalOnly) { Send-AtelierWindowsProgress $DataPath $Status $Percent $Message }
 }
 function Start-Maintenance {
     $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -96,6 +96,10 @@ function Invoke-Installer([string]$Executable, [string]$Arguments, [string]$Work
 }
 
 try {
+    Set-Progress 'running' 2 'Préparation du poste en cours : correctifs KB, HPIA, logiciels et personnalisation.' -LocalOnly
+    $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
+    # La fenêtre est déjà ouverte pendant l’arrivée du bureau et les opérations réseau.
     # Cette tâche est indépendante d’OOBE. Attendre Explorer sans bloquer la connexion.
     $desktopDeadline=(Get-Date).AddSeconds(60)
     while (-not (Get-Process explorer -ErrorAction SilentlyContinue) -and (Get-Date) -lt $desktopDeadline) { Start-Sleep -Seconds 1 }
@@ -107,8 +111,16 @@ try {
     # Vérifier les applications demandées dans cette installation réelle de Windows.
     # Les WIM capturés et les reprises peuvent contenir d’anciens résultats de réussite.
     Set-Progress 'running' 5 'Démarrage de la préparation du poste...'
-    $powerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    Start-Process -FilePath $powerShell -WindowStyle Hidden -ArgumentList ('-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $DataPath 'Progress.ps1') + '"') | Out-Null
+    $manufacturer = (Get-CimInstance Win32_ComputerSystem).Manufacturer
+    if ($payload.deployment.kb_first -and $payload.deployment.cached_windows_updates) {
+        Set-Progress 'running' 5 'Correctifs KB du serveur .250 en premier, avant HPIA et les logiciels.' -Indeterminate
+        . (Join-Path $DataPath 'Client-KBFirst.ps1')
+        $kbPhase=Invoke-AtelierKbFirst -DataPath $DataPath -OnProgress {param($Message);Set-Progress 'running' 5 $Message -Indeterminate}
+        if ($kbPhase.pending) {
+            Set-Progress 'running' 5 $kbPhase.kb.message -Indeterminate
+            return
+        }
+    }
     $hpWinGetTool=$null
     $clientPackages=@()
     if ($payload.settings.software_mode -eq 'winget') { $clientPackages=@($payload.settings.winget_packages) }
@@ -214,6 +226,7 @@ try {
     Stop-AtelierTiming $DataPath $toolsTiming
     Sync-AtelierTimings $DataPath
     Write-Trace 'Début de la personnalisation du premier compte administrateur.'
+    Set-Progress 'running' 62 'Personnalisation du bureau : application du thème Windows.'
     $theme = $payload.settings.theme
     if ($theme -in @('light','dark')) {
         $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
@@ -223,6 +236,7 @@ try {
         New-ItemProperty -Path $registry -Name SystemUsesLightTheme -Value $value -PropertyType DWord -Force | Out-Null
     }
     if ($payload.wallpaper) {
+        Set-Progress 'running' 64 "Personnalisation du bureau : application du fond d’écran."
         $wallpaperSource = Join-Path $DataPath ('Resources\' + $payload.wallpaper.filename)
         Assert-FileHash $wallpaperSource $payload.wallpaper.sha256
         $wallpaperDirectory=Join-Path $env:SystemDrive 'IQ_\Personnalisation'

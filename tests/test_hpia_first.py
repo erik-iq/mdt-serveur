@@ -86,7 +86,7 @@ $global:checkingMaintenance=$true
 def test_new_deployments_disable_both_update_paths_and_include_hp_first_module():
     deploy=(ROOT/'scripts/Deploy.ps1').read_text('utf-8-sig')
     assert 'automatic_windows_update=$false;hpia_first=$true;' in deploy
-    assert 'cached_windows_updates=$false;' in deploy
+    assert 'cached_windows_updates=$true;kb_first=$true;' in deploy
     for name in ('Deploy.ps1','Build-WinPE.ps1'):
         assert "'Client-HpiaFirst.ps1'" in (ROOT/'scripts'/name).read_text('utf-8-sig')
 

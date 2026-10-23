@@ -288,7 +288,7 @@ function Show-Page {
             Add-Choice 'theme' 'Thème du bureau' @($script:session.catalog.options.themes) $script:settings.theme | Out-Null
             $wallpapers = @([pscustomobject]@{id=''; name='Conserver le fond d''écran Windows'}) + @($script:session.catalog.wallpapers | ForEach-Object { [pscustomobject]@{id=$_.id;name=$_.filename} })
             Add-Choice 'wallpaper' 'Fond d''écran' $wallpapers ([string]$script:settings.wallpaper_asset_id) | Out-Null
-            Add-Text 'HP Image Assistant coché : analyse et SoftPaq HP compatibles en premier, puis les logiciels sélectionnés et le dossier IQ. Lenovo System Update coché : installation de l''outil. Windows Update et Microsoft Store restent manuels. Un BIOS peut redémarrer le poste ; la préparation reprend automatiquement.' | Out-Null
+            Add-Text 'Correctifs KB depuis .250 en premier, puis HP Image Assistant si coché, les logiciels sélectionnés et le dossier IQ. La progression apparaît dès la première connexion Windows et suit aussi la personnalisation. Lenovo System Update coché : installation de l''outil. Windows Update et Microsoft Store restent manuels. Un BIOS peut redémarrer le poste ; la préparation reprend automatiquement.' | Out-Null
         }
         4 {
             $disk = Get-Disk -Number $script:session.plan.disk_number -ErrorAction SilentlyContinue
@@ -403,7 +403,7 @@ function Begin-Deployment {
 }
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.8.5'
+$form.Text = 'IQ Atelier | Assistant Windows | ' + $Config.boot_release + ' | IQ-5.8.6'
 $form.Font=New-AtelierFont -Size 10
 $form.StartPosition = 'CenterScreen'; $form.BackColor = $paper; $form.AutoScaleMode = 'Dpi'
 $form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96)
