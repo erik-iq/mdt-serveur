@@ -146,7 +146,14 @@ exit
         Assert-Active
         Send-Event 'running' 35 'Application de l''image Windows (DISM)'
         $imageTiming=Start-AtelierTiming $timingPath 'image' 'winpe'
-        Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
+        $networkMeasurement=Start-AtelierImageNetworkMeasurement $source.FullName
+        $networkApplicationStatus='failed'
+        try {
+            Run-Checked 'dism.exe' @('/Apply-Image', "/ImageFile:$($source.FullName)", "/Index:$($plan.image_index)", '/ApplyDir:W:\', '/CheckIntegrity', '/Verify')
+            $networkApplicationStatus='completed'
+        } finally {
+            Stop-AtelierImageNetworkMeasurement $timingPath $networkMeasurement $networkApplicationStatus
+        }
         Stop-AtelierTiming $timingPath $imageTiming
         Sync-AtelierTimings $timingPath ([pscustomobject]@{server_url=$ServerUrl.TrimEnd('/');id=$DeploymentId;token=$claim.report_token})
     } finally { if ($imageLock) { $imageLock.Dispose(); $imageLock=$null } }
@@ -158,8 +165,12 @@ exit
     $previousPayload=Initialize-AtelierDeploymentPayload -Path $payloadPath
     Run-Checked 'icacls.exe' @($payloadPath, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Copy-Item (Join-Path $PSScriptRoot 'FirstLogon.ps1'), (Join-Path $PSScriptRoot 'Unattend.ps1'), (Join-Path $PSScriptRoot 'Prepare-Windows.ps1'), (Join-Path $PSScriptRoot 'Maintenance.ps1'), (Join-Path $PSScriptRoot 'Progress.ps1'), (Join-Path $PSScriptRoot 'Updates.ps1'), (Join-Path $PSScriptRoot 'Prepare-IQTools.ps1'), (Join-Path $PSScriptRoot 'Test-Batterie.ps1'), (Join-Path $PSScriptRoot 'Verifier-Licence.ps1') -Destination $payloadPath
-    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','HP-ImageAssistant.ps1','Test-HPIA.ps1','Tester-HPIA.cmd','HP-Repository.ps1','HP-ClientRepository.ps1','HP-Reports.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Client-KBUpdates.ps1','Client-KBFirst.ps1','Client-WindowsUpdate.ps1','Client-HpiaFirst.ps1','WindowsUpdate-First.ps1','WindowsUpdate-Diagnostic.ps1','WindowsUpdate-InstallTest.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Finalization.ps1','Timings.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
+    foreach ($name in @('Reporting.ps1','New-DeploymentReport.ps1','Launch-Tools.ps1','HP-ImageAssistant.ps1','Test-HPIA.ps1','Tester-HPIA.cmd','HP-Repository.ps1','HP-ClientRepository.ps1','HP-Reports.ps1','Test-Materiel.ps1','Tests-Materiel.html','Verifier-Garantie.ps1','Export-Inventaire.ps1','Client-Software.ps1','Client-KBUpdates.ps1','Client-KBFirst.ps1','Client-WindowsUpdate.ps1','Client-HpiaFirst.ps1','WindowsUpdate-First.ps1','WindowsUpdate-Diagnostic.ps1','WindowsUpdate-InstallTest.ps1','Install-WinGet.ps1','software-sources.json','Inventory-Transfer.ps1','Finalization.ps1','Timings.ps1','Network-Measurement.ps1','Start-Preparation.ps1','IQ-Paths.ps1','Theme.ps1','theme.json','brand-logo.png')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $payloadPath }
     if (Test-Path (Join-Path $timingPath 'timings')) { Copy-Item -LiteralPath (Join-Path $timingPath 'timings') -Destination $payloadPath -Recurse -Force }
+    foreach ($name in @('deployment-network.json','deployment-network.json.sent')) {
+        $measurementFile=Join-Path $timingPath $name
+        if (Test-Path -LiteralPath $measurementFile) { Copy-Item -LiteralPath $measurementFile -Destination $payloadPath -Force }
+    }
     $publicRoot=Join-Path $PSScriptRoot 'trusted-root.cer'
     if (Test-Path -LiteralPath $publicRoot) { Copy-Item -LiteralPath $publicRoot -Destination $payloadPath }
     $reporting=@{server_url=$ServerUrl.TrimEnd('/');id=$plan.id;token=$claim.report_token;expires=$claim.report_expires} | ConvertTo-Json

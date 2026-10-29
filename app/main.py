@@ -26,6 +26,7 @@ from app.software_jobs import SoftwareJobs, BundleApplications
 from app.inventories import Inventories, MAX_INVENTORY
 from app.computers import computer_routes
 from app.statistics import statistics_routes
+from app.network_statistics import network_routes
 from app.phases import initialize_phases, record_phase, public_phases
 from app.hp_repository import HpRepository
 from app.maintenance import Maintenance
@@ -404,7 +405,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     def health():
         with db() as con:
             con.execute("SELECT 1").fetchone()
-        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.2"}
+        return {"status": "ok", "version": "0.2.0", "release": "ATELIER-2", "revision": "4.0", "ui_revision": "IQ-6.3"}
 
     @api.get('/api/session')
     def session_options():
@@ -826,6 +827,7 @@ def create_app(data_dir=None, admin_token=None, base_url=None, internal_mode=Non
     kb_repository.routes(api, windows_agent, admin)
     WindowsReleases(db, kb_repository.contexts).routes(api, admin)
     computer_routes(api, db, admin, windows_agent, now)
+    network_routes(api, db, admin, windows_agent, now)
     statistics_routes(api, db, admin, now)
 
     @api.get('/api/deployments/{identifier}/pipeline', dependencies=[Depends(admin)])

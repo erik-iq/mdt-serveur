@@ -1,5 +1,13 @@
 # Journal des modifications
 
+## IQ-6.3 : statistiques réseau des déploiements, 29 octobre 2026
+
+- Débit reçu moyen en Mbit/s et Mo/s, meilleure et plus faible moyenne par poste, vitesse de liaison déclarée et repérage des liaisons sous 1 Gbit/s. La période et l’historique des statistiques s’appliquent aussi aux mesures réseau.
+- Compteurs de l’interface IPv4 routée vers le partage lus avant et après DISM, sans téléchargement supplémentaire ni test de débit. L’application de l’image conserve son mode de lancement. Le trafic connexe et les attentes de disque entrent dans l’intervalle mesuré. Les interfaces SMB supplémentaires ne sont pas additionnées.
+- Moyenne pondérée par la durée des mesures, distincte d’un débit total du serveur. Cinquante relevés récents affichés, calculs sur toute la période. Une image appliquée peut transmettre sa mesure avant le bilan Windows final.
+- Compteurs absents, route modifiée, vitesse changée ou compteur revenu en arrière : débit non confirmé, sans faux zéro. Les applications en échec et les annulations sont exclues des moyennes. Réception authentifiée, bornée et idempotente ; reprise de transmission depuis Windows si nécessaire.
+- Reconstruction WinPE IQ-6.3 nécessaire pour les nouveaux relevés. Les anciennes installations restent non mesurées.
+
 ## IQ-6.2 : étapes et états contextualisés, 23 octobre 2026
 
 - Suivi Image Windows, HPIA, Logiciels, Dossier IQ, Redémarrage et Bilan. Les nouveaux agents transmettent explicitement leurs étapes ; le serveur conserve leur première réception et leur fin confirmée.

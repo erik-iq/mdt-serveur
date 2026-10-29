@@ -16,6 +16,7 @@ from playwright.sync_api import expect, sync_playwright
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from test_statistics import measure, seed
+from test_network_statistics import measurement, save
 
 
 def run():
@@ -45,10 +46,14 @@ def run():
                 expect(page.locator('#statistics-models')).to_contain_text('Aucun résultat définitif')
                 expect(page.locator('#statistics-stages')).to_contain_text('Pas encore de chronométrages')
                 expect(page.locator('#statistics-summary')).to_contain_text('Non disponible')
+                expect(page.locator('#statistics-network')).to_contain_text('Aucune mesure réseau')
+                expect(page.locator('#statistics-network-summary')).to_contain_text('Non mesuré')
                 recent=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
                 model='EliteBook <840> & G5'
-                seed(data,machine,profile,created=recent,model=model,timing=[measure('image',120,source='winpe'),measure('software',300,10),measure('hp_updates',600,12)])
-                seed(data,machine,profile,created=recent,model=model,timing=[measure('image',60,source='winpe'),measure('software',180,10)])
+                first=seed(data,machine,profile,created=recent,model=model,timing=[measure('image',120,source='winpe'),measure('software',300,10),measure('hp_updates',600,12)])
+                save(data,first,measurement())
+                second=seed(data,machine,profile,created=recent,model=model,timing=[measure('image',60,source='winpe'),measure('software',180,10)])
+                save(data,second,measurement(duration_seconds=100,link_speed_bps=100000000))
                 seed(data,machine,profile,created=recent,result='needs_attention',model=model)
                 seed(data,machine,profile,created=recent,state='failed',result=None,report=False)
                 seed(data,machine,profile,created=recent,result=None,report=False)
@@ -60,6 +65,12 @@ def run():
                 expect(page.locator('#statistics-summary strong').nth(1)).to_have_text('50 %')
                 expect(page.locator('#statistics-summary strong').nth(2)).to_have_text('9 min 0 s')
                 expect(page.locator('#statistics-models')).to_contain_text(model)
+                expect(page.locator('#statistics-network-summary')).to_contain_text('181,82 Mbit/s')
+                expect(page.locator('#statistics-network')).to_contain_text('1 Gbit/s')
+                expect(page.locator('#statistics-network')).to_contain_text('100 Mbit/s')
+                expect(page.locator('#statistics-network')).to_contain_text('125 Mo/s')
+                expect(page.locator('#statistics-network')).to_contain_text('Intel Ethernet <fixture>')
+                assert page.locator('#statistics-network fixture').count()==0
                 assert page.locator('#statistics-models img, #statistics-models script, #statistics-models fixture').count()==0
                 expect(page.locator('#statistics-stages h3').first).to_contain_text('Mises à jour HP')
                 expect(page.locator('#statistics-stages')).to_contain_text('10 min 0 s')
@@ -71,18 +82,19 @@ def run():
                 page.on('request',lambda request:requests.append(request.url))
                 page.evaluate('Promise.all([loadStatistics(true),loadStatistics(true)])')
                 assert len([url for url in requests if '/api/statistics/deployments' in url])==1,requests
-                page.screenshot(path='/tmp/atelier-statistics-light.png',full_page=True)
+                page.screenshot(path='/tmp/atelier-statistics-network-light.png',full_page=True)
                 page.route('**/api/statistics/deployments?*',lambda route:route.fulfill(status=503,content_type='application/json',body='{"detail":"Statistiques temporairement indisponibles"}'))
                 page.get_by_role('button',name='Actualiser les statistiques',exact=True).click()
                 expect(page.locator('#statistics-status')).to_contain_text('Actualisation impossible')
                 expect(page.locator('#statistics-summary strong').nth(0)).to_have_text('5')
+                expect(page.locator('#statistics-network-summary')).to_contain_text('181,82 Mbit/s')
                 page.unroute('**/api/statistics/deployments?*')
                 page.get_by_role('button',name='Actualiser les statistiques',exact=True).click()
                 expect(page.locator('#statistics-status')).to_contain_text('Actualisé le')
                 page.get_by_label('Thème du site',exact=True).select_option('dark')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-                page.screenshot(path='/tmp/atelier-statistics-dark-mobile.png',full_page=True)
+                page.screenshot(path='/tmp/atelier-statistics-network-dark-mobile.png',full_page=True)
                 assert not errors,errors
                 browser.close()
             print('Statistiques vérifiées : périodes, taux, durées, historique, échappement, requêtes simultanées, erreur réseau et mobile sombre.')

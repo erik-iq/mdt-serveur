@@ -7,8 +7,25 @@ function statisticsDuration(value){
   return measuredDuration(value);
 }
 const statisticsRate=value=>Number.isFinite(value)?value.toLocaleString('fr-CH',{maximumFractionDigits:1})+' %':'Non disponible';
+const networkNumber=value=>value.toLocaleString('fr-CH',{maximumFractionDigits:2});
+function networkRate(value){return Number.isFinite(value)?networkNumber(value)+' Mbit/s':'Non mesuré';}
+function networkLink(value){
+  if(!Number.isFinite(value))return 'Non transmise';
+  return value>=1000000000?networkNumber(value/1000000000)+' Gbit/s':networkNumber(value/1000000)+' Mbit/s';
+}
+function renderNetworkStatistics(value){
+  if(!value){
+    renderFragment('statistics-network-summary','');
+    renderFragment('statistics-network','<p class="padding">Les mesures réseau ne sont pas encore transmises par cette version du serveur.</p>');
+    $('statistics-network-coverage').textContent='';return;
+  }
+  renderFragment('statistics-network-summary',`<article><span>Déploiements mesurés</span><strong>${value.measured}</strong><small>Sur ${value.applications} déploiement(s) dans la période</small></article><article><span>Débit moyen reçu par poste</span><strong>${networkRate(value.average_mbps)}</strong><small>${Number.isFinite(value.average_mbps)?networkNumber(value.average_mbps/8)+' Mo/s, pondéré par la durée':'En attente de mesures exploitables'}</small></article><article><span>Meilleure moyenne par poste</span><strong>${networkRate(value.best_average_mbps)}</strong><small>Minimum des moyennes : ${networkRate(value.lowest_average_mbps)}</small></article><article><span>Liaisons sous 1 Gbit/s</span><strong>${value.known_links?value.below_gigabit:'Non transmise'}</strong><small>Sur ${value.known_links} liaison(s) connue(s), par déploiement</small></article>`);
+  $('statistics-network-coverage').textContent=value.missing+' déploiement(s) sans relevé, '+value.unavailable+' avec compteurs indisponibles et '+value.failed_applications+' application(s) d’image en échec exclue(s) des moyennes. Affichage des '+value.listed+' dernières sur '+value.applications+'.';
+  renderFragment('statistics-network',value.samples.length?`<table><thead><tr><th>POSTE ET DATE</th><th>MODÈLE ET INTERFACE</th><th>LIAISON DÉCLARÉE</th><th>DÉBIT MOYEN REÇU</th><th>VOLUME REÇU</th><th>DURÉE DE MESURE</th></tr></thead><tbody>${value.samples.map(sample=>`<tr><td><strong>${esc(sample.hostname)}</strong><small>${esc(date(sample.created_at))}</small></td><td>${esc(sample.model)}<small>${esc(sample.adapter_name||'Interface non transmise')}</small></td><td>${sample.link_speed_bps&&sample.link_speed_bps<1000000000?contextBadge('queued',networkLink(sample.link_speed_bps)):esc(networkLink(sample.link_speed_bps))}</td><td>${networkRate(sample.average_mbps)}${Number.isFinite(sample.average_mbps)?`<small>${networkNumber(sample.average_mbps/8)} Mo/s</small>`:''}<small>${esc(sample.reason)}</small></td><td>${Number.isFinite(sample.received_bytes)?networkNumber(sample.received_bytes/1000000)+' Mo':'Non mesurés'}</td><td>${statisticsDuration(sample.duration_seconds)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><h3>Aucune mesure réseau sur cette période</h3><p>Les prochains déploiements avec WinPE IQ-6.3 transmettront les mesures après l’application de l’image, si les compteurs sont disponibles.</p></div>');
+}
 function renderStatistics(value){
   const summary=value.summary;
+  renderNetworkStatistics(value.network);
   renderFragment('statistics-summary',`<article><span>Déploiements clôturés</span><strong>${summary.finished}</strong><small>Résultats définitifs sur la période</small></article><article><span>Taux de réussite</span><strong>${statisticsRate(summary.success_rate)}</strong><small>${summary.completed} réussite(s), ${summary.failed} échec(s), ${summary.needs_attention} à vérifier</small></article><article><span>Durée moyenne mesurée</span><strong>${statisticsDuration(summary.average_seconds)}</strong><small>Sur ${summary.timed_successful} déploiement(s) réussi(s)</small></article><article><span>Mesures partielles</span><strong>${summary.partial_successful}</strong><small>${summary.unmeasured_successful} réussite(s) sans chronométrage</small></article>`);
   renderFragment('statistics-models',value.models.length?`<table><thead><tr><th>MODÈLE</th><th>CLÔTURÉS</th><th>RÉUSSITE</th><th>RÉUSSIS</th><th>ÉCHECS</th><th>À VÉRIFIER</th><th>DURÉE MOYENNE MESURÉE</th></tr></thead><tbody>${value.models.map(model=>`<tr><td><strong>${esc(model.model)}</strong><small>${esc(model.manufacturer)}</small></td><td>${model.finished}</td><td>${statisticsRate(model.success_rate)}</td><td>${model.completed}</td><td>${model.failed}</td><td>${model.needs_attention}</td><td>${statisticsDuration(model.average_seconds)}<small>${model.timed_successful} réussite(s) mesurée(s) sur ${model.completed}</small></td></tr>`).join('')}</tbody></table>`:'<div class="empty"><h3>Aucun résultat définitif sur cette période</h3><p>Choisissez une autre période ou attendez la réception des bilans de déploiement.</p></div>');
   const longest=Math.max(1,...value.stages.map(stage=>stage.average_seconds));
@@ -39,6 +56,9 @@ async function loadStatistics(fresh=false){
 document.addEventListener('click',event=>{if(event.target.closest('[data-page="statistics"]'))loadStatistics();});
 $('statistics-period').addEventListener('change',()=>{
   renderFragment('statistics-summary','');
+  renderFragment('statistics-network-summary','');
+  renderFragment('statistics-network','<p class="padding">Chargement des mesures réseau...</p>');
+  $('statistics-network-coverage').textContent='';
   renderFragment('statistics-models','<p class="padding">Chargement de la période sélectionnée...</p>');
   renderFragment('statistics-stages','<p>Chargement des mesures...</p>');
   $('statistics-exclusions').textContent='';

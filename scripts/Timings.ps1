@@ -6,6 +6,7 @@ try { [Console]::OutputEncoding = $OutputEncoding } catch { }
 foreach ($atelierTextCommand in @('Get-Content','Set-Content','Add-Content','Out-File','Export-Csv')) {
     $PSDefaultParameterValues[$atelierTextCommand+':Encoding'] = 'utf8'
 }
+if (Test-Path (Join-Path $PSScriptRoot 'Network-Measurement.ps1')) { . (Join-Path $PSScriptRoot 'Network-Measurement.ps1') }
 # Durées réelles dans un même processus, sans inventer les intervalles de redémarrage ou d’arrêt.
 if (-not $script:AtelierTimingClocks) { $script:AtelierTimingClocks=@{} }
 function Start-AtelierTiming {
@@ -46,6 +47,7 @@ function Sync-AtelierTimings {
             if (-not (Test-Path $path)) { return }
             $Configuration=Get-Content $path -Encoding UTF8 -Raw | ConvertFrom-Json
         }
+        if (Get-Command Sync-AtelierNetworkMeasurement -ErrorAction SilentlyContinue) { Sync-AtelierNetworkMeasurement $DataPath $Configuration }
         $directory=Join-Path $DataPath 'timings'
         if (-not (Test-Path $directory)) { return }
         $receipt=Join-Path $directory 'sent.txt'

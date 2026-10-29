@@ -114,3 +114,12 @@ Le serveur conserve la première réception comme début et la première clôtur
 `GET /api/deployments/{id}/pipeline`, réservé aux administrateurs, fournit les six étapes, leur état, leur message, leurs dates et `generated_at`. La vue globale expose aussi ce suivi. L’étape image repose sur les événements WinPE ; la réussite du bilan exige la réception du rapport Windows. Un résultat manquant devient `unknown` à la clôture, sans durée inventée.
 
 Les réponses du dépôt HP ajoutent `cache_states`, indépendant des tâches de synchronisation. `ready` confirme une copie récente présente avec la taille enregistrée, `stale` une copie ancienne conservée, `unavailable` une copie absente ou non confirmée, `missing` aucune copie publiée. Ce contrôle ne remplace ni les recommandations du poste ni la vérification des empreintes par le client.
+
+
+## Mesures réseau IQ-6.3
+
+`POST /api/windows/{id}/network` utilise le jeton de rapport du seul déploiement. Il reçoit une mesure `source: winpe_image_rx`, `status: measured` ou `unavailable`, `application_status: completed` ou `failed`, `adapter_name`, `link_speed_bps` facultatif, `received_bytes`, `duration_seconds` et `reason`. Une mesure indisponible a des octets et une durée nuls au sens JSON (`null`), jamais des zéros de remplacement. Aucun horodatage du client ni adresse réseau supplémentaire n’est accepté.
+
+La durée doit être positive et finie, les octets positifs ou nuls. La réception crée au plus une mesure par déploiement. La répétition de la même mesure est acceptée sans doublon ; une valeur différente retourne 409. Le client conserve le relevé local et le retransmet depuis Windows si nécessaire.
+
+`GET /api/statistics/deployments` ajoute `network`, sur la même période de lancement. Les statistiques réseau concernent les applications d’image, indépendamment du bilan Windows. La moyenne en Mbit/s vaut `8 * somme(octets) / somme(secondes) / 1000000`, sans additionner les débits des postes simultanés. Les échecs d’application et les annulations sont exclus des moyennes. Les liaisons sous 1 Gbit/s sont comptées par application terminée dont la vitesse de liaison est connue, même si les compteurs ne sont pas disponibles. Les agrégats couvrent toute la période ; `samples` présente au plus les cinquante applications les plus récentes. Les mesures absentes restent distinctes des réceptions réellement mesurées à zéro octet.

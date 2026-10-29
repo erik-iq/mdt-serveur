@@ -2,6 +2,16 @@
 
 IQ Atelier installe Windows sur les ordinateurs de l’atelier depuis le réseau. Le serveur de déploiement est DEPLOY-01, `192.168.99.250`. Le site permet de suivre les installations et retrouver leurs rapports. Consulter [le guide de mise à jour ATELIER-4](ATELIER-4.md) pour mettre le serveur et WinPE à niveau.
 
+## Statistiques réseau
+
+La page **Statistiques** affiche le débit reçu pendant l’application de Windows, en Mbit/s et Mo/s, ainsi que la vitesse de liaison déclarée par le poste. Une liaison à 100 Mbit/s est signalée pour faciliter la comparaison avec les postes à 1 Gbit/s. Le tableau présente le poste, son modèle, son interface, le volume reçu et la durée de mesure.
+
+Le débit repose sur la variation du compteur de réception de l’interface IPv4 routée vers le partage, entre le début et la fin de DISM. Il inclut les autres échanges de cette interface et les périodes où DISM décompresse ou écrit sur disque. La vitesse négociée ne garantit donc pas un débit reçu équivalent. Le compteur ne mesure pas seulement les octets du WIM ; le multicanal SMB n’est pas agrégé.
+
+La moyenne est pondérée par la durée de chaque relevé. Les transferts simultanés sont traités comme des mesures de postes distincts, sans annoncer un débit global du serveur. Le meilleur résultat est une moyenne par application, pas une pointe instantanée. Les mesures s’affichent après l’application de l’image, même si la préparation Windows continue. Les applications en échec et les annulations sont exclues des moyennes.
+
+Les nouveaux relevés nécessitent WinPE IQ-6.3. Les anciens déploiements et les compteurs indisponibles sont indiqués comme non mesurés. La vitesse de liaison peut rester connue même si le compteur de réception est indisponible. Une route différente, une vitesse modifiée ou un compteur décroissant aux bornes invalide le débit. La liste montre les cinquante dernières applications de la période ; les moyennes utilisent toute la période.
+
 ## Avant de commencer
 
 Depuis IQ-6.2, **Suivre les étapes** présente Image Windows, HPIA, Logiciels, Dossier IQ, Redémarrage et Bilan, depuis la vue globale ou l’historique du poste. Le compteur part du premier signal reçu, sans repartir à zéro à chaque actualisation. Les résultats absents des anciens agents restent non confirmés. Consulter [la signification des états](ETATS-ET-SUIVI.md).

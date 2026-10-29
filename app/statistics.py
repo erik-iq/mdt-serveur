@@ -6,6 +6,7 @@ import math
 from fastapi import Depends, Query
 
 from app.computers import STAGES
+from app.network_statistics import network_statistics
 
 FINAL = {'completed', 'failed', 'needs_attention'}
 
@@ -130,7 +131,8 @@ def deployment_statistics(con, *, days=30, at=None):
     stage_rows.sort(key=lambda entry: (-entry['average_seconds'], entry['stage']))
     return {'generated_at': at.isoformat(), 'days': days, 'since': since,
             'summary': {**counts, 'success_rate': round(100 * counts['completed'] / counts['finished'], 1) if counts['finished'] else None,
-                        'average_seconds': mean(durations)}, 'models': model_rows, 'stages': stage_rows}
+                        'average_seconds': mean(durations)}, 'models': model_rows, 'stages': stage_rows,
+            'network': network_statistics(con, since, at)}
 
 
 def statistics_routes(api, db, admin, now):
