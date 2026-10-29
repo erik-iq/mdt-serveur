@@ -1,53 +1,79 @@
 # IQ Atelier PXE
 
-Console de déploiement Windows conçue pour une installation neuve sur **Windows Server 2025, 192.168.99.250**. Elle utilise **WDS pour le démarrage réseau**, une image **WinPE x64 dédiée**, puis **DISM et BCDBoot** pour préparer Windows. Aucun MDT préexistant n’est requis.
+Atelier PXE déploie Windows depuis **DEPLOY-01, 192.168.99.250**, avec WDS pour le démarrage réseau, WinPE x64, DISM et BCDBoot. La console Web suit les postes, les pilotes HP, les rapports et les statistiques. L’installation ne nécessite pas un ancien environnement Microsoft MDT.
 
-La révision **ATELIER-4** utilise le thème IQ bleu/lilas dans le site, WinPE et la progression Windows. Les postes arrivent automatiquement dans Atelier ; le choix Pro/Famille et la confirmation du disque sont dans WinPE. Le bureau s’ouvre pendant que les logiciels WinGet et la préparation s’exécutent en arrière-plan. Windows Update et Microsoft Store restent manuels. WinPE IQ-5.5.1 s’ouvre maximisé et redémarre automatiquement vers Windows après préparation vérifiée de l’image. Le démarrage rapide Windows reste désactivé.
+La version fonctionnelle publiée est **IQ-6.3**. Les mises à jour de documentation ultérieures ne changent pas ce numéro. La branche de travail et de publication est **`codex/atelier-2`**. La version réellement installée sur le serveur et celle de son image WinPE doivent être vérifiées sur place ; la publication GitHub ne prouve pas leur installation.
 
-Le dossier **C:\IQ_** classe les outils par catégorie. Les rapports PDF se trouvent dans **Rapports** ; les inventaires XML/CSV sont transmis au serveur .250 et accessibles depuis l’activité du poste. Les pages Infrastructure PXE et Logiciels & bundles sont retirées. Le SHA-256 complet du WIM est calculé à l’enregistrement sur le serveur ; il n’est plus recalculé dans WinPE à chaque déploiement. Les contrôles rapides et `/CheckIntegrity /Verify` de DISM sont conservés.
+## Reprendre le projet, notamment dans Claude
 
-**Commencer ici :** [guide utilisateur](docs/GUIDE-UTILISATEUR.md) et [mise à jour ATELIER-4, limites et nettoyage](docs/ATELIER-4.md). La mise à jour utilise `scripts/Upgrade-Atelier4.ps1` depuis l’archive d’une révision publiée sur `codex/atelier-2`. Les anciennes images WinPE sont refusées avant tout effacement. Le WIM est reconstruit sur Windows avec l’ADK, les pilotes et le certificat du serveur.
+Lire dans cet ordre :
 
-La console serveur **IQ-5.4** ajoute une [maintenance mensuelle des images Windows](docs/MAINTENANCE-IMAGES-WINDOWS.md) : sauvegarde du WIM, correctifs Microsoft et .NET Framework sur une copie, profils TEST puis publication seulement après déploiements Windows réussis. La préparation automatique ne remplace pas l’image de production. Cette fonction serveur seule ne demande pas de reconstruire WinPE.
+1. [AGENTS.md](AGENTS.md), règles de rédaction, d’encodage et de validation.
+2. [CLAUDE.md](CLAUDE.md), points d’entrée pour Claude Code.
+3. [Passation du projet](docs/PASSATION-PROJET.md), état actuel, décisions et vérifications restantes.
+4. [Guide utilisateur](docs/GUIDE-UTILISATEUR.md), [états et suivi](docs/ETATS-ET-SUIVI.md), puis [journal des modifications](docs/CHANGELOG.md).
 
-Les tests automatisés ne remplacent pas un déploiement réel sur Server 2025/WinPE : ce contrôle doit être effectué sur un poste de laboratoire.
+```bash
+git clone --branch codex/atelier-2 https://github.com/erik-iq/mdt-serveur.git
+cd mdt-serveur
+```
 
-![Console Atelier PXE avec des données synthétiques de test](docs/console.png)
+Le dossier de passation résume les décisions connues dans la conversation de travail. Les discussions ChatGPT originales ne sont pas présentes dans Git ; leur export doit être fourni séparément si nécessaire.
 
-Cette première version est un atelier **supervisé**, à valider sur un PC de laboratoire. Le code Windows est fourni mais n’a pas été exécuté sur Server 2025/WinPE dans l’environnement Linux de développement. Un état `staged` signifie « image appliquée et démarrage préparé » ; les clients ATELIER-2 transmettent ensuite les états Windows et leur rapport à la console.
+## Parcours actuel du poste
 
+1. Démarrer en PXE et choisir le profil Windows et le disque dans l’assistant WinPE. Le numéro de série identifie le PC, y compris lorsqu’une station d’accueil est utilisée.
+2. Confirmer localement l’effacement. DISM applique l’édition choisie depuis le partage SMB, puis le poste redémarre vers Windows.
+3. Exécuter HPIA en premier si sélectionné, avec analyse et installation des SoftPaq compatibles. Les reprises liées aux redémarrages HP sont conservées.
+4. Installer les logiciels sélectionnés, appliquer la personnalisation et préparer **C:\IQ_**.
+5. En cas de réussite et selon les contrôles de finalisation, redémarrer automatiquement, vérifier la reprise et transmettre le bilan.
+6. Archiver les rapports et inventaires sur le serveur avant le nettoyage du dossier de travail privé. Le dossier IQ reste disponible.
 
-## Français et UTF-8
+**Les KB, Windows Update et Microsoft Store restent manuels pendant la préparation des nouveaux postes.** Les anciens scripts de mise à jour et la maintenance WIM restent présents pour compatibilité et consultation ; ils ne définissent pas le parcours actuel.
 
-La révision IQ-5.5.1 rétablit les accents dans le site, WinPE, les outils IQ et les rapports. Les scripts PowerShell utilisent un BOM UTF-8 pour PowerShell 5.1 ; leurs sorties restent en UTF-8. Les identifiants techniques et les clés des anciens inventaires restent stables. Voir [les règles d’encodage](docs/ENCODAGE.md) et [le journal des modifications](docs/CHANGELOG.md).
+L’image et les profils français sont conservés avec les réglages suisses du mode interne : région `fr-CH`, clavier `100c:0000100c`, fuseau `W. Europe Standard Time`. La langue du média et du profil doit être vérifiée séparément ; une image française `fr-FR` n’est pas renommée artificiellement en média `fr-CH`.
 
-## Historique : parcours ATELIER-2
+Plusieurs postes distincts peuvent être déployés en parallèle. Le débit du réseau et le stockage du serveur influencent les durées. Un même poste ne peut pas avoir deux autorisations WinPE actives simultanément.
 
-Le [guide utilisateur](docs/GUIDE-UTILISATEUR.md) présente l’atelier à une personne qui découvre le projet. La [procédure ATELIER-2](docs/MISE-A-JOUR-ATELIER-2.md) décrit la mise à jour de DEPLOY-01 et la reconstruction WinPE.
+## Console et mesures
 
-Cette révision ajoute le détail Windows Update, masque les consoles de fond, ouvre HP Image Assistant sur les HP équipés, prépare les profils Pro/Famille depuis le WIM, désactive le démarrage rapide Windows et génère un PDF local avec remontée dans la console. Le dossier IQ_ contient les tests audio/webcam/clavier et une vérification de garantie assistée sur les portails officiels HP, Lenovo et Dell. Dans la console, **Guide utilisateur** ouvre la documentation intégrée.
+- Vue globale, parc machines, profils Windows, HPIA et pilotes, correctifs Windows, statistiques.
+- Modes clair, sombre et automatique. L’espace de stockage est présenté dans la vue globale.
+- Six étapes suivies : Image Windows, HPIA, Logiciels, Dossier IQ, Redémarrage et Bilan. Les résultats non transmis restent non confirmés.
+- Cache HP, dernière actualisation et source déclarée par le poste sont distincts. Une actualisation du cache échouée ne suffit pas à déclarer le déploiement en échec.
+- Statistiques des déploiements terminés, durées mesurées par modèle et étapes les plus longues.
+- Avec WinPE IQ-6.3 : débit reçu pendant DISM, liaison déclarée, volume et durée par poste. Les compteurs indisponibles et les anciennes installations restent non mesurés. Le trafic connexe est inclus et le multicanal SMB n’est pas agrégé.
 
-## Logiciels et inventaire ATELIER 2.1
+## Architecture
 
-La [synchronisation WinGet](docs/LOGICIELS-AUTOMATIQUES.md) récupère les installateurs de VLC, Reader, Chrome et AnyDesk sur le serveur et actualise les entrées du catalogue en conservant les bundles. Le dossier IQ_ reçoit un inventaire XML et CSV détaillé. La mise à jour retrouve désormais le dossier installé depuis la tâche console au lieu d’imposer un chemin fixe.
+```mermaid
+flowchart LR
+    PC[Poste UEFI] --> WDS[WDS sur DEPLOY-01]
+    WDS --> PE[Assistant WinPE]
+    PE --> API[API Atelier PXE]
+    PE --> SMB[Partage des images]
+    SMB --> DISM[Application DISM]
+    DISM --> WIN[Préparation Windows]
+    WIN --> HP[HPIA puis logiciels et IQ]
+    HP --> BILAN[Redémarrage et bilan]
+    BILAN --> API
+    API --> DB[SQLite et inventaires]
+    WEB[Console Web] --> API
+```
 
-## Installer sur votre serveur
+Les composants et fichiers à modifier selon le besoin sont détaillés dans la [passation](docs/PASSATION-PROJET.md). Les contrats sont décrits dans [l’API](docs/API.md).
 
-Si le premier démarrage Windows est bloqué par le fichier de réponses, [récupérer les journaux depuis l’hôte Hyper-V](docs/DIAGNOSTIC-PREMIER-DEMARRAGE.md). Le collecteur monte le disque de la VM arrêtée en lecture seule et copie le diagnostic sur l’hôte.
+## Installer ou mettre à jour le serveur
 
-Pour le test actuel dans la VM **PC-TEST-PXE**, suivre [l'activation et le test du mode interne](docs/MODE-INTERNE.md). La [reconstruction WinPE](docs/REPRISE-PXE.md) vérifie les partitions et sécurise l’écriture des fichiers de personnalisation. Si un ancien fichier de réponses contient uniquement des octets nuls, utiliser [la réparation du Windows déjà appliqué](docs/REPARATION-UNATTEND.md).
+Consulter [l’installation Windows Server](docs/INSTALLATION.md) et [la procédure ATELIER-4](docs/ATELIER-4.md). Pour une mise à jour complète, utiliser **`scripts/Upgrade-Atelier4.ps1`** depuis une copie séparée de la révision publiée. Ce script met à jour la console et reconstruit WinPE sur Windows avec l’ADK, les pilotes et le certificat du serveur.
 
-Pour mettre à jour votre VM **DEPLOY-01 / 192.168.99.250** déjà installée, suivre [l’assistant PXE et le test physique HP pas à pas](docs/ASSISTANT-PXE.md). Le premier client est un **HP EliteBook 850 G6**. L’hôte Hyper-V est `192.168.99.253` et le DHCP existant est fourni par le routeur `192.168.99.1`.
+Les changements des scripts embarqués nécessitent une reconstruction WinPE. Une simple mise à jour du site ne modifie pas une image déjà importée dans WDS et ne relance pas la préparation d’un poste terminé.
 
-Les bundles accueillent VLC, un lecteur PDF, Chrome et les outils constructeurs. HP Image Assistant est proposé sur HP, Lenovo System Update sur Lenovo. Les autres marques reçoivent les logiciels communs. Les logiciels sont préparés pendant WinPE, puis installés à la première connexion administrateur ; le fond d’écran et le thème s’appliquent au premier compte. Les installateurs et médias Microsoft sont fournis séparément par leurs éditeurs.
+Le dépôt ne contient pas les WIM, les pilotes en cache, les bases de production, les certificats privés ou les identifiants du serveur. Leurs chemins dépendent notamment de `data-runtime.json`, présent uniquement sur l’installation.
 
-Pour le premier essai, suivre [la procédure de test pas à pas](docs/PROCEDURE-TEST.md) : console locale, réseau HTTPS/WDS, refus d’effacement puis installation sur un disque de laboratoire.
+## Développer et vérifier
 
-Suivez [le guide Windows Server 2025](docs/INSTALLATION.md). Il couvre Python, WDS, ADK, WinPE, HTTPS, SMB, le DHCP et le premier poste. Les scripts préservent une installation WDS existante et désactivent par défaut les réponses PXE lors d’une installation neuve.
-
-## Développer dans le cloud
-
-Dans `/workspace/mdt-serveur`, avec Python 3.12 :
+Avec Python 3.12 :
 
 ```bash
 python3 -m venv .venv
@@ -56,31 +82,18 @@ python3 -m venv .venv
 .venv/bin/python -m uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8080
 ```
 
-La console génère un jeton dans `data/admin-token`. Lisez-le localement pour ouvrir la console ; ne le partagez pas et ne l’ajoutez pas à Git. Le jeton reste uniquement en mémoire dans l’onglet du navigateur. Les fichiers de données et les images ne sont pas suivis dans Git.
+Pour les contrôles navigateur, installer les dépendances de `requirements-browser.txt`, fournir Chromium puis exécuter le scénario concerné dans `tests/browser_*.py`. Pour les tests PowerShell portables, définir `ATELIER_PWSH` vers l’exécutable `pwsh`. Les tests propres à Windows sont ignorés sur Linux ; ce résultat ne remplace pas leur exécution native.
 
-Les postes PXE de votre LAN ne peuvent pas démarrer depuis une instance cloud isolée : installez la console et WDS sur le serveur de votre réseau.
+Après une modification de texte, exécuter `tests/test_source_encoding.py`. Après une modification PowerShell, exécuter `scripts/Test-PowerShellSyntax.ps1` et les tests concernés. Le français reste accentué, les scripts PowerShell sont en UTF-8 avec BOM, et les tirets longs sont interdits. Les contrôles automatisés ne remplacent pas une validation physique WinPE/HPIA sur le serveur et les postes.
 
-Pour générer une archive transférable au serveur : `python scripts/package.py`. Elle contient le code et la documentation, sans images Windows, base, jeton ni environnement virtuel.
+Pour produire une archive de sources :
 
-## Architecture
-
-```mermaid
-flowchart LR
-  Admin[Administrateur] -->|HTTPS + jeton| IIS[IIS / proxy HTTPS]
-  IIS --> API[Console FastAPI locale]
-  API --> DB[(SQLite / journaux)]
-  PC[PC UEFI] -->|PXE / DHCP / TFTP| WDS[WDS Server 2025]
-  WDS --> PE[WinPE + assistant graphique]
-  PE -->|HTTPS / jeton de déploiement| IIS
-  PE -->|SMB chiffré / lecture seule| WIM[Images / logiciels / fond écran]
-  PE -->|DISM / BCDBoot| Disk[Disque GPT / Windows]
-  Disk --> First[Première connexion admin / bundle et bureau]
+```bash
+python3 scripts/package.py
 ```
 
-Le transport iPXE/wimboot est disponible en option avec `/boot/menu.ipxe`. WDS est le parcours recommandé ici et ne dépend pas d’iPXE. Les fichiers Microsoft, licences Windows, drivers et binaires de démarrage ne sont pas distribués avec le logiciel.
+L’archive `dist/atelier-pxe-0.2.0.zip` contient le code, les guides et la passation. Le numéro technique `0.2.0` du paquet est distinct de la révision d’interface IQ-6.3. Les données de production et l’environnement virtuel sont exclus.
 
-Consultez [l’API et les états](docs/API.md) et [les limites et la recette de validation](docs/VALIDATION.md).
+## Documentation historique
 
-La révision **ATELIER-2.2** ajoute le bouton **Mettre à jour les logiciels** dans **Logiciels & bundles** : téléchargement WinGet vérifié, suivi des étapes et ajout aux bundles sélectionnés sans remplacer leur contenu. Préparer une fois l’agent Windows interactif avec `scripts/Enable-SoftwareSync.ps1` ; voir [le guide des logiciels](docs/LOGICIELS-AUTOMATIQUES.md). Mise à jour de la console seule, sans changement WDS/WinPE.
-
-Le parcours **ATELIER-3** inscrit automatiquement les postes depuis WinPE, installe les logiciels via WinGet dans Windows et centralise XML/CSV dans un dossier par PC sur le serveur. Le raccourci « Dossier inventaire » se trouve dans l’activité. [Installation, nouveau WinPE et nettoyage des anciennes images](docs/ATELIER-3.md).
+Les guides [ATELIER-2](docs/MISE-A-JOUR-ATELIER-2.md), [ATELIER-3](docs/ATELIER-3.md), les anciens essais Windows Update et les passages de maintenance WIM décrivent des états antérieurs ou des outils spécialisés. Pour déterminer le comportement courant, partir de la passation, des dernières entrées du changelog et du code de la branche `codex/atelier-2`.

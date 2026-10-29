@@ -1,5 +1,11 @@
 # IQ Atelier 4 - bureau disponible et préparation en arrière-plan
 
+## État courant : IQ-6.3
+
+Pour la reprise actuelle, lire [la passation](PASSATION-PROJET.md), [le guide utilisateur](GUIDE-UTILISATEUR.md) et les dernières entrées du [changelog](CHANGELOG.md). Le parcours conserve HPIA avant les logiciels, sans KB ni Windows Update automatiques sur les nouveaux postes. IQ-6.2 ajoute le suivi des étapes et IQ-6.3 les mesures réseau pendant DISM. Ces signaux nécessitent le nouveau WinPE.
+
+Les sections suivantes conservent l’historique des évolutions. En particulier, les anciens paragraphes sur Windows Update ou les KB automatiques ne décrivent pas les réglages actuels. La publication GitHub ne confirme pas l’installation sur DEPLOY-01 ; vérifier la console et l’image WinPE réellement utilisées.
+
 ## IQ-5.8.9 : HPIA en premier, sans installation automatique des KB
 
 Les nouveaux déploiements exécutent HPIA si sélectionné, puis les logiciels, la personnalisation et le dossier IQ. Les KB et Windows Update restent manuels. La progression immédiate, la reprise HP et le bilan après redémarrage sont conservés. Reconstruire WinPE avec `Upgrade-Atelier4.ps1` pour embarquer ce parcours.

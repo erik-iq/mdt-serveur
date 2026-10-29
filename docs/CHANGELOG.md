@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## Documentation de reprise du projet, 29 octobre 2026
+
+- README aligné sur IQ-6.3, branche de publication explicite et distinction entre sources publiées, installation serveur et WinPE importé.
+- Nouveau guide de passation : décisions conservées, architecture, fichiers à modifier, limites des mesures et vérifications physiques restantes. Ajout de CLAUDE.md pour la reprise dans Claude Code.
+- Anciennes procédures ATELIER-4 identifiées comme historiques. La passation résume les échanges connus sans prétendre importer les conversations ChatGPT originales. CLAUDE.md est inclus dans l’archive de sources. Aucun changement du parcours Windows ni de la révision fonctionnelle IQ-6.3.
+
 ## IQ-6.3 : statistiques réseau des déploiements, 29 octobre 2026
 
 - Débit reçu moyen en Mbit/s et Mo/s, meilleure et plus faible moyenne par poste, vitesse de liaison déclarée et repérage des liaisons sous 1 Gbit/s. La période et l’historique des statistiques s’appliquent aussi aux mesures réseau.
